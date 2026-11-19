@@ -12,7 +12,7 @@ end)
 
 test("recettes connues : données ou raison connue", function()
     local lib = LibStub("LibCommune-1.0")
-    assertTrue(lib:Demander("recettes connues"))
+    assertTrue(lib:Souscrire("recettes connues"))
     local data, raison = lib:Lire("recettes connues", "tous")
     if data then
         assertType("table", data.recettes)
@@ -41,4 +41,22 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     HandshakeClassicRecipes = reserve
     assertTrue(ok)
     assertTrue(fini)
+end)
+
+test("catalogue : chaque type a son accesseur dans GameData", function()
+    local lib = LibStub("LibCommune-1.0")
+    for nom, t in pairs(lib.types) do
+        assertType("function", GameDataAPI[t.gamedata])
+        local data, raison = lib:Lire(nom, "tous")
+        if not data then assertEquals("pas encore relevé", raison) end
+    end
+end)
+
+test("souscription retenue par GameData avec sa date, pour tout le joueur", function()
+    local lib = LibStub("LibCommune-1.0")
+    -- Handshake a souscrit aux recettes connues pendant le chargement : retenu à la connexion
+    assertType("number", GameDataDB.souscriptions and GameDataDB.souscriptions["recettes connues"])
+    assertTrue(lib:Souscrire("marchands"))
+    assertType("number", GameDataDB.souscriptions.marchands)
+    assertTrue(GameDataAPI.souscrit("marchands"))
 end)
