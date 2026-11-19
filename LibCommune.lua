@@ -13,20 +13,22 @@
 -- fiable), le build du client (GetBuildInfo) et la date du relevé ; perime = true : figé sous un autre build, peut-être
 -- périmé. Pour un type par personnage, le lot va aussi par personnage : { persos = { [personnage] = lot } }. Dans un lot
 -- mixte (marchands : vus en jeu et base VendorData), une ligne d'une autre provenance porte la sienne (champ provenance).
--- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session.
+-- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session
+-- (recettes connues ; inventaires : sacs lus à l'instant, banque vue cette session).
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 5
+local MAJOR, MINOR = "LibCommune-1.0", 6
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
 -- Catalogue des types de données (ceux que GameData relève). léger : relevable sans GameData, par un relevé de repli ;
 -- un type lourd (HV, catalogue des objets) attend GameData ou un fournisseur. parPerso : les données vont par personnage
 -- ({ persos = { [personnage] = … } }, filtrées par lib:Lire), sinon une seule table pour le joueur. gamedata : la
--- fonction de GameDataAPI qui rend ce type. repli : le relevé de repli est écrit (seulement les recettes connues).
+-- fonction de GameDataAPI qui rend ce type. repli : le relevé de repli est écrit (recettes connues, inventaires).
 local TYPES = {
   -- persos[p] = { character (fiche, or), equipped, bags, bank, mail, currencies }
-  inventaires = { leger = true, parPerso = true, gamedata = "inventaires" },
+  -- Repli : le personnage connecté, { bags (lus à l'instant), bank (vue cette session) }.
+  inventaires = { leger = true, parPerso = true, gamedata = "inventaires", repli = true },
   ["réputations"] = { leger = true, parPerso = true, gamedata = "reputations" }, -- persos[p] = { { id, name, standing, … } }
   ["métiers et compétences"] = { leger = true, parPerso = true, gamedata = "metiersEtCompetences" }, -- persos[p] = { professions, skills }
   ["quêtes terminées"] = { leger = true, parPerso = true, gamedata = "quetesTerminees" }, -- persos[p] = { questID, … }
@@ -201,7 +203,34 @@ end
 -- Gardé d'une mineure à l'autre : une copie plus récente reprend ce que la précédente a relevé.
 lib.repli = lib.repli or { recettes = {}, metiers = {} }
 lib.cadre = lib.cadre or CreateFrame("Frame")
-local EVENEMENTS = { "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" }
+-- Les événements de chaque type de repli (enregistrés à sa souscription).
+local EVENEMENTS = {
+  ["recettes connues"] = { "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" },
+  inventaires = { "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" },
+}
+
+-- Conteneurs d'Enum.BagIndex dont le nom passe le filtre (sacs, banque, onglets : ce que ce client a), lus à l'instant :
+-- { [nom] = { size, items = { { id, count }, … } } } (même forme que GameData).
+function lib.Conteneurs(garder)
+  local out, vus = {}, {}
+  for nom, sac in pairs(Enum.BagIndex or {}) do
+    if garder(nom) and not vus[sac] then
+      vus[sac] = true
+      local taille = C_Container.GetContainerNumSlots(sac)
+      if taille and taille > 0 then
+        local items = {}
+        for slot = 1, taille do
+          local it = C_Container.GetContainerItemInfo(sac, slot)
+          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount } end
+        end
+        out[nom] = { size = taille, items = items }
+      end
+    end
+  end
+  return out
+end
+function lib.EstSac(n) return n == "Backpack" or n == "Keyring" or n == "ReagentBag" or n:find("^Bag_") ~= nil end
+function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 
 local function releveDeRepli()
   local r = lib:ReleverRecettes()
@@ -211,12 +240,20 @@ local function releveDeRepli()
   lib.repli.lot = lotDuJour()
 end
 
-local jeton = 0
+local jeton, banqueOuverte = 0, false
 lib.cadre:SetScript("OnEvent", function(_, evenement)
   if evenement == "PLAYER_REGEN_ENABLED" then -- fin du combat : le relevé sans fenêtre reprend (GameData compris)
     local reprise = lib.reprise
     lib.reprise = nil
     if reprise then reprise() end
+    return
+  end
+  if evenement == "BANKFRAME_CLOSED" then banqueOuverte = false return end
+  if evenement == "BANKFRAME_OPENED" or evenement == "PLAYERBANKSLOTS_CHANGED" then
+    banqueOuverte = banqueOuverte or evenement == "BANKFRAME_OPENED"
+    if banqueOuverte and not (GameDataAPI and GameDataAPI.inventaires) then -- GameData relève la banque pour tout le monde
+      lib.repli.banque, lib.repli.lotBanque = lib.Conteneurs(lib.EstBanque), lotDuJour()
+    end
     return
   end
   if GameDataAPI and GameDataAPI.recettesConnues then return end -- GameData relève et sauvegarde pour tout le monde
@@ -240,7 +277,7 @@ function lib:Souscrire(typeDeDonnees)
   if not t then return nil, "type inconnu" end
   self.souscriptions[typeDeDonnees] = true
   if GameDataAPI and GameDataAPI.souscrire then GameDataAPI.souscrire(typeDeDonnees) end
-  if t.repli then for _, e in ipairs(EVENEMENTS) do pcall(self.cadre.RegisterEvent, self.cadre, e) end end
+  for _, e in ipairs(EVENEMENTS[typeDeDonnees] or {}) do pcall(self.cadre.RegisterEvent, self.cadre, e) end
   return true
 end
 -- ponytail: ancien nom, Handshake sur main appelle encore lib:Demander("recettes connues") ; à retirer après sa fusion.
@@ -258,8 +295,13 @@ function lib:Lire(typeDeDonnees, personnage)
   if not fournir then
     local moi = personnageConnecte()
     if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
-    if not next(self.repli.metiers) then return nil, "pas encore relevé" end
-    d, lot = { recettes = self.repli.recettes, persos = { [moi] = self.repli.metiers } }, { persos = { [moi] = self.repli.lot } }
+    if typeDeDonnees == "inventaires" then
+      d = { persos = { [moi] = { bags = lib.Conteneurs(lib.EstSac), bank = self.repli.banque } } }
+      lot = { persos = { [moi] = self.repli.lotBanque or lotDuJour() } } -- ponytail: un lot pour les deux ; le moins frais (la banque)
+    else
+      if not next(self.repli.metiers) then return nil, "pas encore relevé" end
+      d, lot = { recettes = self.repli.recettes, persos = { [moi] = self.repli.metiers } }, { persos = { [moi] = self.repli.lot } }
+    end
   end
   if not t.parPerso then -- une seule table pour le joueur : personnage sans objet
     if type(d) ~= "table" or not next(d) then return nil, "pas encore relevé" end

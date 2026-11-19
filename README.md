@@ -12,6 +12,9 @@ local d, raison = lib:Lire("recettes connues", "tous") -- nil = personnage conne
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
 --       persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
 -- raison : « type inconnu », « pas de GameData », « pas encore relevé »
+-- sans GameData, relevé de repli (personnage connecté, en mémoire) : recettes connues ; inventaires = { bags (lus à
+-- l'instant), bank (vue cette session) } ; les autres types : « pas de GameData »
+lib.Conteneurs(lib.EstSac)                          -- sacs lus à l'instant : { [nom] = { size, items = { { id, count } } } }
 local d, lot = lib:Lire("marchands")
 -- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [personnage] = lot } }
 -- jamais nil quand d est là : {} (ou { persos = {} }) si GameData n'en donne pas (version d'avant les lots)
