@@ -2,8 +2,8 @@
 ## Title: LibCommune
 ## Category: Libraries
 ## Category-frFR: Bibliothèques
-## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (recettes connues), avec ou sans GameData ; fenêtres, tableaux, montants, noms d'objets, capture et export. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
-## Version: 1.1.0
+## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (catalogue des types de données, demandes), avec ou sans GameData ; fenêtres, tableaux, montants, noms d'objets, capture et export. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
+## Version: 1.2.0
 LibStub.lua
 LibCommune.lua
 Interface.lua

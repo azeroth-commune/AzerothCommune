@@ -3,23 +3,39 @@
 -- sauvegardées que dans GameData).
 --
 -- Accès aux données relevées, deux gestes :
---   lib:Demander(type)           : l'add-on déclare qu'il a besoin de ce type de données.
+--   lib:Demander(type)           : l'add-on déclare qu'il a besoin de ce type de données. Avec GameData, la demande est
+--                                  retenue pour tous les personnages du joueur (GameData ne relève que les types demandés,
+--                                  et cesse après ~30 jours sans demande) ; sans lui, elle vaut le temps de la session.
 --   lib:Lire(type, personnage)   : les données, ou nil et la raison (« type inconnu », « pas de GameData »,
 --                                  « pas encore relevé »). personnage = « Nom-Royaume » (sur Forever « Prénom Nom-Royaume »),
 --                                  nil pour le personnage connecté, « tous » pour tous les personnages relevés.
 -- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session.
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 2
+local MAJOR, MINOR = "LibCommune-1.0", 3
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
--- Catalogue des types de données. léger : relevable sans GameData (relevé de repli) ; un type lourd (HV, catalogue des
--- objets) attendrait GameData ou un fournisseur. gamedata : la fonction de GameDataAPI qui rend ce type.
+-- Catalogue des types de données (ceux que GameData relève). léger : relevable sans GameData, par un relevé de repli ;
+-- un type lourd (HV, catalogue des objets) attend GameData ou un fournisseur. parPerso : les données vont par personnage
+-- ({ persos = { [personnage] = … } }, filtrées par lib:Lire), sinon une seule table pour le joueur. gamedata : la
+-- fonction de GameDataAPI qui rend ce type. repli : le relevé de repli est écrit (seulement les recettes connues).
 local TYPES = {
+  -- persos[p] = { character (fiche, or), equipped, bags, bank, mail, currencies }
+  inventaires = { leger = true, parPerso = true, gamedata = "inventaires" },
+  ["réputations"] = { leger = true, parPerso = true, gamedata = "reputations" }, -- persos[p] = { { id, name, standing, … } }
+  ["métiers et compétences"] = { leger = true, parPerso = true, gamedata = "metiersEtCompetences" }, -- persos[p] = { professions, skills }
+  ["quêtes terminées"] = { leger = true, parPerso = true, gamedata = "quetesTerminees" }, -- persos[p] = { questID, … }
   -- { recettes = { [clé] = { profession, name, output, reagents, … } },
   --   persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
-  ["recettes connues"] = { leger = true, gamedata = "recettesConnues" },
+  ["recettes connues"] = { leger = true, parPerso = true, gamedata = "recettesConnues", repli = true },
+  ["maîtres de métier"] = { leger = true, gamedata = "maitresDeMetier" }, -- { [PNJ] = { services, filters, … } }
+  marchands = { leger = true, gamedata = "marchands" }, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
+  ["prix des vols"] = { leger = true, gamedata = "prixDesVols" }, -- { [départ] = { [arrivée] = prix } }
+  ["add-ons installés"] = { leger = true, gamedata = "addonsInstalles" }, -- { [dossier] = { title, version, … } }
+  ["cours de l'HV"] = { gamedata = "coursHV" }, -- { hv = { [royaume-faction] = { items, hist, … } }, depot = { rate24, min } }
+  objets = { gamedata = "objets" }, -- { [itemID] = { name, class, price, stack, … } }
 }
+lib.types = TYPES -- lecture seule : GameData y vérifie qu'il rend chaque type
 
 -- Même clé que GameData : sur Forever, UnitName("player") rend prénom et nom de famille.
 local function personnageConnecte()
@@ -166,10 +182,16 @@ lib.cadre:SetScript("OnEvent", function(_, evenement)
   C_Timer.After(0.5, function() if mien == jeton then pcall(releveDeRepli) end end)
 end)
 
--- ponytail: une demande vaut jusqu'à la fin de la session ; « plus personne ne demande ce type » viendra avec un 2e type.
+-- Les types demandés pendant cette session : GameData les retient à la connexion (une demande faite pendant le
+-- chargement arrive avant que ses SavedVariables soient lues). Sans GameData, une demande vaut le temps de la session.
+lib.demandes = lib.demandes or {}
+
 function lib:Demander(typeDeDonnees)
-  if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
-  for _, e in ipairs(EVENEMENTS) do pcall(self.cadre.RegisterEvent, self.cadre, e) end
+  local t = TYPES[typeDeDonnees]
+  if not t then return nil, "type inconnu" end
+  self.demandes[typeDeDonnees] = true
+  if GameDataAPI and GameDataAPI.demander then GameDataAPI.demander(typeDeDonnees) end
+  if t.repli then for _, e in ipairs(EVENEMENTS) do pcall(self.cadre.RegisterEvent, self.cadre, e) end end
   return true
 end
 
@@ -182,15 +204,21 @@ function lib:Lire(typeDeDonnees, personnage)
     d = fournir() -- lecture seule : ce sont les tables de GameData
   else
     local moi = personnageConnecte()
-    if not t.leger or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
+    if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
     if not next(self.repli.metiers) then return nil, "pas encore relevé" end
     d = { recettes = self.repli.recettes, persos = { [moi] = self.repli.metiers } }
+  end
+  if not t.parPerso then -- une seule table pour le joueur : personnage sans objet
+    if type(d) ~= "table" or not next(d) then return nil, "pas encore relevé" end
+    return d
   end
   if personnage ~= "tous" then
     local p = personnage or personnageConnecte()
     if not d.persos[p] then return nil, "pas encore relevé" end
-    d = { recettes = d.recettes, persos = { [p] = d.persos[p] } }
+    local un = { persos = { [p] = d.persos[p] } }
+    for k, v in pairs(d) do if k ~= "persos" then un[k] = v end end
+    d = un
   end
-  if not next(d.persos) and not next(d.recettes) then return nil, "pas encore relevé" end
+  if not next(d.persos) and not next(d.recettes or {}) then return nil, "pas encore relevé" end
   return d
 end

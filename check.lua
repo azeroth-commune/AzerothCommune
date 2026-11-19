@@ -52,6 +52,36 @@ d, raison = lib:Demander("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 print("LibCommune : type inconnu OK")
 
+-- Catalogue : les types que GameData relève, chacun léger ou lourd, avec son accesseur dans GameDataAPI.
+local attendus = { "inventaires", "réputations", "métiers et compétences", "quêtes terminées", "recettes connues",
+  "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
+local nTypes = 0
+for _ in pairs(lib.types) do nTypes = nTypes + 1 end
+assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
+for _, nom in ipairs(attendus) do assert(lib.types[nom] and type(lib.types[nom].gamedata) == "string", "au catalogue : " .. nom) end
+assert(not lib.types.objets.leger and not lib.types["cours de l'HV"].leger and lib.types.inventaires.leger, "lourds : HV et objets")
+-- Demande avec GameData : transmise à GameDataAPI.demander (qui la retient pour le joueur), et gardée pour la session.
+local transmis = {}
+GameDataAPI.demander = function(t) transmis[#transmis + 1] = t end
+for _, nom in ipairs(attendus) do assert(lib:Demander(nom), "demande : " .. nom) end
+assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque demande transmise à GameData")
+assert(lib.demandes.objets and lib.demandes["recettes connues"], "et retenue pour la session")
+-- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
+GameDataAPI.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, ["Alt Dupont-Kerys"] = { bank = {} } } } end
+local inv = assert(lib:Lire("inventaires"))
+assert(inv.persos[MOI].bags.Backpack.size == 16 and not inv.persos["Alt Dupont-Kerys"], "inventaires du personnage connecté")
+assert(lib:Lire("inventaires", "tous").persos["Alt Dupont-Kerys"], "inventaires de tous")
+GameDataAPI.marchands = function() return { [1234] = { name = "Marchand", items = {} } } end
+assert(assert(lib:Lire("marchands", "Alt Dupont-Kerys"))[1234].name == "Marchand", "marchands : une table pour le joueur")
+GameDataAPI.marchands = function() return {} end
+d, raison = lib:Lire("marchands")
+assert(d == nil and raison == "pas encore relevé", "aucun marchand : " .. tostring(raison))
+GameDataAPI.objets = function() return nil end
+d, raison = lib:Lire("objets")
+assert(d == nil and raison == "pas encore relevé", "objets absents : " .. tostring(raison))
+lib.demandes = {}
+print("LibCommune : catalogue et demandes avec GameData OK")
+
 -- GameData absent : relevé de repli du personnage connecté, en mémoire ; rien n'est écrit chez l'hôte.
 GameDataAPI = nil
 HoteDB = { reglages = { x = 1 } } -- les SavedVariables de l'add-on hôte
@@ -60,6 +90,12 @@ for k in pairs(_G) do avant[k] = true end
 d, raison = lib:Lire("recettes connues")
 assert(d == nil and raison == "pas encore relevé", "rien de relevé : " .. tostring(raison))
 assert(lib:Demander("recettes connues"))
+-- Sans GameData, pas de relevé de repli pour les autres types (lourds, ou pas encore écrits) ; la demande reste acceptée.
+assert(lib:Demander("objets") and lib:Demander("inventaires"), "demande sans GameData")
+for _, nom in ipairs({ "objets", "cours de l'HV", "inventaires", "marchands" }) do
+  d, raison = lib:Lire(nom)
+  assert(d == nil and raison == "pas de GameData", nom .. " sans GameData : " .. tostring(raison))
+end
 local cadre = cadres[#cadres]
 Enum = {}
 C_TradeSkillUI = { -- fenêtre de métier ouverte : une recette apprise, une pas encore apprise
