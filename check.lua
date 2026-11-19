@@ -209,6 +209,8 @@ assert(table.concat(sortie, "\n"):find("inconnu", 1, true), "type inconnu refus�
 
 -- Types globaux : recettes, maîtres, marchands, HV, objets. Le joueur souscrit lui-même aux objets (/gdata souscrire).
 gdata("souscrire objets")
+gdata("souscrire cours de l'HV")
+assert(gns.souscrit("cours de l'HV"), "/gdata souscrire cours de l'HV : le nom tapé tel quel")
 session("Bob")
 assert(objetsScannes(), "objets souscrits : scan des objets lancé")
 GameDataDB.vendors[42] = { items = {} }

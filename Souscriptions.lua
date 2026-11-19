@@ -118,6 +118,7 @@ function ns.souscriptionsCommand(cmd, rest)
   end
   if cmd ~= "effacer" and cmd ~= "souscrire" then return false end
   local nom = rest:lower()
+  for n in pairs(RANGEMENT) do if n:lower() == nom then nom = n end end -- « cours de l'HV » : la clé a des majuscules
   if cmd == "souscrire" and nom == "tout" then
     for _, n in ipairs(noms()) do ns.souscrire(n) end
     print("GameData : souscrit à tous les types ; relevés dès maintenant (objets : à la prochaine connexion).")
