@@ -87,6 +87,10 @@ local frames = {}
 CreateFrame = function() local fr = { RegisterEvent = noop }; fr.SetScript = function(self, _, fn) self.fn = fn end; frames[#frames + 1] = fr; return fr end
 assert(loadfile("GameData/Commerce.lua"))("GameData", ns)
 local commerce = frames[#frames]
+-- Rien n'est relevé sans souscription (Souscriptions.lua, testé plus bas) : ici, souscription à tous les types.
+time = os.time
+assert(loadfile("GameData/Souscriptions.lua"))("GameData", ns)
+for nom in pairs(ns.rangement) do ns.souscrire(nom) end
 commerce.fn(commerce, "TRADE_SKILL_LIST_UPDATE")
 local r = GameDataDB.recipes[3307]
 assert(r and r.output == 3575 and r.reagents[1].id == 2772 and r.reagents[1].qty == 1, "recette lue")
@@ -144,3 +148,76 @@ for _, f in ipairs({ "Flip", "Ledger", "Alerts", "BulkBuy" }) do assert(not toc:
 assert(not ns.exports.journal and not ns.exports.mecreant and #ns.hubTools == 1, "plus d'export ni d'outil du négoce")
 for _, e in ipairs(ns.exportList) do assert(e[1] ~= "journal" and e[1] ~= "mecreant", "bouton d'export du négoce") end
 print("GameData : sans négoce OK")
+
+-- Souscriptions (GameData#4), sur plusieurs sessions qui partagent les SavedVariables : une souscription faite sur le
+-- personnage A fait relever le type sur le personnage B à sa connexion, même sans l'add-on qui a souscrit ; un type sans
+-- souscription n'est pas relevé ; après 30 jours sans souscription il ne l'est plus, ses données restent ;
+-- /gdata effacer <type> les efface.
+GameDataDB, GameDataItems, GameDataMarket = nil, nil, nil
+time, GetRealmName = os.time, function() return "Kerys" end
+local tickers
+C_Timer = { After = function(_, fn) fn() end, NewTicker = function(t) tickers[#tickers + 1] = t return { Cancel = noop } end }
+local sortie = {}
+local function session(nom, souscriptions)
+  UnitName = function() return nom end
+  tickers, sortie = {}, {}
+  LibStub = nil -- nouvelle session : la lib repart de zéro, seules les SavedVariables restent
+  assert(loadfile("LibCommune/LibStub.lua"))()
+  assert(loadfile("LibCommune/LibCommune.lua"))()
+  frames = {} -- ceux de GameData : GameData.lua puis Commerce.lua
+  local gns = {}
+  for _, f in ipairs({ "GameData", "Commerce", "Souscriptions" }) do assert(loadfile("GameData/" .. f .. ".lua"))("GameData", gns) end
+  frames[1].fn(frames[1], "ADDON_LOADED", "GameData")
+  local lib = LibStub("LibCommune-1.0")
+  for _, t in ipairs(souscriptions or {}) do assert(lib:Souscrire(t)) end -- l'add-on qui souscrit, chargé après GameData
+  print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end
+  for _, fr in ipairs(frames) do if fr.fn then fr.fn(fr, "PLAYER_LOGIN") end end
+  print = realPrint
+  return gns, lib
+end
+local function gdata(cmd) print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end; SlashCmdList.GAMEDATA(cmd); print = realPrint end
+local function objetsScannes() for _, t in ipairs(tickers) do if t == 0.5 then return true end end return false end
+local A, B, C = "Alice-Kerys", "Bob-Kerys", "Carl-Kerys"
+
+local gns, glib = session("Alice", { "inventaires" })
+assert(type(GameDataDB.souscriptions.inventaires) == "number", "souscription retenue avec sa date")
+assert(GameDataDB.chars[A].bags.Backpack, "A : inventaires relevés")
+assert(not objetsScannes(), "objets sans souscription : pas de scan des objets")
+for _, t in pairs(glib.types) do assert(type(gns[t.gamedata]) == "function", "accesseur de GameData : " .. t.gamedata) end
+for nom in pairs(gns.rangement) do assert(glib.types[nom], "rangé mais pas au catalogue : " .. nom) end
+
+session("Bob") -- l'add-on qui a souscrit n'est pas activé sur B
+local b = GameDataDB.chars[B]
+assert(b and b.bags.Backpack.items[1].id == 100, "B : inventaires relevés à sa connexion, souscrits sur A")
+assert(b.reputations == nil and b.errors.reputations == nil and b.quests_done == nil, "B : un type sans souscription n'est pas relevé")
+assert(glib.types and LibStub("LibCommune-1.0"):Lire("inventaires", B).persos[B].bags, "lu par la lib")
+gdata("souscriptions")
+local liste = table.concat(sortie, "\n")
+assert(liste:find("inventaires : souscrit le", 1, true) and liste:find("objets : aucune souscription", 1, true), liste)
+
+GameDataDB.souscriptions.inventaires = os.time() - 31 * 24 * 3600
+session("Carl")
+assert(not (GameDataDB.chars[C] and GameDataDB.chars[C].bags), "C : plus de souscription depuis 31 jours, plus relevé")
+assert(GameDataDB.chars[B].bags.Backpack and GameDataDB.chars[A].bags, "les données relevées restent")
+gdata("souscriptions")
+assert(table.concat(sortie, "\n"):find("plus relevé", 1, true), "la liste dit qu'il n'est plus relevé")
+
+gdata("effacer inventaires")
+assert(GameDataDB.chars[A].bags == nil and GameDataDB.chars[B].bags == nil and GameDataDB.chars[B].scanned.bags == nil, "inventaires effacés")
+gdata("effacer pas un type")
+assert(table.concat(sortie, "\n"):find("inconnu", 1, true), "type inconnu refusé")
+
+-- Types globaux : recettes, maîtres, marchands, HV, objets. Le joueur souscrit lui-même aux objets (/gdata souscrire).
+gdata("souscrire objets")
+gdata("souscrire cours de l'HV")
+assert(gns.souscrit("cours de l'HV"), "/gdata souscrire cours de l'HV : le nom tapé tel quel")
+session("Bob")
+assert(objetsScannes(), "objets souscrits : scan des objets lancé")
+GameDataDB.vendors[42] = { items = {} }
+GameDataItems.items[7] = { name = "x" }
+gdata("effacer objets")
+assert(next(GameDataItems.items) == nil and GameDataItems.next_id == 1, "objets effacés, le balayage repart de 1")
+gns.itemTick() -- un ID encore en file d'attente, effacé entre-temps : ignoré sans erreur
+gdata("effacer marchands")
+assert(next(GameDataDB.vendors) == nil, "marchands effacés")
+print("GameData : souscriptions OK")
