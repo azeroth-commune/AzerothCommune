@@ -348,6 +348,7 @@ local EXPORTS = {
     return out
   end,
 }
+ns.exports = EXPORTS -- un add-on consommateur (le Négoce) y ajoute les siens, avec un bouton dans ns.exportList
 function ns.exportCommand(what)
   if not (BeAGoodPal and BeAGoodPal.Export) then return print("GameData : l'export par image demande le cœur Be a Good Pal.") end
   local get = EXPORTS[what]

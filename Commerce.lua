@@ -236,7 +236,7 @@ local function readReplicate()
     GameDataMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = hist }
     reading, readAt = false, GetTime()
     print(("GameData : hôtel des ventes lu, %d enchères. /reload pour l'écrire sur le disque."):format(n))
-    if ns.ahAlerts then safe("auction_alerts", ns.ahAlerts) end
+    safe("market_scanned", ns.marketScanned)
   end
   step()
 end
@@ -264,6 +264,10 @@ local function learnDeposit()
   local function median(t) table.sort(t) return t[math.floor((#t + 1) / 2)] end
   GameDataDB.deposit = { rate24 = median(rates), min = #mins > 0 and median(mins) or nil, checked = ns.now() }
 end
+
+-- Appelé après chaque lecture de l'HV. Un add-on qui veut réagir au scan frais (le Négoce) s'y accroche :
+-- hooksecurefunc(GameDataAPI, "marketScanned", fn).
+function ns.marketScanned() end
 
 local function requestScan()
   if GetTime() - lastRequest < SCAN_COOLDOWN then return end

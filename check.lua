@@ -98,6 +98,18 @@ local rc = ns.recettesConnues()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(LibStub("LibCommune-1.0"):Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
+-- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
+C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
+  GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
+GetRealmName, UnitFactionGroup, time, GameDataMarket = function() return "R" end, function() return "Alliance" end, os.time, {}
+local scanned, realPrint = 0, print
+ns.marketScanned = function() scanned = scanned + 1 end
+print = noop
+commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
+commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
+print = realPrint
+assert(GameDataMarket["R-Alliance"].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
+assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
 print("GameData : vérifications OK")
 -- Mécréant : le plan d'achat d'un objet (prix sûr, débit, quantité).
 assert(loadfile("GameData/Flip.lua"))("GameData", ns)
@@ -227,6 +239,7 @@ print("GameData : ventes de l'onglet HV OK")
 
 -- Tableaux : tri par colonne, cases vides toujours en bas, égalités dans l'ordre d'arrivée.
 assert(loadfile("GameData/Window.lua"))("GameData", ns)
+assert(ns.exportList and ns.hubTools and ns.hubTools[1][1] == "Acheter ou fabriquer", "boutons d'export et outils du hub, ouverts aux consommateurs")
 local cols = { { key = "h", get = function(r) return r.h end }, { key = "n", get = function(r) return r.n end } }
 local rows = { { n = "b", h = 5 }, { n = "a" }, { n = "c", h = 9 }, { n = "d", h = 5 } }
 ns.sortRows(rows, cols, { key = "h", desc = true })
