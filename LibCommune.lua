@@ -14,7 +14,7 @@
 -- périmé. Pour un type par personnage, le lot va aussi par personnage : { persos = { [personnage] = lot } }. Dans un lot
 -- mixte (marchands : vus en jeu et base VendorData), une ligne d'une autre provenance porte la sienne (champ provenance).
 -- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session.
--- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe par eux d'abord (Fournisseurs.lua).
+-- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
 local MAJOR, MINOR = "LibCommune-1.0", 5
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -38,8 +38,8 @@ local TYPES = {
   ["prix des vols"] = { leger = true, gamedata = "prixDesVols" }, -- { [départ] = { [arrivée] = prix } }
   ["add-ons installés"] = { leger = true, gamedata = "addonsInstalles" }, -- { [dossier] = { title, version, … } }
   -- { objet = fn(itemID) -> { min, qty, auctions, tiers, hist, sources }, depot = { rate24, min }, hv = le relevé de
-  --   GameData ({ [royaume-faction] = { items, hist, … } }, seulement les champs qu'aucun fournisseur ne donne) } :
-  --   par fournisseurs (Fournisseurs.lua), puis le relevé de GameData
+  --   GameData ({ [royaume-faction] = { items, hist, … } } ; hist absent quand AuctionDB le tient) } : le scan de
+  --   GameData fait foi, les fournisseurs pour l'historique et quand GameData n'a pas scanné l'HV (Fournisseurs.lua)
   ["cours de l'HV"] = { gamedata = "coursHV" },
   objets = { gamedata = "objets" }, -- { [itemID] = { name, class, price, stack, … } }
 }
