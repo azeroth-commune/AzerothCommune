@@ -7,8 +7,8 @@
 -- Cours de l'HV, ligne d'un objet de ton HV (royaume-faction du personnage connecté) :
 --   Avec un scan de GameData pour cet HV : min (prix unitaire le plus bas), qty (quantité en vente), auctions (annonces),
 --     tiers (paliers { {price, qty} }) de son dernier scan, relevé direct ; un objet absent de ce scan est plus en vente
---     (min nil, qty 0). hist ({ {heure, min, qté}, … }) : AuctionDB s'il a scanné l'HV il y a moins de 6 h (GameData
---     n'en garde alors pas de copie), sinon celui de GameData, sinon celui d'AuctionDB.
+--     (min nil, qty 0). hist ({ {heure, min, qté}, … }) : AuctionDB dès qu'il en a un, même ancien (un historique reste juste) ;
+--     sinon celui de GameData. GameData n'en garde pas de copie quand AuctionDB a scanné l'HV il y a moins de 6 h.
 --   Sans : les fournisseurs seuls. min : Auctionator (API v1 ; seulement si son âge est 0, « vu aujourd'hui » : le mieux
 --     qu'il dise, pas « vu au dernier scan ») > TSM (TSM_API, non essayé) > AuctionDB ; qty et hist : AuctionDB. age :
 --     jours depuis qu'Auctionator a vu l'objet. AuctionDB : un point qui n'est pas du dernier scan de la maison (ou plus
@@ -145,16 +145,15 @@ end
 function lib:LireParFournisseurs(typeDeDonnees, d, lotGD, avecGameData)
   local chaine = presents(typeDeDonnees)
   local gd = avecGameData and lecteurGameData(d)
-  if gd then -- son scan fait foi ; un fournisseur ne donne plus que ses champs lourds, avant GameData s'il est frais
-    local avant, apres = {}, {}
+  if gd then -- son scan fait foi ; un fournisseur ne donne plus que ses champs lourds (l'historique), avant GameData
+    -- même s'il n'est plus frais : un historique de plusieurs jours reste juste quand son dernier point a 7 h, alors que
+    -- celui de GameData peut n'avoir qu'un point (il le recommence quand AuctionDB était frais). « frais » ne décide que
+    -- de ce que GameData garde à son scan (ChampsARelever).
+    local avant = {}
     for _, f in ipairs(chaine) do
-      if f.lourds then
-        f.champs = f.lourds
-        table.insert(f.frais and avant or apres, f)
-      end
+      if f.lourds then f.champs = f.lourds; avant[#avant + 1] = f end
     end
     avant[#avant + 1] = { nom = "GameData", provenance = "relevé direct", champs = CHAMPS[typeDeDonnees], lire = gd }
-    for _, f in ipairs(apres) do avant[#avant + 1] = f end
     chaine = avant
   end
   if #chaine == 0 then return nil, avecGameData and "pas encore relevé" or "pas de GameData ni de fournisseur" end

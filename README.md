@@ -34,8 +34,9 @@ et qu'un fournisseur tient déjà ; ce que le scan de GameData vient de voir est
 
 - **Avec un scan de GameData pour ton HV** : `min`, `qty`, `auctions`, `tiers` de son dernier scan, « relevé direct » ;
   un objet absent de ce scan est plus en vente (`min` nil, `qty` 0), même si un autre add-on l'a « vu » récemment.
-  `hist` : AuctionDB s'il a scanné l'HV il y a moins de 6 h (GameData n'en garde alors pas de copie,
-  `lib:ChampsARelever("cours de l'HV")`), sinon celui de GameData, sinon celui d'AuctionDB.
+  `hist` : AuctionDB dès qu'il en a un, même ancien (un historique de plusieurs jours reste juste), sinon celui de
+  GameData ; GameData n'en garde pas de copie quand AuctionDB a scanné l'HV il y a moins de 6 h
+  (`lib:ChampsARelever("cours de l'HV")`).
 - **Sans** (pas de GameData, ou pas encore de scan de cet HV) : les fournisseurs seuls, jamais de relevé de repli.
 
 | Champ | Fournisseurs, dans l'ordre (sans scan de GameData) |
