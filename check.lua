@@ -26,6 +26,9 @@ C_Item = {
   RequestLoadItemDataByID = function(id) requested[#requested + 1] = id end,
 }
 
+-- La lib commune (dépôt voisin, chargée avant GameData comme dans le jeu) : GameData y prend le relevé des recettes.
+assert(loadfile("LibCommune/LibStub.lua"))()
+assert(loadfile("LibCommune/LibCommune.lua"))()
 assert(loadfile("GameData/GameData.lua"))("GameData", ns)
 
 local bags = ns.containers(ns.isBag)
@@ -89,6 +92,14 @@ local r = GameDataDB.recipes[3307]
 assert(r and r.output == 3575 and r.reagents[1].id == 2772 and r.reagents[1].qty == 1, "recette lue")
 assert(GameDataDB.recipes[3308] and GameDataDB.recipes[3308].output == 3577, "recette pas encore apprise : lue aussi")
 assert(c.recipes.Minage.rank == 140 and c.recipes.Minage.known[3307] == "optimal" and not c.recipes.Minage.known[3308])
+-- Ce que lit LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers.
+GameDataDB.chars["Belegard-Test"], GameDataDB.chars["Sans-Metier"] = c, { errors = {} }
+local rc = ns.recettesConnues()
+assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
+assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
+GameDataAPI = ns
+assert(LibStub("LibCommune-1.0"):Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
+GameDataAPI = ns -- comme après le chargement de GameData.lua
 print("GameData : vérifications OK")
 -- Mécréant : le plan d'achat d'un objet (prix sûr, débit, quantité).
 assert(loadfile("GameData/Flip.lua"))("GameData", ns)

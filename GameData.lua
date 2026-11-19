@@ -10,7 +10,7 @@
 -- Chaque lecture tourne sous pcall : une API absente sur ce client devient une ligne dans `errors`.
 
 local _, ns = ...
-GameDataAPI = ns -- lu par BeAGoodPal_Commandes (prix, recettes, stocks, fenêtres)
+GameDataAPI = ns -- lu par Handshake (prix, stocks, fenêtres) et LibCommune (recettesConnues)
 
 local function now() return date("%Y-%m-%d %H:%M:%S") end
 -- Sur Forever, UnitName("player") renvoie prénom, nom de famille (le 2e retour n'est pas le royaume) ;
