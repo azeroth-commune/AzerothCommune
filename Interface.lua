@@ -62,7 +62,9 @@ end
 ---------------------------------------------------------------------------------------------------
 -- Noms d'objets. objets = { [id] = { name, link } } : la base de l'add-on (GameDataItems.items, HandshakeDB.items…).
 -- garde : la table où retenir le nom d'un objet quand le serveur l'envoie (nil : ne rien retenir, un autre s'en charge).
-local demandes = {} -- [id] = garde (ou false) : déjà demandé au serveur cette session
+-- Dans la lib et pas dans ce fichier : le cadre d'écoute (lib.cadreObjets) d'une copie plus ancienne le lit aussi.
+local demandes = lib.demandesObjets or {} -- [id] = garde (ou false) : déjà demandé au serveur cette session
+lib.demandesObjets = demandes
 
 -- Nom et lien d'un objet ; pas encore connu du client : demandé au serveur, retenu dans garde quand il arrive.
 function lib.RetenirObjet(id, garde)
