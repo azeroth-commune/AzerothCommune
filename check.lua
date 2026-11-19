@@ -166,12 +166,13 @@ assert(lotLib.provenance == "relevé direct" and lotLib.champs.hist == "AuctionD
 local retire = hvLib.objet(9999)
 assert(retire.min == nil and retire.qty == 0, "absent du scan de GameData : plus en vente, même vu aujourd'hui par Auctionator")
 assert(ns.exports.hv().items == "2772,100,5,1,100:5", "export comme avant")
--- AuctionDB plus frais (son dernier scan il y a 7 h) : GameData garde son historique, comme avant.
+-- AuctionDB plus frais (son dernier scan il y a 7 h) : GameData garde son historique, comme avant ; à la lecture,
+-- celui d'AuctionDB (plusieurs jours) passe quand même avant le point unique de GameData (relecture de Negoce#1).
 AuctionDBForeverSaved.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
 scanHV()
 hvR = GameDataMarket["R-Alliance"]
 assert(scanned == 3 and #hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100, "historique gardé par GameData")
-assert(LibStub("LibCommune-1.0"):Lire("cours de l'HV").objet(2772).sources.hist == "GameData", "et lu chez lui")
+assert(LibStub("LibCommune-1.0"):Lire("cours de l'HV").objet(2772).sources.hist == "AuctionDB", "lu : l'historique d'AuctionDB d'abord")
 Auctionator, AuctionDBForeverSaved = nil, nil
 print("GameData : fournisseurs des cours de l'HV OK")
 assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
