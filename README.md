@@ -34,13 +34,22 @@ présent qui a l'objet :
 
 | Champ | Fournisseurs, dans l'ordre |
 |---|---|
-| `min` (prix unitaire le plus bas) | Auctionator (`Auctionator.API.v1`) > TSM (`TSM_API`, non essayé) > AuctionDB (SavedVariables, fragile) > GameData |
+| `min` (prix unitaire le plus bas) | Auctionator (`Auctionator.API.v1`) > TSM (`TSM_API`, non essayé) > AuctionDB (SavedVariables, fragile ; GPL v3 dans son LICENSE, LGPLv3 dans son TOC) > GameData |
 | `qty` (quantité en vente) | AuctionDB > GameData |
 | `auctions` (annonces), `tiers` (paliers) | GameData |
 | `hist` (`{ {heure, min, qté}, … }`) | AuctionDB (scans des derniers jours) > GameData (12 derniers scans) |
 
-GameData ne garde pas de copie de ce qu'un fournisseur présent donne : il ne relève que `lib:ChampsARelever("cours de l'HV")`.
-Un autre add-on ne dit pas sous quel build il a relevé : son lot n'a ni build ni date.
+`age` (jours depuis qu'Auctionator a vu l'objet) vient d'Auctionator. La `qty` d'AuctionDB compte aussi les annonces sans
+achat immédiat (enchères seules) ; celle de GameData, seulement les annonces avec achat immédiat.
+
+- **Fraîcheur** : un « dernier vu » ne vaut que s'il vient du dernier scan. Auctionator : âge 0, sinon plus en vente
+  (`min` nil, `age` rendu) ; AuctionDB : point du dernier scan de la maison (ou plus récent), sinon `min` nil, `qty` 0 ;
+  l'historique reste.
+- **Présence ≠ données** : GameData ne garde pas de copie de ce qu'un fournisseur donne, mais un fournisseur ne compte
+  que s'il a des données pour ton HV : `lib:ChampsARelever("cours de l'HV", sondes)`, sondes = quelques objets du scan en
+  cours ; Auctionator et TSM doivent rendre un prix frais pour l'un d'eux, AuctionDB avoir scanné l'HV il y a moins de 6 h.
+  Sinon GameData relève le champ lui-même, le note (`GameDataMarket[hv].releves`) et, à la lecture, ce champ vient de lui.
+- Un autre add-on ne dit pas sous quel build il a relevé : son lot n'a ni build ni date.
 
 Avec GameData, la lib lit sa base (`GameDataAPI.recettesConnues`) ; sans lui, relevé de repli : le personnage connecté,
 en mémoire, le temps de la session, jamais dans les SavedVariables de l'add-on hôte.

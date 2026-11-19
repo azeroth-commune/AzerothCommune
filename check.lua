@@ -172,70 +172,116 @@ assert(HoteDB.reglages.x == 1 and next(HoteDB, next(HoteDB)) == nil, "SavedVaria
 print("LibCommune : GameData absent, relevé de repli OK")
 
 -- Fournisseurs des cours de l'HV (GameData#6). Sans GameData, la lib passe directement par un fournisseur : une fausse API
--- d'Auctionator donne les prix, provenance « autre add-on ».
+-- d'Auctionator donne les prix, provenance « autre add-on ». Un prix ne vaut que vu au dernier scan (âge 0, en jours).
+time = os.time
 local appels = {}
-Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function(appelant, id)
-  appels[#appels + 1] = appelant
-  return ({ [2772] = 95, [2840] = 40 })[id]
-end } } }
+local PRIX, AGE = { [2772] = 95, [2840] = 40, [2841] = 300 }, { [2772] = 0, [2840] = 0, [2841] = 3 }
+local function fausseAPI()
+  return { API = { v1 = {
+    GetAuctionPriceByItemID = function(appelant, id) appels[#appels + 1] = appelant return PRIX[id] end,
+    GetAuctionAgeByItemID = function(appelant, id) appels[#appels + 1] = appelant return AGE[id] end } } }
+end
+Auctionator = fausseAPI()
 local hv, lotHV = lib:Lire("cours de l'HV")
-assert(hv and hv.objet(2772).min == 95 and hv.objet(2772).sources.min == "Auctionator", "prix venus d'Auctionator")
+assert(hv and hv.objet(2772).min == 95 and hv.objet(2772).age == 0 and hv.objet(2772).sources.min == "Auctionator", "prix venus d'Auctionator")
 assert(appels[1] == "LibCommune", "l'API d'Auctionator reçoit le nom de l'appelant")
+local vieux = hv.objet(2841)
+assert(vieux and vieux.min == nil and vieux.age == 3, "pas vu au dernier scan (âge 3 j) : plus en vente, l'âge reste")
 assert(hv.objet(1) == nil and hv.hv == nil and hv.depot == nil, "objet inconnu d'Auctionator ; rien de GameData")
 assert(lotHV.provenance == "autre add-on" and lotHV.fournisseur == "Auctionator" and lotHV.champs.min == "Auctionator", "lot autre add-on")
 assert(lotHV.build == nil and lotHV.releve == nil and not lotHV.fragile, "un autre add-on ne dit pas son build ; API publique : pas fragile")
-local reste = lib:ChampsARelever("cours de l'HV")
+-- Présence ≠ données : Auctionator ne compte pour le prix que s'il rend un prix frais pour un des objets du scan (sondes).
+local reste = lib:ChampsARelever("cours de l'HV", { 1, 2772 })
 assert(not reste.min and reste.qty and reste.auctions and reste.tiers and reste.hist, "à relever : tout sauf le prix")
+reste = lib:ChampsARelever("cours de l'HV", { 1, 2841 })
+assert(reste.min, "Auctionator sans prix frais pour les objets du scan : GameData relève le prix")
+reste = lib:ChampsARelever("cours de l'HV")
+assert(reste.min, "sans sondes : rien ne prouve qu'Auctionator a des données, GameData relève le prix")
+local plein = PRIX
+PRIX = {} -- base vide (royaume jamais scanné par Auctionator)
+assert(lib:ChampsARelever("cours de l'HV", { 2772, 2840 }).min, "base d'Auctionator vide : GameData relève le prix")
+PRIX = plein
 -- Un fournisseur qui plante ne fait pas planter la lecture (ni ne prive des autres).
 Auctionator.API.v1.GetAuctionPriceByItemID = function() error("Auctionator cassé") end
 assert(lib:Lire("cours de l'HV").objet(2772) == nil, "fournisseur en erreur : ignoré")
+assert(lib:ChampsARelever("cours de l'HV", { 2772 }).min, "fournisseur en erreur : GameData relève")
+Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function() return 95 end } } } -- sans l'âge : on ne sait pas s'il est frais
+assert(lib:Lire("cours de l'HV") == nil, "Auctionator sans GetAuctionAgeByItemID : pas fournisseur")
 Auctionator = nil
 
 -- TSM (API publique documentée, pas installé ici) : prix par TSM_API.GetCustomPriceValue("dbminbuyout", "i:<id>").
 TSM_API = { GetCustomPriceValue = function(source, item) if source == "dbminbuyout" and item == "i:2772" then return 88 end end }
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2772).min == 88 and lotHV.fournisseur == "TSM", "prix venus de TSM")
+assert(not lib:ChampsARelever("cours de l'HV", { 2772 }).min and lib:ChampsARelever("cours de l'HV", { 9 }).min, "TSM : sondé aussi")
 TSM_API = nil
 
--- AuctionDB : pas d'API publique, ses SavedVariables (fragile). La maison de la faction la plus récemment scannée.
+-- AuctionDB : pas d'API publique, ses SavedVariables (fragile). La maison de la faction la plus récemment scannée ; un
+-- point qui n'est pas du dernier scan de la maison : plus en vente (min nil, quantité 0), l'historique reste.
+local T = os.time() - 600 -- dernier scan d'AuctionDB il y a 10 min
 AuctionDBForeverSaved = { houses = {
-  ["na-forever-rp Alliance"] = { scans = { { 2000 } }, items = { [2772] = "1000,90,95,300 2000,0,0,10", [2840] = "2000,41,45,800" } },
+  ["na-forever-rp Alliance"] = { scans = { { T }, { T - 900 } }, items = {
+    [2772] = ("%d,90,95,300 %d,0,0,10"):format(T - 900, T), [2840] = ("%d,41,45,800"):format(T),
+    [44] = ("%d,20100,20100,1"):format(T - 900), [45] = ("%d,7,7,7"):format(T + 5) } },
   ["na-forever-pvp Alliance"] = { scans = { { 1000 } }, items = { [2772] = "1000,1,1,1" } },
-  ["na-forever-rp Horde"] = { scans = { { 3000 } }, items = { [2772] = "3000,7,7,7" } } } }
+  ["na-forever-rp Horde"] = { scans = { { T + 60 } }, items = { [2772] = ("%d,7,7,7"):format(T + 60) } } } }
 hv, lotHV = lib:Lire("cours de l'HV")
 local cuivre = hv.objet(2772)
 assert(cuivre.min == nil and cuivre.qty == 10 and #cuivre.hist == 2 and cuivre.hist[1][2] == 90 and cuivre.hist[1][3] == 300, "AuctionDB : quantité et historique")
 assert(hv.objet(2840).min == 41 and hv.objet(2840).qty == 800, "AuctionDB : prix du dernier scan")
+local retire = hv.objet(44)
+assert(retire.min == nil and retire.qty == 0 and #retire.hist == 1, "plus à l'HV au dernier scan : plus en vente, historique gardé")
+assert(hv.objet(45).min == 7, "point d'un perso de confiance plus récent que le dernier scan : frais")
 assert(lotHV.fournisseur == "AuctionDB" and lotHV.fragile and lotHV.champs.hist == "AuctionDB", "SavedVariables : marqué fragile")
-reste = lib:ChampsARelever("cours de l'HV")
-assert(not reste.min and not reste.qty and not reste.hist and reste.tiers and reste.auctions, "à relever avec AuctionDB : paliers, annonces")
+reste = lib:ChampsARelever("cours de l'HV", { 2772 })
+assert(not reste.min and not reste.qty and not reste.hist and reste.tiers and reste.auctions, "à relever avec AuctionDB récent : paliers, annonces")
+AuctionDBForeverSaved.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
+reste = lib:ChampsARelever("cours de l'HV", { 2772 })
+assert(reste.min and reste.qty and reste.hist, "dernier scan d'AuctionDB il y a 7 h : pas récent, GameData relève tout")
 AuctionDBForeverSaved = { houses = "format changé" }
 assert(lib:Lire("cours de l'HV") == nil, "format d'AuctionDB changé : plus de fournisseur, rien ne plante")
 
 -- Tous ensemble, avec GameData : pour chaque champ, le premier de la liste qui l'a. Auctionator (prix) > AuctionDB
--- (quantité, historique) > GameData (le reste ; prix d'un objet qu'Auctionator n'a pas, s'il l'a relevé).
-Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function(_, id) return ({ [2772] = 95 })[id] end } } }
-AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { 2000 } }, items = { [2772] = "2000,90,95,300" } } } }
+-- (quantité, historique) > GameData (le reste ; prix d'un objet qu'Auctionator n'a pas, s'il l'a relevé). Un champ que
+-- GameData a relevé à son dernier scan (releves : aucun fournisseur n'en avait alors) vient de lui.
+Auctionator = fausseAPI()
+AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { T } }, items = { [2772] = ("%d,90,95,300"):format(T) } } } }
 local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19 10:00:00" }
-GameDataAPI = { coursHV = function() return { hv = { ["Kerys-Alliance"] = {
-  items = { [2772] = { qty = 1, auctions = 3, tiers = { { price = 96, qty = 1 } } }, [2841] = { min = 500, qty = 4 } },
-  hist = { [2772] = { { 1, 2, 3 } } } } }, depot = { rate24 = 0.3 } }, lotGD end }
+local marche = { releves = { auctions = true, tiers = true },
+  items = { [2772] = { auctions = 3, tiers = { { price = 96, qty = 1 } } }, [2841] = { auctions = 1 } },
+  hist = { [2772] = { { 1, 2, 3 } } } }
+GameDataAPI = { coursHV = function() return { hv = { ["Kerys-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end }
 hv, lotHV = lib:Lire("cours de l'HV")
 cuivre = hv.objet(2772)
-assert(cuivre.min == 95 and cuivre.qty == 300 and cuivre.auctions == 3 and cuivre.tiers[1].price == 96 and cuivre.hist[1][1] == 2000, "champ par champ")
+assert(cuivre.min == 95 and cuivre.qty == 300 and cuivre.auctions == 3 and cuivre.tiers[1].price == 96 and cuivre.hist[1][1] == T, "champ par champ")
 assert(cuivre.sources.min == "Auctionator" and cuivre.sources.qty == "AuctionDB" and cuivre.sources.tiers == "GameData", "sources de la ligne")
-assert(hv.objet(2841).min == 500 and hv.objet(2841).sources.min == "GameData", "objet absent des fournisseurs : le relevé de GameData")
 assert(lotHV.provenance == "autre add-on" and lotHV.fournisseur == "Auctionator" and lotHV.releve == lotGD and lotHV.fragile, "lot mixte")
 assert(lotHV.champs.min == "Auctionator" and lotHV.champs.qty == "AuctionDB" and lotHV.champs.tiers == "GameData", "d'où vient chaque champ")
 assert(hv.depot.rate24 == 0.3 and hv.hv["Kerys-Alliance"], "dépôt et relevé de GameData")
+-- GameData a relevé prix et quantité à son dernier scan (Auctionator sans prix frais, AuctionDB pas récent) : les siens.
+marche.releves = { min = true, qty = true, auctions = true, tiers = true, hist = true }
+marche.items[2772].min, marche.items[2772].qty = 99, 4
+hv, lotHV = lib:Lire("cours de l'HV")
+cuivre = hv.objet(2772)
+assert(cuivre.min == 99 and cuivre.qty == 4 and cuivre.sources.min == "GameData" and cuivre.sources.qty == "GameData", "relevé par GameData : le sien")
+assert(lotHV.champs.min == "GameData" and lotHV.provenance == "relevé direct" and lotHV.build == 64000, "lot : celui de GameData")
+-- Un relevé d'avant les fournisseurs (sans releves) : tout vient de GameData.
+marche.releves = nil
+assert(lib:Lire("cours de l'HV").objet(2772).sources.min == "GameData", "relevé d'avant : tout de GameData")
+-- HV neutre ou faction inconnue : rien ne plante.
+local faction = UnitFactionGroup
+UnitFactionGroup = function() return nil end
+assert(pcall(lib.Lire, lib, "cours de l'HV") and pcall(lib.ChampsARelever, lib, "cours de l'HV", { 2772 }), "faction inconnue")
+UnitFactionGroup = faction
 -- Sans fournisseur, avec GameData : son relevé, son lot (relevé direct) ; rien de relevé : « pas encore relevé ».
 Auctionator, AuctionDBForeverSaved = nil, nil
+marche.items[2841].min = 500
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2841).min == 500 and lotHV.provenance == "relevé direct" and lotHV.build == 64000 and lotHV.champs.min == "GameData", "GameData seul")
-reste = lib:ChampsARelever("cours de l'HV")
+reste = lib:ChampsARelever("cours de l'HV", { 2772 })
 assert(reste.min and reste.qty and reste.auctions and reste.tiers and reste.hist, "sans fournisseur : GameData relève tout")
 GameDataAPI.coursHV = function() end
-d, raison = lib:Lire("cours de l'HV")
+local d, raison = lib:Lire("cours de l'HV")
 assert(d == nil and raison == "pas encore relevé", "GameData sans relevé, sans fournisseur : " .. tostring(raison))
 GameDataAPI = nil
 print("LibCommune : fournisseurs des cours de l'HV OK")
