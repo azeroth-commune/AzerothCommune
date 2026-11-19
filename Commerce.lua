@@ -71,7 +71,7 @@ end
 -- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par LibCommune.
 local function scanKnownRecipes()
   local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not (lib and lib.ReleverRecettesSansFenetre) then return end -- absente, ou mineure 1
+  if not (lib and lib.ReleverRecettesSansFenetre) or not ns.demande("recettes connues") then return end -- absente, ou mineure 1
   local c = ns.char()
   c.recipes = c.recipes or {}
   lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes)
@@ -310,10 +310,17 @@ for _, e in ipairs({ "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDAT
   pcall(f.RegisterEvent, f, e)
 end
 
+-- Le type de données que relève chaque fenêtre : rien n'est lu s'il n'est pas demandé (Demandes.lua). Les recettes
+-- passent par ns.run, qui vérifie lui-même.
+local TYPE_DE = { TRAINER_SHOW = "maîtres de métier", TRAINER_UPDATE = "maîtres de métier", MERCHANT_SHOW = "marchands",
+  MERCHANT_UPDATE = "marchands", TAXIMAP_OPENED = "prix des vols", AUCTION_HOUSE_SHOW = "cours de l'HV",
+  REPLICATE_ITEM_LIST_UPDATE = "cours de l'HV" }
+
 f:SetScript("OnEvent", function(_, event)
   -- diagnostic : la dernière fois que chaque événement est arrivé (pour savoir si une fenêtre a bien été vue)
   GameDataDB.events = GameDataDB.events or {}
   GameDataDB.events[event] = ns.now()
+  if TYPE_DE[event] and not ns.demande(TYPE_DE[event]) then return end
   if event == "PLAYER_LOGIN" then
     C_Timer.After(5, function() safe("recipes_login", scanKnownRecipes) end)
   elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then

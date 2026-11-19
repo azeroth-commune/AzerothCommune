@@ -2,10 +2,11 @@
 ## Title: GameData
 ## Category: Data
 ## Category-frFR: Données
-## Notes: Base de données scannée du jeu : tous tes persos (sacs, banque, courrier, équipement, monnaies, réputations, métiers, recettes, quêtes terminées), les add-ons installés, tous les objets du jeu, les recettes et leurs composants, les maîtres de métier, les marchands et les prix de l'hôtel des ventes. /gdata
+## Notes: Base de données scannée du jeu : tous tes persos (sacs, banque, courrier, équipement, monnaies, réputations, métiers, recettes, quêtes terminées), les add-ons installés, tous les objets du jeu, les recettes et leurs composants, les maîtres de métier, les marchands et les prix de l'hôtel des ventes ; seulement ce que demandent tes add-ons. /gdata
 ## OptionalDeps: LibCommune
 ## SavedVariables: GameDataDB, GameDataItems, GameDataMarket
 GameData.lua
 Commerce.lua
+Demandes.lua
 Window.lua
 VendorData.lua
