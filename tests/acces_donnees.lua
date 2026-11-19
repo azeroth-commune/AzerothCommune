@@ -60,3 +60,21 @@ test("souscription retenue par GameData avec sa date, pour tout le joueur", func
     assertType("number", GameDataDB.souscriptions.marchands)
     assertTrue(GameDataAPI.souscrit("marchands"))
 end)
+
+test("provenance : un lot porte le build du client simulé, et chaque type lu rend son lot", function()
+    assertType("function", GetBuildInfo)
+    local version, build = GetBuildInfo()
+    assertType("string", version)
+    assertNotNil(tonumber(build))
+    assertType("table", GameDataDB.lots) -- lots vérifiés au chargement de GameData
+    local lot = GameDataAPI.lot()
+    assertEquals("relevé direct", lot.provenance)
+    assertEquals(tonumber(build), lot.build)
+    assertType("string", lot.date)
+    local lib = LibStub("LibCommune-1.0")
+    for nom, t in pairs(lib.types) do
+        local data, l = lib:Lire(nom, "tous")
+        if data and not t.parPerso then assertType("table", l) end
+        if data and t.parPerso then assertType("table", l.persos) end
+    end
+end)
