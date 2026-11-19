@@ -12,6 +12,8 @@ end
 C_Timer = { After = function(_, fn) fn() end } -- le relevé différé part tout de suite dans le test
 UnitName = function() return "Belegard", "Marteaudefer" end
 GetRealmName = function() return "Kerys" end
+GetBuildInfo = function() return "1.16.1", "64000", "Nov 1 2026", 11601 end
+date = os.date
 local MOI = "Belegard Marteaudefer-Kerys"
 
 assert(loadfile("LibCommune/LibStub.lua"))()
@@ -83,6 +85,35 @@ assert(d == nil and raison == "pas encore relevé", "objets absents : " .. tostr
 lib.souscriptions = {}
 print("LibCommune : catalogue et souscriptions avec GameData OK")
 
+-- Provenance (GameData#5) : lire un type rend son lot, provenance, build et date ; par personnage pour un type par perso.
+local lotM = { provenance = "relevé direct", build = 64000, version = "1.16.1", date = "2026-11-19 10:00:00" }
+GameDataAPI.marchands = function() return { [1234] = { items = {} } }, lotM end
+local _, lot = lib:Lire("marchands")
+assert(lot == lotM and lot.provenance == "relevé direct" and lot.build == 64000 and lot.date, "lot d'un type pour le joueur")
+local lotA, lotB = { provenance = "relevé direct", build = 63000, perime = true }, { provenance = "relevé direct", build = 64000 }
+GameDataAPI.inventaires = function()
+  return { persos = { [MOI] = { bags = {} }, ["Alt Dupont-Kerys"] = { bags = {} } } }, { persos = { [MOI] = lotB, ["Alt Dupont-Kerys"] = lotA } }
+end
+_, lot = lib:Lire("inventaires")
+assert(lot.persos[MOI] == lotB and lot.persos["Alt Dupont-Kerys"] == nil, "lot du personnage lu seulement")
+_, lot = lib:Lire("inventaires", "tous")
+assert(lot.persos["Alt Dupont-Kerys"].perime and lot.persos["Alt Dupont-Kerys"].build == 63000, "lots de tous, figé sous un autre build : peut-être périmé")
+GameDataAPI.inventaires = function() return { persos = { [MOI] = {} } } end -- un GameData d'avant les lots
+d, lot = lib:Lire("inventaires")
+assert(d and lot.persos[MOI] == nil, "sans lot fourni : les données quand même")
+-- Lot mixte : pour chaque clé, la provenance la plus fiable gagne ; une ligne d'une autre provenance porte la sienne.
+local vu, base = { [1] = { price = 90 } }, { [1] = { price = 100 }, [2] = { price = 50 } }
+local autre = { [2] = { price = 60 }, [3] = { price = 70 } }
+local mixte, tete = lib.Fusionner({ { donnees = base, provenance = "source externe" }, { donnees = autre, provenance = "autre add-on" },
+  { donnees = vu, provenance = "relevé direct" } })
+assert(tete == "relevé direct" and mixte[1] == vu[1] and mixte[1].provenance == nil, "vu en jeu > base externe")
+assert(mixte[2].price == 60 and mixte[2].provenance == "autre add-on", "autre add-on > source externe")
+assert(mixte[3].provenance == "autre add-on" and base[2].provenance == nil, "les sources ne sont pas touchées")
+mixte, tete = lib.Fusionner({ { donnees = {}, provenance = "relevé direct" }, { donnees = base, provenance = "source externe" } })
+assert(tete == "source externe" and mixte[2].provenance == nil, "une seule source avec des données : c'est la provenance du lot")
+assert(lib.provenances[1] == "relevé direct" and lib.provenances[4] == "source externe", "du plus fiable au moins fiable")
+print("LibCommune : provenance, build et date des lots OK")
+
 -- GameData absent : relevé de repli du personnage connecté, en mémoire ; rien n'est écrit chez l'hôte.
 GameDataAPI = nil
 HoteDB = { reglages = { x = 1 } } -- les SavedVariables de l'add-on hôte
@@ -113,6 +144,9 @@ assert(minage.rank == 140 and minage.known[3307] == "optimal" and not minage.kno
 assert(repli.recettes[3307].output == 3575 and repli.recettes[3307].reagents[1].id == 2772, "recette lue")
 assert(repli.recettes[3308], "recette pas encore apprise : lue aussi")
 assert(lib:Lire("recettes connues", "tous").persos[MOI], "tous = le personnage connecté seulement")
+local _, lotRepli = lib:Lire("recettes connues")
+lotRepli = lotRepli.persos[MOI]
+assert(lotRepli.provenance == "relevé direct" and lotRepli.build == 64000 and lotRepli.version == "1.16.1" and lotRepli.date, "lot du relevé de repli")
 d, raison = lib:Lire("recettes connues", "Alt Dupont-Kerys")
 assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameData : " .. tostring(raison))
 for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI", "global écrit par la lib : " .. k) end
