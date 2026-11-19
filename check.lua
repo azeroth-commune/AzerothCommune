@@ -262,8 +262,49 @@ local lm = GameDataDB.lots.marchands
 assert(lm.perime and lm.build == 64000, "lot du joueur figé sous l'ancien build : peut-être périmé")
 assert(GameDataDB.chars[C].lots.bags.perime and GameDataDB.chars[C].bags, "lot d'un perso pas connecté : marqué, gardé")
 assert(GameDataDB.chars[A].lots.bags.build == 64100 and not GameDataDB.chars[A].lots.bags.perime, "perso connecté : relevé à nouveau, plus périmé")
+local figeLe = lm.date
+lm.date = "2026-11-01 12:00:00"
 gns.noterLot("marchands") -- un autre marchand vu : les autres restent d'avant
 assert(lm.perime and lm.build == 64000 and GameDataDB.lots.marchands == lm, "relevé partiel : le lot reste peut-être périmé")
+assert(lm.date == "2026-11-01 12:00:00" and figeLe, "relevé partiel d'un lot périmé : sa date reste celle où il a été figé")
 gns.noterLot("marchands", true)
 assert(GameDataDB.lots.marchands.build == 64100 and not GameDataDB.lots.marchands.perime, "relevé entier : plus périmé")
 print("GameData : provenance, build et date des lots OK")
+
+-- Recettes connues sous un nouveau build (64100) : la fenêtre d'un métier ne relève que ce métier. Une fenêtre qui ne
+-- relève rien (liste pas à jour, métier d'un autre) ne touche pas au lot ; le lot n'est plus périmé que quand chaque
+-- métier a été relevé sous ce build. Le relevé sans fenêtre note son lot à la fin.
+GameDataDB.souscriptions["recettes connues"] = os.time()
+local ca = GameDataDB.chars[A]
+ca.recipes = { Minage = { rank = 100, max = 150, known = {} }, Couture = { rank = 50, max = 75, known = {} } }
+ca.lots.recipes = { provenance = "relevé direct", build = 64000, date = "2026-11-01 12:00:00", perime = true }
+local lr = ca.lots.recipes
+local commerceS = frames[2]
+local function fenetre() commerceS.fn(commerceS, "TRADE_SKILL_LIST_UPDATE") end
+local function inchange(quoi)
+  assert(ca.lots.recipes == lr and lr.perime and lr.build == 64000 and lr.date == "2026-11-01 12:00:00", quoi)
+  assert(ca.errors.recipes == nil, tostring(ca.errors.recipes))
+end
+C_TradeSkillUI.GetProfessionInfoByRecipeID = function() return { professionName = "Forge" } end
+fenetre()
+inchange("liste pas à jour : rien de relevé, lot inchangé")
+C_TradeSkillUI.GetProfessionInfoByRecipeID, C_TradeSkillUI.IsTradeSkillLinked = nil, function() return true end
+fenetre()
+inchange("métier d'un autre : rien de relevé, lot inchangé")
+C_TradeSkillUI.IsTradeSkillLinked = nil
+fenetre()
+assert(ca.recipes.Minage.known[3307] and ca.recipes.Minage.build == 64100, "Minage relevé sous le nouveau build")
+inchange("un métier relevé, Couture encore d'avant : relevé partiel, lot toujours peut-être périmé")
+local base0 = C_TradeSkillUI.GetBaseProfessionInfo
+C_TradeSkillUI.GetBaseProfessionInfo = function() return { professionName = "Couture", skillLevel = 60, maxSkillLevel = 75 } end
+fenetre()
+C_TradeSkillUI.GetBaseProfessionInfo = base0
+assert(ca.lots.recipes.build == 64100 and not ca.lots.recipes.perime, "chaque métier relevé sous ce build : lot entier, plus périmé")
+local fini
+glib.ReleverRecettesSansFenetre = function(_, _, _, f) fini = f return true end
+ca.lots.recipes = nil
+commerceS.fn(commerceS, "PLAYER_LOGIN")
+assert(fini and ca.lots.recipes == nil, "relevé sans fenêtre en cours : lot pas encore noté")
+fini()
+assert(ca.lots.recipes and ca.lots.recipes.build == 64100, "relevé sans fenêtre fini : lot noté")
+print("GameData : lot des recettes connues, par métier OK")

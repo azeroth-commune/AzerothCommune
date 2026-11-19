@@ -26,19 +26,21 @@ end
 local function charKey() return playerName() .. "-" .. GetRealmName() end
 
 -- Le lot d'un relevé fait maintenant, par GameData en jeu.
+local function build() return tonumber((select(2, GetBuildInfo()))) end
 local function lot()
-  local version, build = GetBuildInfo()
-  return { provenance = "relevé direct", build = tonumber(build), version = version, date = now() }
+  return { provenance = "relevé direct", build = build(), version = (GetBuildInfo()), date = now() }
 end
 -- Note un relevé dans le lot nom de lots (GameDataDB.lots par défaut). entier : le relevé remplace tout le lot ; sinon il
--- n'en remplace qu'une partie (un marchand, un objet…) et un lot figé sous un autre build reste peut-être périmé.
+-- n'en remplace qu'une partie (un marchand, un objet…) et un lot figé sous un autre build reste peut-être périmé, avec sa
+-- date d'alors (quand il a été figé).
 local function noterLot(nom, entier, lots)
   lots = lots or GameDataDB.lots
   local l = lots[nom]
-  if l and not (l.perime and entier) then l.date = now() return end -- ponytail: un lot de GameData est toujours un relevé direct
+  if l and l.perime and not entier then return end
+  if l and not l.perime then l.date = now() return end -- ponytail: un lot de GameData est toujours un relevé direct
   lots[nom] = lot()
 end
-ns.lot, ns.noterLot = lot, noterLot
+ns.build, ns.lot, ns.noterLot = build, lot, noterLot
 
 -- Contenu des conteneurs d'Enum.BagIndex dont le nom passe le filtre. Lire l'enum plutôt qu'une liste
 -- en dur : sacs, trousseau, sac de composants, onglets de banque… ce client n'a que ceux qu'il a.
@@ -174,13 +176,14 @@ local function char()
   return GameDataDB.chars[k]
 end
 
+-- fn(c) rend le champ relevé, et en 2e retour false s'il n'a rien relevé, "partiel" s'il n'en a relevé qu'une partie.
 local function run(name, fn)
   if not ns.champSouscrit(name) then return end -- aucune souscription à son type (Souscriptions.lua)
   local c = char()
-  local ok, result = pcall(fn, c)
+  local ok, result, releve = pcall(fn, c)
   if ok then
     c[name], c.errors[name] = result, nil
-    noterLot(name, true, c.lots)
+    if releve ~= false then noterLot(name, releve ~= "partiel", c.lots) end
   else c.errors[name] = tostring(result) end
 end
 

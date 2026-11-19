@@ -45,27 +45,38 @@ end
 -- Recettes. Sur Forever les métiers passent par l'API moderne C_TradeSkillUI (GetTradeSkillLine n'existe pas). Le
 -- relevé de la fenêtre ouverte est dans LibCommune (lib:ReleverRecettes, partagé avec le relevé de repli des add-ons
 -- sans GameData) ; GameData sauvegarde ce qu'il rend.
-local function saveProfession(c, prof, rank, max, known)
-  c.recipes = c.recipes or {}
-  c.recipes[prof] = { rank = rank, max = max, known = known, scanned = ns.now() }
+-- Une fenêtre ne relève qu'un métier : le lot des recettes d'un perso n'est relevé entier (plus peut-être périmé) que
+-- quand chacun de ses métiers a été relevé sous ce build (build noté par métier). Rend le 2e retour attendu par ns.run.
+local function releveRecettes(c)
+  for _, m in pairs(c.recipes) do if m.build ~= ns.build() then return "partiel" end end
+  return true
 end
 
+local function saveProfession(c, prof, rank, max, known)
+  c.recipes = c.recipes or {}
+  c.recipes[prof] = { rank = rank, max = max, known = known, scanned = ns.now(), build = ns.build() }
+  return releveRecettes(c)
+end
+
+-- Rend false si rien n'a été relevé, sinon le 2e retour de ns.run.
 local function scanTradeSkill(c)
   local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not lib then GameDataDB.errors.recipes = "LibCommune absente : recettes pas relevées" return end
+  if not lib then GameDataDB.errors.recipes = "LibCommune absente : recettes pas relevées" return false end
   GameDataDB.errors.recipes = nil
   local r, why, prof = lib:ReleverRecettes()
-  if why == "liste pas à jour" then return ns.retryTrade() end
+  if why == "liste pas à jour" then ns.retryTrade() return false end
   GameDataDB.trade_seen = GameDataDB.trade_seen or {}
   if r or why == "liste vide" then
     GameDataDB.trade_seen[r and r.metier or prof] = ns.now() .. " : " .. (r and r.total or "aucune") .. " recette(s) données par le jeu"
   end
-  if not r then return end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
+  if not r then return false end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
   for id, rec in pairs(r.recettes) do GameDataDB.recipes[id] = rec end
   GameDataDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
   c.recipes = c.recipes or {}
   if not lib.RangerRecettes then return saveProfession(c, r.metier, r.rang, r.max, r.connues) end -- LibCommune mineure 1
-  lib:RangerRecettes(c.recipes, r).scanned = ns.now() -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
+  local m = lib:RangerRecettes(c.recipes, r) -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
+  m.scanned, m.build = ns.now(), ns.build()
+  return releveRecettes(c)
 end
 
 -- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par LibCommune.
@@ -74,8 +85,8 @@ local function scanKnownRecipes()
   if not (lib and lib.ReleverRecettesSansFenetre) or not ns.souscrit("recettes connues") then return end -- absente, ou mineure 1
   local c = ns.char()
   c.recipes = c.recipes or {}
-  ns.noterLot("recipes", false, c.lots) -- ajoute des connues sans rien retirer : pas un lot entier
-  lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes)
+  -- ajoute des connues sans rien retirer : relevé partiel, noté une fois fini (il court sur plusieurs images)
+  lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes, function() ns.noterLot("recipes", false, c.lots) end)
 end
 
 -- Lu par LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
@@ -86,9 +97,9 @@ function ns.recettesConnues()
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore
-  if not GetCraftDisplaySkillLine then return end
+  if not GetCraftDisplaySkillLine then return false end
   local prof, rank, max = GetCraftDisplaySkillLine()
-  if not prof then return end
+  if not prof then return false end
   local known = {}
   for i = 1, GetNumCrafts() do
     local name, _, kind = GetCraftInfo(i)
@@ -104,7 +115,7 @@ local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement)
       known[key] = kind
     end
   end
-  saveProfession(c, prof, rank, max, known)
+  return saveProfession(c, prof, rank, max, known)
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -302,7 +313,7 @@ local function queueTrade()
   tradeToken = tradeToken + 1
   local mine = tradeToken
   C_Timer.After(0.5, function()
-    if mine == tradeToken then ns.run("recipes", function(c) scanTradeSkill(c); return c.recipes end) end
+    if mine == tradeToken then ns.run("recipes", function(c) local releve = scanTradeSkill(c); return c.recipes, releve end) end
   end)
 end
 function ns.retryTrade() -- liste pas encore à jour : jusqu'à 4 nouveaux essais
@@ -334,7 +345,7 @@ f:SetScript("OnEvent", function(_, event)
     retries = 0
     queueTrade()
   elseif event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then
-    ns.run("recipes", function(c) scanCraft(c); return c.recipes end)
+    ns.run("recipes", function(c) local releve = scanCraft(c); return c.recipes, releve end)
   elseif event == "TRAINER_SHOW" or event == "TRAINER_UPDATE" then
     safe("trainer", scanTrainer)
   elseif event == "MERCHANT_SHOW" or event == "MERCHANT_UPDATE" then
