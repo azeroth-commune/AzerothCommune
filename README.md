@@ -12,6 +12,13 @@ local d, raison = lib:Lire("recettes connues", "tous") -- nil = personnage conne
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
 --       persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
 -- raison : « type inconnu », « pas de GameData », « pas encore relevé »
+local d, lot = lib:Lire("marchands")
+-- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [personnage] = lot } }
+-- provenance (lib.provenances) : « relevé direct » > « extrait du client » > « autre add-on » > « source externe »
+-- perime = true : figé sous un autre build du client, peut-être périmé (marqué par GameData au chargement)
+-- lot mixte (marchands : vus en jeu et base VendorData) : une ligne d'une autre provenance porte la sienne
+local lignes, provenance = lib.Fusionner({ { donnees = a, provenance = "relevé direct" }, { donnees = b, provenance = "autre add-on" } })
+-- pour chaque clé, la ligne de la provenance la plus fiable gagne
 ```
 
 Avec GameData, la lib lit sa base (`GameDataAPI.recettesConnues`) ; sans lui, relevé de repli : le personnage connecté,
