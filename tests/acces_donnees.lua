@@ -78,3 +78,16 @@ test("provenance : un lot porte le build du client simulé, et chaque type lu re
         if data and t.parPerso then assertType("table", l.persos) end
     end
 end)
+
+test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé de repli des inventaires)", function()
+    local lib = LibStub("LibCommune-1.0")
+    assertType("table", Enum.BagIndex)
+    assertType("function", lib.Conteneurs)
+    local sacs = lib.Conteneurs(lib.EstSac)
+    assertType("table", sacs)
+    for nom, sac in pairs(sacs) do
+        assertTrue(lib.EstSac(nom))
+        assertType("number", sac.size)
+        assertType("table", sac.items)
+    end
+end)

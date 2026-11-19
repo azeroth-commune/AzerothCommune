@@ -138,7 +138,7 @@ assert(d == nil and raison == "pas encore relevé", "rien de relevé : " .. tost
 assert(lib:Souscrire("recettes connues"))
 -- Sans GameData, pas de relevé de repli pour les autres types (lourds, ou pas encore écrits) ; la souscription reste acceptée.
 assert(lib:Souscrire("objets") and lib:Souscrire("inventaires"), "souscription sans GameData")
-for _, nom in ipairs({ "objets", "inventaires", "marchands" }) do
+for _, nom in ipairs({ "objets", "marchands" }) do
   d, raison = lib:Lire(nom)
   assert(d == nil and raison == "pas de GameData", nom .. " sans GameData : " .. tostring(raison))
 end
@@ -167,7 +167,31 @@ lotRepli = lotRepli.persos[MOI]
 assert(lotRepli.provenance == "relevé direct" and lotRepli.build == 64000 and lotRepli.version == "1.16.1" and lotRepli.date, "lot du relevé de repli")
 d, raison = lib:Lire("recettes connues", "Alt Dupont-Kerys")
 assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameData : " .. tostring(raison))
-for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI", "global écrit par la lib : " .. k) end
+-- Inventaires sans GameData (Handshake#1) : le personnage connecté, ses sacs lus à l'instant et sa banque vue cette
+-- session (relevée à l'ouverture, en mémoire ; fermée, elle n'est plus lue).
+Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bank = -1, BankBag_1 = 5 } }
+local slots = { [0] = { { itemID = 2772, stackCount = 5 } }, [1] = {}, [-1] = { { itemID = 2840, stackCount = 7 }, false } }
+C_Container = { GetContainerNumSlots = function(b) return slots[b] and #slots[b] or 0 end,
+  GetContainerItemInfo = function(b, s) return slots[b][s] or nil end }
+local inv = assert(lib:Lire("inventaires"))
+assert(inv.persos[MOI].bags.Backpack.items[1].id == 2772 and inv.persos[MOI].bags.Backpack.items[1].count == 5, "sacs lus à l'instant")
+assert(not inv.persos[MOI].bags.Bag_1 and not inv.persos[MOI].bags.Bank and not inv.persos[MOI].bank, "sac vide ignoré ; banque pas encore vue")
+assert(lib.EstSac("Bag_1") and lib.EstSac("ReagentBag") and not lib.EstSac("Bank") and lib.EstBanque("BankBag_1"), "sacs et banque")
+cadre.onEvent(cadre, "BANKFRAME_OPENED")
+slots[-1][1] = { itemID = 2840, stackCount = 9 }
+local banque = lib:Lire("inventaires", "tous").persos[MOI].bank
+assert(banque.Bank.size == 2 and #banque.Bank.items == 1 and banque.Bank.items[1].count == 7, "banque relevée à l'ouverture")
+cadre.onEvent(cadre, "PLAYERBANKSLOTS_CHANGED")
+assert(lib:Lire("inventaires").persos[MOI].bank.Bank.items[1].count == 9, "banque ouverte : suivie")
+cadre.onEvent(cadre, "BANKFRAME_CLOSED")
+slots[-1] = {}
+cadre.onEvent(cadre, "PLAYERBANKSLOTS_CHANGED")
+local _, lotInv = lib:Lire("inventaires")
+assert(lib:Lire("inventaires").persos[MOI].bank.Bank.items[1].count == 9, "banque fermée : la dernière vue reste")
+assert(lotInv.persos[MOI].provenance == "relevé direct" and lotInv.persos[MOI].date, "lot des inventaires de repli")
+d, raison = lib:Lire("inventaires", "Alt Dupont-Kerys")
+assert(d == nil and raison == "pas de GameData", "inventaires d'un autre personnage sans GameData : " .. tostring(raison))
+for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI" or k == "C_Container", "global écrit par la lib : " .. k) end
 assert(HoteDB.reglages.x == 1 and next(HoteDB, next(HoteDB)) == nil, "SavedVariables de l'hôte intactes")
 print("LibCommune : GameData absent, relevé de repli OK")
 
