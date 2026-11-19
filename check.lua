@@ -31,6 +31,7 @@ C_Item = {
 -- La lib commune (dépôt voisin, chargée avant GameData comme dans le jeu) : GameData y prend le relevé des recettes.
 assert(loadfile("LibCommune/LibStub.lua"))()
 assert(loadfile("LibCommune/LibCommune.lua"))()
+assert(loadfile("LibCommune/Fournisseurs.lua"))()
 assert(loadfile("GameData/GameData.lua"))("GameData", ns)
 
 local bags = ns.containers(ns.isBag)
@@ -131,6 +132,48 @@ commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
 commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
 print = realPrint
 assert(GameDataMarket["R-Alliance"].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
+-- Sans fournisseur, le scan de l'HV marche comme avant : GameData relève tout (prix, quantité, paliers, historique).
+local hvR = GameDataMarket["R-Alliance"]
+assert(hvR.items[2772].qty == 5 and hvR.items[2772].auctions == 1 and hvR.items[2772].tiers[1].price == 100, "tout relevé")
+assert(#hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100 and hvR.hist[2772][1][3] == 5, "historique relevé")
+local hvLib, lotLib = LibStub("LibCommune-1.0"):Lire("cours de l'HV")
+assert(hvLib.objet(2772).min == 100 and hvLib.objet(2772).sources.min == "GameData" and lotLib.provenance == "relevé direct", "lu par la lib")
+
+-- Fournisseurs (GameData#6, option B). Un nouveau scan, 15 min plus tard, avec Auctionator et AuctionDB frais : GameData
+-- garde ce que son scan vient de voir (prix, quantité, annonces, paliers : comme avant, ils font foi en relevé direct),
+-- mais pas de copie de l'historique, qu'AuctionDB tient.
+local horloge = 100
+GetTime = function() return horloge end
+local function scanHV()
+  horloge = horloge + 1000
+  print = noop
+  commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
+  commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
+  print = realPrint
+end
+Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function(_, id) return ({ [2772] = 95, [9999] = 70 })[id] end,
+  GetAuctionAgeByItemID = function(_, id) if id == 2772 or id == 9999 then return 0 end end } } } -- 9999 vu aujourd'hui
+local T = os.time() - 600
+AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { T } }, items = { [2772] = ("%d,90,95,300"):format(T) } } } }
+scanHV()
+hvR = GameDataMarket["R-Alliance"]
+assert(scanned == 2 and hvR.items[2772].min == 100 and hvR.items[2772].qty == 5 and hvR.items[2772].tiers[1].price == 100, "prix, quantité, paliers gardés comme avant")
+assert(hvR.hist == nil, "AuctionDB frais : pas de copie de l'historique")
+hvLib, lotLib = LibStub("LibCommune-1.0"):Lire("cours de l'HV")
+local l = hvLib.objet(2772)
+assert(l.min == 100 and l.sources.min == "GameData" and l.qty == 5 and l.hist[1][1] == T and l.sources.hist == "AuctionDB", "lu : scan de GameData, historique d'AuctionDB")
+assert(lotLib.provenance == "relevé direct" and lotLib.champs.hist == "AuctionDB", "relevé direct")
+local retire = hvLib.objet(9999)
+assert(retire.min == nil and retire.qty == 0, "absent du scan de GameData : plus en vente, même vu aujourd'hui par Auctionator")
+assert(ns.exports.hv().items == "2772,100,5,1,100:5", "export comme avant")
+-- AuctionDB plus frais (son dernier scan il y a 7 h) : GameData garde son historique, comme avant.
+AuctionDBForeverSaved.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
+scanHV()
+hvR = GameDataMarket["R-Alliance"]
+assert(scanned == 3 and #hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100, "historique gardé par GameData")
+assert(LibStub("LibCommune-1.0"):Lire("cours de l'HV").objet(2772).sources.hist == "GameData", "et lu chez lui")
+Auctionator, AuctionDBForeverSaved = nil, nil
+print("GameData : fournisseurs des cours de l'HV OK")
 assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
 print("GameData : vérifications OK")
 -- Fenêtre, tableaux, montants, noms d'objets : dans LibCommune (testés par LibCommune/check.lua), plus de copie ici.
@@ -172,6 +215,7 @@ local function session(nom, souscriptions)
   LibStub = nil -- nouvelle session : la lib repart de zéro, seules les SavedVariables restent
   assert(loadfile("LibCommune/LibStub.lua"))()
   assert(loadfile("LibCommune/LibCommune.lua"))()
+  assert(loadfile("LibCommune/Fournisseurs.lua"))()
   frames = {} -- ceux de GameData : GameData.lua puis Commerce.lua
   local gns = {}
   for _, f in ipairs({ "GameData", "Commerce", "Souscriptions" }) do assert(loadfile("GameData/" .. f .. ".lua"))("GameData", gns) end

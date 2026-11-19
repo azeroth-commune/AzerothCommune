@@ -7,7 +7,8 @@
 --   GameDataDB.vendors[npc]   : ce que chaque marchand vend, à quel prix, par combien, en stock limité ou non.
 --   GameDataDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
 --   GameDataMarket[royaume-faction] : dernier scan complet de l'hôtel des ventes : par objet, le prix unitaire le
---                              plus bas, la quantité en vente et les paliers de prix les moins chers.
+--                              plus bas, la quantité en vente et les paliers de prix les moins chers ; l'historique,
+--                              seulement si aucun fournisseur ne le tient (AuctionDB frais : LibCommune, Fournisseurs.lua).
 -- Rien ne se lit sans la fenêtre ouverte (sauf les recettes connues, relevées aussi à la connexion parmi celles déjà
 -- vues) : ouvre tes métiers, parle aux maîtres et aux marchands, ouvre l'HV.
 local _, ns = ...
@@ -234,6 +235,13 @@ local function aggregate(rows)
 end
 ns.aggregate = aggregate
 
+-- L'historique (lourd) n'est pas copié quand un fournisseur le tient, frais, pour cet HV (LibCommune) ; prix, quantité,
+-- annonces et paliers que le scan vient de voir sont toujours gardés : ils font foi.
+local function historiqueFourni()
+  local lib = LibStub and LibStub("LibCommune-1.0", true)
+  return lib and lib.ChampsARelever and not lib:ChampsARelever("cours de l'HV").hist
+end
+
 local function readReplicate()
   local n = C_AuctionHouse.GetNumReplicateItems()
   local rows, i = {}, 0
@@ -261,7 +269,7 @@ local function readReplicate()
         while #list > 12 do table.remove(list, 1) end
       end
     end
-    GameDataMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = hist }
+    GameDataMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = not historiqueFourni() and hist or nil }
     -- ponytail: lot entier, un seul HV relevé en pratique ; un lot par HV si un joueur en relève plusieurs (sinon l'HV
     -- de l'autre faction passe pour frais après un nouveau build)
     ns.noterLot("cours de l'HV", true)
