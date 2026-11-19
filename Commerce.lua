@@ -7,7 +7,8 @@
 --   GameDataDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
 --   GameDataMarket[royaume-faction] : dernier scan complet de l'hôtel des ventes : par objet, le prix unitaire le
 --                              plus bas, la quantité en vente et les paliers de prix les moins chers.
--- Rien ne se lit sans la fenêtre ouverte : ouvre tes métiers, parle aux maîtres et aux marchands, ouvre l'HV.
+-- Rien ne se lit sans la fenêtre ouverte (sauf les recettes connues, relevées aussi à la connexion parmi celles déjà
+-- vues) : ouvre tes métiers, parle aux maîtres et aux marchands, ouvre l'HV.
 local _, ns = ...
 
 local function itemIDOf(link) return tonumber(link and link:match("item:(%d+)")) end
@@ -61,7 +62,17 @@ local function scanTradeSkill(c)
   if not r then return end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
   for id, rec in pairs(r.recettes) do GameDataDB.recipes[id] = rec end
   GameDataDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
-  saveProfession(c, r.metier, r.rang, r.max, r.connues)
+  c.recipes = c.recipes or {}
+  lib:RangerRecettes(c.recipes, r).scanned = ns.now() -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
+end
+
+-- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par LibCommune.
+local function scanKnownRecipes()
+  local lib = LibStub and LibStub("LibCommune-1.0", true)
+  if not lib then return end
+  local c = ns.char()
+  c.recipes = c.recipes or {}
+  lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes)
 end
 
 -- Lu par LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
@@ -291,7 +302,7 @@ function ns.retryTrade() -- liste pas encore à jour : jusqu'à 4 nouveaux essai
 end
 
 local f = CreateFrame("Frame")
-for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "CRAFT_SHOW", "CRAFT_UPDATE",
+for _, e in ipairs({ "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "CRAFT_SHOW", "CRAFT_UPDATE",
   "TRAINER_SHOW", "TRAINER_UPDATE", "MERCHANT_SHOW", "MERCHANT_UPDATE", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "TAXIMAP_OPENED",
   "REPLICATE_ITEM_LIST_UPDATE" }) do
   pcall(f.RegisterEvent, f, e)
@@ -301,7 +312,9 @@ f:SetScript("OnEvent", function(_, event)
   -- diagnostic : la dernière fois que chaque événement est arrivé (pour savoir si une fenêtre a bien été vue)
   GameDataDB.events = GameDataDB.events or {}
   GameDataDB.events[event] = ns.now()
-  if event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
+  if event == "PLAYER_LOGIN" then
+    C_Timer.After(5, function() safe("recipes_login", scanKnownRecipes) end)
+  elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
     retries = 0
     queueTrade()
   elseif event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then

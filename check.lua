@@ -98,6 +98,22 @@ local rc = ns.recettesConnues()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(LibStub("LibCommune-1.0"):Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
+-- Connexion : recettes connues relevées sans fenêtre (IsPlayerSpell, recettes déjà vues), pour un perso jamais passé par
+-- sa fenêtre de métier, et sauvegardées dans son perso. Puis la fenêtre s'ouvre : elle prime, sans rien perdre.
+local neuf, char0, run0 = { errors = {}, scanned = {} }, ns.char, ns.run
+ns.char, ns.run = function() return neuf end, function(_, fn) fn(neuf) end
+GameDataDB.recipes[3310] = { profession = "Minage", name = "Fondre le thorium" } -- vue chez un autre perso
+GetProfessions = function() return 1 end
+GetProfessionInfo = function() return "Minage", "icône", 150, 225 end
+IsPlayerSpell = function(id) return id == 3307 or id == 3310 end
+commerce.fn(commerce, "PLAYER_LOGIN")
+local mn = neuf.recipes and neuf.recipes.Minage
+assert(mn and mn.rank == 150 and mn.known[3307] == true and mn.known[3310] and not mn.known[3308], "relevé sans fenêtre sauvegardé")
+commerce.fn(commerce, "TRADE_SKILL_LIST_UPDATE")
+mn = neuf.recipes.Minage
+assert(mn.known[3307] == "optimal" and mn.rank == 140 and mn.scanned and not mn.known[3308], "la fenêtre prime")
+assert(mn.known[3310], "connue mais absente de la liste de la fenêtre : gardée")
+ns.char, ns.run = char0, run0
 -- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
 C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
   GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
