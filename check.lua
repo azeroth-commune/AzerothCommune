@@ -134,7 +134,13 @@ assert(GameDataMarket["R-Alliance"].items[2772].min == 100 and scanned == 1, "HV
 assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
 print("GameData : vérifications OK")
 -- Fenêtre, tableaux, montants, noms d'objets : dans LibCommune (testés par LibCommune/check.lua), plus de copie ici.
+assert(loadfile("LibCommune/Regroupement.lua"))() -- bouton de minicarte et entrée des options communs (LibCommune#3)
 assert(loadfile("GameData/Window.lua"))("GameData", ns)
+local regroupe = LibStub("LibCommune-1.0").regroupes[1]
+GameDataDB = GameDataDB or {}
+assert(regroupe and regroupe.nom == "GameData" and regroupe.ouvrir == ns.toggleExportWindow and regroupe.store() == GameDataDB,
+  "GameData regroupé : sa fenêtre au clic, l'angle du bouton dans GameDataDB")
+assert(not io.open("GameData/Window.lua"):read("*a"):find("GameDataMinimapButton", 1, true), "plus de bouton de minicarte à lui")
 assert(ns.exportList and ns.hubTools and ns.hubTools[1][1] == "Acheter ou fabriquer", "boutons d'export et outils du hub, ouverts aux consommateurs")
 for _, k in ipairs({ "newWindow", "newTable", "sortRows", "money", "moneyShort", "moneySigned", "itemLabel", "findItem" }) do
   assert(ns[k] == nil, "copie de l'outil commun " .. k .. " encore dans GameData")

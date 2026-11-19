@@ -1,6 +1,6 @@
--- GameData : bouton de la minicarte et fenêtre d'export (la fenêtre, les tableaux, les montants : LibCommune).
---   Minicarte : clic gauche = fenêtre GameData : outils (acheter ou fabriquer, ceux du Négoce s'il est là) et exports (ouvre / replie), clic droit = « Acheter ou fabriquer »,
---               glisser = le déplacer autour de la carte (position gardée).
+-- GameData : fenêtre d'export (la fenêtre, les tableaux, les montants, le bouton de la minicarte : LibCommune).
+--   Fenêtre GameData : outils (acheter ou fabriquer, ceux du Négoce s'il est là) et exports (ouvre / replie), par le
+--   bouton de minicarte commun d'Azeroth Commune.
 --   Export : un bouton par partie de la base ; chaque export est photographié en grilles de couleurs
 --            (export de LibCommune), puis relu hors du jeu par tools/crop_captures.py. Sans /reload.
 local _, ns = ...
@@ -77,60 +77,10 @@ function ns.toggleExportWindow()
 end
 
 ---------------------------------------------------------------------------------------------------
--- Bouton de la minicarte, posé sur le bord à l'angle gardé dans GameDataDB.minimap_angle.
-local function placeButton(b)
-  local a = math.rad(GameDataDB.minimap_angle or 200)
-  local r = Minimap:GetWidth() / 2 + 6
-  b:ClearAllPoints()
-  b:SetPoint("CENTER", Minimap, "CENTER", math.cos(a) * r, math.sin(a) * r)
+-- Bouton de la minicarte et entrée des options : ceux d'Azeroth Commune, communs aux add-ons présents (LibCommune#3).
+-- Clic (GameData seul) ou sa ligne du menu = cette fenêtre ; « Acheter ou fabriquer » (l'ancien clic droit) = la ligne
+-- Handshake du menu, et le premier outil de cette fenêtre. L'angle reste dans GameDataDB.minimap_angle.
+if lib and lib.Regrouper then
+  lib.Regrouper({ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
+    ouvrir = ns.toggleExportWindow, store = function() return GameDataDB end })
 end
-
-local function makeMinimapButton()
-  local b = CreateFrame("Button", "GameDataMinimapButton", Minimap)
-  b:SetSize(31, 31)
-  b:SetFrameStrata("MEDIUM")
-  b:SetFrameLevel(8)
-  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  b:RegisterForDrag("LeftButton")
-  local bg = b:CreateTexture(nil, "BACKGROUND")
-  bg:SetSize(20, 20)
-  bg:SetPoint("CENTER")
-  bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-  local icon = b:CreateTexture(nil, "ARTWORK")
-  icon:SetSize(18, 18)
-  icon:SetPoint("CENTER")
-  icon:SetTexture("Interface\\Icons\\INV_Scroll_03")
-  icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-  local border = b:CreateTexture(nil, "OVERLAY")
-  border:SetSize(53, 53)
-  border:SetPoint("TOPLEFT")
-  border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-  b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-  b:SetScript("OnClick", function(_, button)
-    if button == "RightButton" then if ns.openCraftWindow then ns.openCraftWindow() end else ns.toggleExportWindow() end
-  end)
-  b:SetScript("OnDragStart", function(self)
-    self:SetScript("OnUpdate", function()
-      local mx, my = Minimap:GetCenter()
-      local px, py = GetCursorPosition()
-      local s = Minimap:GetEffectiveScale()
-      GameDataDB.minimap_angle = math.deg(math.atan2(py / s - my, px / s - mx))
-      placeButton(self)
-    end)
-  end)
-  b:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
-  b:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("GameData")
-    GameTooltip:AddLine("Clic : outils et exports", 1, 1, 1)
-    GameTooltip:AddLine("Clic droit : acheter ou fabriquer", 1, 1, 1)
-    GameTooltip:AddLine("Glisser : déplacer", 0.6, 0.6, 0.6)
-    GameTooltip:Show()
-  end)
-  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  placeButton(b)
-end
-
-local f = CreateFrame("Frame")
-f:RegisterEvent("PLAYER_LOGIN")
-f:SetScript("OnEvent", function() pcall(makeMinimapButton) end)
