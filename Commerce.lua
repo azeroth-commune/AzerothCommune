@@ -40,66 +40,35 @@ local function npc()
 end
 
 ---------------------------------------------------------------------------------------------------
--- Recettes. Sur Forever les métiers passent par l'API moderne C_TradeSkillUI (GetTradeSkillLine n'existe pas).
--- GetAllRecipeIDs (non documentée, mais utilisée par DataStore sur ce client) donne toutes les recettes du métier
--- ouvert, apprises ou non, quels que soient les filtres et les en-têtes repliés ; GetRecipeSchematic donne le
--- produit et les composants de chacune, même d'une recette pas encore apprise.
-local DIFFICULTY = { [0] = "optimal", [1] = "medium", [2] = "easy", [3] = "trivial" } -- Enum.TradeskillRelativeDifficulty
-
+-- Recettes. Sur Forever les métiers passent par l'API moderne C_TradeSkillUI (GetTradeSkillLine n'existe pas). Le
+-- relevé de la fenêtre ouverte est dans LibCommune (lib:ReleverRecettes, partagé avec le relevé de repli des add-ons
+-- sans GameData) ; GameData sauvegarde ce qu'il rend.
 local function saveProfession(c, prof, rank, max, known)
   c.recipes = c.recipes or {}
   c.recipes[prof] = { rank = rank, max = max, known = known, scanned = ns.now() }
 end
 
 local function scanTradeSkill(c)
-  local p = C_TradeSkillUI.GetBaseProfessionInfo()
-  local prof = p and p.professionName
-  if not prof or prof == "" then return end
-  local list = C_TradeSkillUI.GetAllRecipeIDs and C_TradeSkillUI.GetAllRecipeIDs() or C_TradeSkillUI.GetFilteredRecipeIDs()
-  -- Pièges vus dans Mastercraft (lu dans addons-src) : une fenêtre de métier liée (celui d'un autre joueur) ou
-  -- d'un PNJ n'est pas à nous ; et juste après l'ouverture, la liste peut encore être celle du métier précédent :
-  -- on vérifie le métier de la première recette et on réessaie un peu plus tard.
-  local T = C_TradeSkillUI
-  if (T.IsTradeSkillLinked and T.IsTradeSkillLinked()) or (T.IsTradeSkillGuild and T.IsTradeSkillGuild())
-    or (T.IsNPCCrafting and T.IsNPCCrafting()) then return end
-  if list and list[1] and T.GetProfessionInfoByRecipeID then
-    local owner = T.GetProfessionInfoByRecipeID(list[1])
-    if owner and owner.professionName ~= prof and owner.parentProfessionName ~= prof then
-      ns.retryTrade()
-      return
-    end
-  end
+  local lib = LibStub and LibStub("LibCommune-1.0", true)
+  if not lib then GameDataDB.errors.recipes = "LibCommune absente : recettes pas relevées" return end
+  GameDataDB.errors.recipes = nil
+  local r, why, prof = lib:ReleverRecettes()
+  if why == "liste pas à jour" then return ns.retryTrade() end
   GameDataDB.trade_seen = GameDataDB.trade_seen or {}
-  GameDataDB.trade_seen[prof] = ns.now() .. " : " .. (list and #list or "aucune") .. " recette(s) données par le jeu"
-  if not list or #list == 0 then return end -- données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
-  local known, failed, firstError = {}, 0, nil
-  for _, id in ipairs(list) do
-    -- une recette qui fait planter l'API ne doit pas faire perdre tout le métier
-    local ok, err = pcall(function()
-      local r = C_TradeSkillUI.GetRecipeInfo(id)
-      if not r or r.isDummyRecipe then return end
-      local s = C_TradeSkillUI.GetRecipeSchematic(id, false)
-      local reagents = {}
-      for _, slot in ipairs(s and s.reagentSlotSchematics or {}) do
-        local rg = slot.reagents and slot.reagents[1]
-        local basic = not Enum.CraftingReagentType or slot.reagentType == nil or slot.reagentType == Enum.CraftingReagentType.Basic
-        if rg and basic and slot.required ~= false then -- composants de base seulement (pas les optionnels)
-          reagents[#reagents + 1] = { id = rg.itemID, currency = rg.currencyID, qty = slot.quantityRequired }
-        end
-      end
-      GameDataDB.recipes[id] = {
-        profession = prof, name = r.name, output = s and s.outputItemID, reagents = reagents,
-        made_min = s and s.quantityMin, made_max = s and s.quantityMax ~= s.quantityMin and s.quantityMax or nil,
-        enchant = r.isEnchantingRecipe or nil, icon = r.icon,
-      }
-      if r.learned then
-        known[id] = DIFFICULTY[r.relativeDifficulty] or r.relativeDifficulty -- la couleur pour ce perso
-      end
-    end)
-    if not ok then failed, firstError = failed + 1, firstError or (id .. " : " .. tostring(err)) end
+  if r or why == "liste vide" then
+    GameDataDB.trade_seen[r and r.metier or prof] = ns.now() .. " : " .. (r and r.total or "aucune") .. " recette(s) données par le jeu"
   end
-  GameDataDB.errors["recipes:" .. prof] = firstError and (failed .. " recette(s) illisible(s), ex. " .. firstError) or nil
-  saveProfession(c, prof, p.skillLevel, p.maxSkillLevel, known)
+  if not r then return end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
+  for id, rec in pairs(r.recettes) do GameDataDB.recipes[id] = rec end
+  GameDataDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
+  saveProfession(c, r.metier, r.rang, r.max, r.connues)
+end
+
+-- Lu par LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
+function ns.recettesConnues()
+  local persos = {}
+  for k, c in pairs(GameDataDB.chars) do persos[k] = c.recipes end
+  return { recettes = GameDataDB.recipes, persos = persos }
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore

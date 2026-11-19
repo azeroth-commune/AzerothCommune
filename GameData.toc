@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: GameData
 ## Notes: Base de données scannée du jeu : tous tes persos (sacs, banque, courrier, équipement, monnaies, réputations, métiers, recettes, quêtes terminées), les add-ons installés, tous les objets du jeu, les recettes et leurs composants, les maîtres de métier, les marchands et les prix de l'hôtel des ventes. /gdata
-## OptionalDeps: BeAGoodPal
+## OptionalDeps: BeAGoodPal, LibCommune
 ## SavedVariables: GameDataDB, GameDataItems, GameDataMarket
 GameData.lua
 Commerce.lua
