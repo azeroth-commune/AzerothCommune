@@ -1,13 +1,13 @@
 # GameData
 
-Add-on WoW Forever. Repo `Virgile-Dauge/GameData` (privé pour l'instant). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
+Add-on WoW Forever. Repo `azeroth-commune/GameData` (privé pour l'instant). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
 Déploiement : lien symbolique depuis le dossier AddOns du jeu, `/reload` suffit.
 
 ## Agent skills
 
 ### Issue tracker
 
-GitHub Issues de `Virgile-Dauge/GameData`, toujours avec `-R Virgile-Dauge/GameData` ; PR externes : non. See `docs/agents/issue-tracker.md`.
+GitHub Issues de `azeroth-commune/GameData`, toujours avec `-R azeroth-commune/GameData` ; PR externes : non. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
