@@ -8,6 +8,8 @@ C_Timer = { After = noop, NewTicker = noop }
 InCombatLockdown = function() return false end
 GetTime = function() return 100 end
 date = os.date
+local BUILD = "64000"
+GetBuildInfo = function() return "1.16.1", BUILD, "Nov 1 2026", 11601 end
 
 -- Conteneurs : deux noms pour le même sac (Characterbanktab = CharacterBankTab_1), un sac vide.
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bag_2 = 2, Keyring = -2, ReagentBag = 5,
@@ -40,7 +42,7 @@ for _ in pairs(bank) do n = n + 1 end
 assert(n == 3, "banque : Bank, Reagentbank et un seul des deux noms de l'onglet 1, trouvé " .. n)
 assert(bags.Backpack.items[1].id == 100 and bags.Backpack.items[1].count == 3)
 
-GameDataItems = {}
+GameDataItems, GameDataDB = {}, { lots = {} }
 ns.itemsReady()
 ns.itemTick()
 local items = GameDataItems.items
@@ -72,7 +74,7 @@ assert(#m[2772].tiers == 2 and m[2772].tiers[1].price == 80 and m[2772].tiers[2]
 assert(m[3575].min == 150)
 
 -- Fenêtre de métier simulée (API moderne de Forever) : recette apprise et recette pas encore apprise.
-GameDataDB = { recipes = {}, errors = {}, chars = {} }
+GameDataDB = { recipes = {}, errors = {}, chars = {}, lots = {} }
 C_Timer.After = function(_, fn) fn() end -- le scan différé part tout de suite dans le test
 C_TradeSkillUI = {
   GetBaseProfessionInfo = function() return { professionName = "Minage", skillLevel = 140, maxSkillLevel = 225 } end,
@@ -81,7 +83,7 @@ C_TradeSkillUI = {
   GetRecipeSchematic = function(id) return { outputItemID = id == 3307 and 3575 or 3577, quantityMin = 1, quantityMax = 1,
     reagentSlotSchematics = { { reagents = { { itemID = id == 3307 and 2772 or 2776 } }, quantityRequired = 1, required = true } } } end,
 }
-local c = { errors = {}, scanned = {} }
+local c = { errors = {}, lots = {} }
 ns.run = function(_, fn) fn(c) end
 local frames = {}
 CreateFrame = function() local fr = { RegisterEvent = noop }; fr.SetScript = function(self, _, fn) self.fn = fn end; frames[#frames + 1] = fr; return fr end
@@ -104,7 +106,7 @@ assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'appara�
 assert(LibStub("LibCommune-1.0"):Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
 -- Connexion : recettes connues relevées sans fenêtre (IsPlayerSpell, recettes déjà vues), pour un perso jamais passé par
 -- sa fenêtre de métier, et sauvegardées dans son perso. Puis la fenêtre s'ouvre : elle prime, sans rien perdre.
-local neuf, char0, run0 = { errors = {}, scanned = {} }, ns.char, ns.run
+local neuf, char0, run0 = { errors = {}, lots = {} }, ns.char, ns.run
 ns.char, ns.run = function() return neuf end, function(_, fn) fn(neuf) end
 GameDataDB.recipes[3310] = { profession = "Minage", name = "Fondre le thorium" } -- vue chez un autre perso
 GetProfessions = function() return 1 end
@@ -203,7 +205,7 @@ gdata("souscriptions")
 assert(table.concat(sortie, "\n"):find("plus relevé", 1, true), "la liste dit qu'il n'est plus relevé")
 
 gdata("effacer inventaires")
-assert(GameDataDB.chars[A].bags == nil and GameDataDB.chars[B].bags == nil and GameDataDB.chars[B].scanned.bags == nil, "inventaires effacés")
+assert(GameDataDB.chars[A].bags == nil and GameDataDB.chars[B].bags == nil and GameDataDB.chars[B].lots.bags == nil, "inventaires effacés")
 gdata("effacer pas un type")
 assert(table.concat(sortie, "\n"):find("inconnu", 1, true), "type inconnu refusé")
 
@@ -221,3 +223,47 @@ gns.itemTick() -- un ID encore en file d'attente, effacé entre-temps : ignoré 
 gdata("effacer marchands")
 assert(next(GameDataDB.vendors) == nil, "marchands effacés")
 print("GameData : souscriptions OK")
+
+-- Provenance (GameData#5) : chaque lot porte sa provenance, son build et sa date. Une base d'avant les lots est migrée
+-- (relevé direct, build inconnu donc peut-être périmé) ; un build différent marque les lots figés peut-être périmés ;
+-- dans le lot mixte des marchands, la provenance la plus fiable gagne.
+GameDataDB = { souscriptions = { inventaires = os.time(), marchands = os.time() },
+  chars = { [A] = { errors = {}, scanned = { bags = "2026-11-01 12:00:00" }, bags = { Backpack = { size = 16, items = {} } } } },
+  vendors = { [42] = { name = "Vu en jeu", items = { { id = 159, price = 30, stack = 5 } } } } }
+GameDataItems, GameDataMarket = nil, nil
+gns, glib = session("Carl")
+local la = GameDataDB.chars[A].lots.bags
+assert(la.provenance == "relevé direct" and la.date == "2026-11-01 12:00:00" and la.perime and la.build == nil, "migration d'un champ de perso")
+assert(GameDataDB.chars[A].scanned == nil, "la date du relevé est passée dans le lot")
+assert(GameDataDB.lots.marchands.provenance == "relevé direct" and GameDataDB.lots.marchands.perime, "migration d'un type du joueur")
+local _, lot = glib:Lire("inventaires")
+lot = lot.persos[C]
+assert(lot.provenance == "relevé direct" and lot.build == 64000 and lot.version == "1.16.1" and lot.date and not lot.perime, "lire un type rend provenance, build et date")
+_, lot = glib:Lire("inventaires", "tous")
+assert(lot.persos[A].perime and lot.persos[C].build == 64000, "lots de chaque perso")
+
+-- Lot mixte : le marchand 42 vu en jeu garde sa liste, le 7 (seulement dans VendorData) vient de la base, marqué.
+gns.VENDOR_DB = { [159] = { 25, 5, "42,7", 1, 20 } }
+local m7
+m, lot = glib:Lire("marchands")
+m7 = m[7]
+assert(m[42].items[1].price == 30 and m[42].provenance == nil and lot == GameDataDB.lots.marchands, "vu en jeu > VendorData")
+assert(m7.provenance == "source externe" and m7.items[1].price == 25 and GameDataDB.vendors[7] == nil, "marchand pas vu : la base, sans rien sauvegarder")
+gdata("effacer marchands")
+m, lot = glib:Lire("marchands")
+assert(m[42].provenance == nil and m[42].items[1].price == 25 and lot.provenance == "source externe" and lot.perime, "seule la base : lot source externe, build inconnu")
+
+-- Nouveau build du client : les lots figés sous l'ancien sont marqués peut-être périmés, rien n'est effacé.
+gns.noterLot("marchands") -- un marchand vu sous le build 64000
+assert(GameDataDB.lots.marchands.build == 64000 and not GameDataDB.lots.marchands.perime)
+BUILD = "64100"
+gns, glib = session("Alice")
+local lm = GameDataDB.lots.marchands
+assert(lm.perime and lm.build == 64000, "lot du joueur figé sous l'ancien build : peut-être périmé")
+assert(GameDataDB.chars[C].lots.bags.perime and GameDataDB.chars[C].bags, "lot d'un perso pas connecté : marqué, gardé")
+assert(GameDataDB.chars[A].lots.bags.build == 64100 and not GameDataDB.chars[A].lots.bags.perime, "perso connecté : relevé à nouveau, plus périmé")
+gns.noterLot("marchands") -- un autre marchand vu : les autres restent d'avant
+assert(lm.perime and lm.build == 64000 and GameDataDB.lots.marchands == lm, "relevé partiel : le lot reste peut-être périmé")
+gns.noterLot("marchands", true)
+assert(GameDataDB.lots.marchands.build == 64100 and not GameDataDB.lots.marchands.perime, "relevé entier : plus périmé")
+print("GameData : provenance, build et date des lots OK")

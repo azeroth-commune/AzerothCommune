@@ -9,6 +9,9 @@
 -- et les recettes ne se lisent que fenêtre ouverte : ouvre-les une fois par perso.
 -- Chaque lecture tourne sous pcall : une API absente sur ce client devient une ligne dans `errors`.
 -- Seuls les types de données auxquels un add-on a souscrit sont relevés (Souscriptions.lua, /gdata souscriptions).
+-- Chaque lot relevé porte sa provenance, le build du client et sa date (ns.lot) : GameDataDB.lots[type] pour un type du
+-- joueur, chars[perso].lots[champ] pour un champ de perso. Au chargement, un lot figé sous un autre build est marqué
+-- perime = true, « peut-être périmé » (Souscriptions.lua, ns.verifierLots).
 
 local _, ns = ...
 GameDataAPI = ns -- lu par Handshake (prix, stocks), le Négoce et LibCommune (recettesConnues)
@@ -21,6 +24,21 @@ local function playerName()
   return last and (first .. " " .. last) or first
 end
 local function charKey() return playerName() .. "-" .. GetRealmName() end
+
+-- Le lot d'un relevé fait maintenant, par GameData en jeu.
+local function lot()
+  local version, build = GetBuildInfo()
+  return { provenance = "relevé direct", build = tonumber(build), version = version, date = now() }
+end
+-- Note un relevé dans le lot nom de lots (GameDataDB.lots par défaut). entier : le relevé remplace tout le lot ; sinon il
+-- n'en remplace qu'une partie (un marchand, un objet…) et un lot figé sous un autre build reste peut-être périmé.
+local function noterLot(nom, entier, lots)
+  lots = lots or GameDataDB.lots
+  local l = lots[nom]
+  if l and not (l.perime and entier) then l.date = now() return end -- ponytail: un lot de GameData est toujours un relevé direct
+  lots[nom] = lot()
+end
+ns.lot, ns.noterLot = lot, noterLot
 
 -- Contenu des conteneurs d'Enum.BagIndex dont le nom passe le filtre. Lire l'enum plutôt qu'une liste
 -- en dur : sacs, trousseau, sac de composants, onglets de banque… ce client n'a que ceux qu'il a.
@@ -152,7 +170,7 @@ end
 
 local function char()
   local k = charKey()
-  GameDataDB.chars[k] = GameDataDB.chars[k] or { errors = {}, scanned = {} }
+  GameDataDB.chars[k] = GameDataDB.chars[k] or { errors = {}, lots = {} }
   return GameDataDB.chars[k]
 end
 
@@ -160,7 +178,9 @@ local function run(name, fn)
   if not ns.champSouscrit(name) then return end -- aucune souscription à son type (Souscriptions.lua)
   local c = char()
   local ok, result = pcall(fn, c)
-  if ok then c[name], c.errors[name], c.scanned[name] = result, nil, now()
+  if ok then
+    c[name], c.errors[name] = result, nil
+    noterLot(name, true, c.lots)
   else c.errors[name] = tostring(result) end
 end
 
@@ -178,6 +198,7 @@ local function scanAddons()
     }
   end
   GameDataDB.addons, GameDataDB.addons_scanned = t, now()
+  noterLot("add-ons installés", true)
 end
 
 local function scanAll()
@@ -205,6 +226,7 @@ local function record(id)
   local name, link, quality, ilvl, minLevel, _, _, stack, _, _, price, _, _, bind = C_Item.GetItemInfo(id)
   if not name then return false end
   it.name, it.link, it.quality, it.ilvl, it.min_level, it.stack, it.price, it.bind = name, link, quality, ilvl, minLevel, stack, price, bind
+  noterLot("objets")
   return true
 end
 
@@ -289,11 +311,12 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
   if event == "ADDON_LOADED" then
     if a1 ~= "GameData" then return end
     GameDataDB = GameDataDB or {}
-    for _, k in ipairs({ "chars", "recipes", "trainers", "vendors", "errors" }) do GameDataDB[k] = GameDataDB[k] or {} end
+    for _, k in ipairs({ "chars", "recipes", "trainers", "vendors", "errors", "lots" }) do GameDataDB[k] = GameDataDB[k] or {} end
     GameDataMarket = GameDataMarket or {}
     if GameDataDB.item_scan == nil then GameDataDB.item_scan = true end
     GameDataItems = GameDataItems or {}
     itemsReady()
+    ns.verifierLots()
   elseif event == "PLAYER_LOGIN" then
     ns.retenirSouscriptions()
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)

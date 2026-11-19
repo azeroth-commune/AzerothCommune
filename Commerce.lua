@@ -74,14 +74,15 @@ local function scanKnownRecipes()
   if not (lib and lib.ReleverRecettesSansFenetre) or not ns.souscrit("recettes connues") then return end -- absente, ou mineure 1
   local c = ns.char()
   c.recipes = c.recipes or {}
+  ns.noterLot("recipes", false, c.lots) -- ajoute des connues sans rien retirer : pas un lot entier
   lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes)
 end
 
 -- Lu par LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
 function ns.recettesConnues()
-  local persos = {}
-  for k, c in pairs(GameDataDB.chars) do persos[k] = c.recipes end
-  return { recettes = GameDataDB.recipes, persos = persos }
+  local persos, lots = {}, {}
+  for k, c in pairs(GameDataDB.chars) do persos[k], lots[k] = c.recipes, c.recipes and c.lots and c.lots.recipes end
+  return { recettes = GameDataDB.recipes, persos = persos }, { persos = lots }
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore
@@ -130,6 +131,7 @@ local function scanTrainer()
   end
   info.tradeskill = IsTradeskillTrainer and IsTradeskillTrainer() or nil
   GameDataDB.trainers[id] = info
+  ns.noterLot("maîtres de métier")
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -156,6 +158,7 @@ local function scanMerchant()
   end
   info.items = items
   GameDataDB.vendors[id] = info
+  ns.noterLot("marchands")
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -170,6 +173,7 @@ local function scanTaxi()
   if here then
     GameDataDB.taxi = GameDataDB.taxi or {}
     GameDataDB.taxi[here] = costs
+    ns.noterLot("prix des vols")
   end
 end
 
@@ -247,6 +251,9 @@ local function readReplicate()
       end
     end
     GameDataMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = hist }
+    -- ponytail: lot entier, un seul HV relevé en pratique ; un lot par HV si un joueur en relève plusieurs (sinon l'HV
+    -- de l'autre faction passe pour frais après un nouveau build)
+    ns.noterLot("cours de l'HV", true)
     reading, readAt = false, GetTime()
     print(("GameData : hôtel des ventes lu, %d enchères. /reload pour l'écrire sur le disque."):format(n))
     safe("market_scanned", ns.marketScanned)
