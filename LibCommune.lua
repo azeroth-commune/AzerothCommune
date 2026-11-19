@@ -48,12 +48,16 @@ local RANG = {}
 for i, p in ipairs(lib.provenances) do RANG[p] = i end
 
 -- Lot mixte : sources = { { donnees = { [clé] = ligne }, provenance = … }, … }. Pour chaque clé, la ligne de la provenance
--- la plus fiable gagne. Rend les lignes et la provenance du lot (la plus fiable qui a des données) ; une ligne d'une autre
--- provenance est copiée avec son champ provenance (les tables des sources ne sont pas touchées).
+-- la plus fiable gagne (une provenance hors de lib.provenances passe en dernier). Rend les lignes et la provenance du lot
+-- (la plus fiable qui a des données) ; une ligne d'une autre provenance est copiée avec son champ provenance (ni les
+-- sources ni leur tableau ne sont touchés).
 function lib.Fusionner(sources)
-  table.sort(sources, function(a, b) return RANG[a.provenance] < RANG[b.provenance] end)
+  local triees = {}
+  for i, s in ipairs(sources) do triees[i] = s end
+  local function rang(s) return RANG[s.provenance] or #lib.provenances + 1 end
+  table.sort(triees, function(a, b) return rang(a) < rang(b) end)
   local out, tete = {}, nil
-  for _, s in ipairs(sources) do
+  for _, s in ipairs(triees) do
     for k, ligne in pairs(s.donnees or {}) do
       tete = tete or s.provenance
       if out[k] == nil then
@@ -253,14 +257,15 @@ function lib:Lire(typeDeDonnees, personnage)
   end
   if not t.parPerso then -- une seule table pour le joueur : personnage sans objet
     if type(d) ~= "table" or not next(d) then return nil, "pas encore relevé" end
-    return d, lot
+    return d, lot or {} -- un GameData d'avant les lots n'en rend pas : lot vide
   end
+  lot = { persos = lot and lot.persos or {} }
   if personnage ~= "tous" then
     local p = personnage or personnageConnecte()
     if not d.persos[p] then return nil, "pas encore relevé" end
     local un = { persos = { [p] = d.persos[p] } }
     for k, v in pairs(d) do if k ~= "persos" then un[k] = v end end
-    d, lot = un, { persos = { [p] = lot and lot.persos and lot.persos[p] } }
+    d, lot = un, { persos = { [p] = lot.persos[p] } }
   end
   if not next(d.persos) and not next(d.recettes or {}) then return nil, "pas encore relevé" end
   return d, lot

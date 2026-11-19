@@ -101,6 +101,11 @@ assert(lot.persos["Alt Dupont-Kerys"].perime and lot.persos["Alt Dupont-Kerys"].
 GameDataAPI.inventaires = function() return { persos = { [MOI] = {} } } end -- un GameData d'avant les lots
 d, lot = lib:Lire("inventaires")
 assert(d and lot.persos[MOI] == nil, "sans lot fourni : les données quand même")
+_, lot = lib:Lire("inventaires", "tous")
+assert(type(lot.persos) == "table", "sans lot fourni, « tous » : lot.persos lisible quand même")
+GameDataAPI.marchands = function() return { [1234] = { items = {} } } end
+_, lot = lib:Lire("marchands")
+assert(type(lot) == "table" and lot.provenance == nil, "sans lot fourni, type du joueur : un lot vide, pas nil")
 -- Lot mixte : pour chaque clé, la provenance la plus fiable gagne ; une ligne d'une autre provenance porte la sienne.
 local vu, base = { [1] = { price = 90 } }, { [1] = { price = 100 }, [2] = { price = 50 } }
 local autre = { [2] = { price = 60 }, [3] = { price = 70 } }
@@ -112,6 +117,13 @@ assert(mixte[3].provenance == "autre add-on" and base[2].provenance == nil, "les
 mixte, tete = lib.Fusionner({ { donnees = {}, provenance = "relevé direct" }, { donnees = base, provenance = "source externe" } })
 assert(tete == "source externe" and mixte[2].provenance == nil, "une seule source avec des données : c'est la provenance du lot")
 assert(lib.provenances[1] == "relevé direct" and lib.provenances[4] == "source externe", "du plus fiable au moins fiable")
+local sources = { { donnees = { [1] = { x = "inconnue" } }, provenance = "rumeur" }, { donnees = base, provenance = "source externe" },
+  { donnees = vu, provenance = "relevé direct" } }
+mixte, tete = lib.Fusionner(sources)
+assert(sources[1].provenance == "rumeur" and sources[3].provenance == "relevé direct", "le tableau des sources de l'appelant n'est pas trié")
+assert(tete == "relevé direct" and mixte[1] == vu[1], "provenance inconnue : classée en dernier, sans erreur")
+mixte, tete = lib.Fusionner({ { donnees = { [9] = { x = 1 } }, provenance = "rumeur" } })
+assert(tete == "rumeur" and mixte[9].x == 1, "seule source, provenance inconnue")
 print("LibCommune : provenance, build et date des lots OK")
 
 -- GameData absent : relevé de repli du personnage connecté, en mémoire ; rien n'est écrit chez l'hôte.
