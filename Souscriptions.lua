@@ -1,8 +1,9 @@
--- GameData, demandes : on ne relève que les types de données qu'un add-on a demandés (lib:Demander de LibCommune).
---   GameDataDB.demandes[type] = date de la dernière demande (time()). Elle vaut pour tout le joueur : à la connexion de
---   n'importe quel personnage, GameData relève les types demandés, même si l'add-on demandeur n'y est pas activé.
--- Un type que personne n'a redemandé depuis 30 jours cesse d'être relevé ; ses données restent jusqu'à ce que le joueur
--- les efface. /gdata demandes : la liste ; /gdata effacer <type> ; /gdata demander <type|tout> (le joueur demande lui-même,
+-- GameData, souscriptions : on ne relève que les types de données auxquels un add-on a souscrit (lib:Souscrire de
+-- LibCommune). GameDataDB.souscriptions[type] = date de la dernière souscription (time()). Elle vaut pour tout le joueur :
+--   à la connexion de n'importe quel personnage, GameData relève les types souscrits, même si l'add-on qui a souscrit n'y
+--   est pas activé.
+-- Un type sans nouvelle souscription depuis 30 jours cesse d'être relevé ; ses données restent jusqu'à ce que le joueur
+-- les efface. /gdata souscriptions : la liste ; /gdata effacer <type> ; /gdata souscrire <type|tout> (le joueur souscrit lui-même,
 -- pour ses exports).
 local _, ns = ...
 local DUREE = 30 * 24 * 3600
@@ -26,21 +27,21 @@ ns.rangement = RANGEMENT
 local typeDuChamp = {}
 for nom, r in pairs(RANGEMENT) do for _, c in ipairs(r.persos or {}) do typeDuChamp[c] = nom end end
 
-function ns.demander(nom) -- appelé par lib:Demander ; avant la lecture des SavedVariables, retenu à la connexion
+function ns.souscrire(nom) -- appelé par lib:Souscrire ; avant la lecture des SavedVariables, retenu à la connexion
   if not (RANGEMENT[nom] and GameDataDB) then return end
-  GameDataDB.demandes = GameDataDB.demandes or {}
-  GameDataDB.demandes[nom] = time()
+  GameDataDB.souscriptions = GameDataDB.souscriptions or {}
+  GameDataDB.souscriptions[nom] = time()
 end
 
-function ns.demande(nom) -- ce type est-il à relever ?
-  local quand = GameDataDB and GameDataDB.demandes and GameDataDB.demandes[nom]
+function ns.souscrit(nom) -- une souscription en cours : ce type est à relever
+  local quand = GameDataDB and GameDataDB.souscriptions and GameDataDB.souscriptions[nom]
   return quand ~= nil and time() - quand < DUREE
 end
-function ns.champDemande(champ) return ns.demande(typeDuChamp[champ]) end
+function ns.champSouscrit(champ) return ns.souscrit(typeDuChamp[champ]) end
 
-function ns.retenirDemandes() -- à la connexion, avant tout relevé : les demandes faites pendant le chargement
+function ns.retenirSouscriptions() -- à la connexion, avant tout relevé : les souscriptions faites pendant le chargement
   local lib = LibStub and LibStub("LibCommune-1.0", true)
-  for nom in pairs(lib and lib.demandes or {}) do ns.demander(nom) end
+  for nom in pairs(lib and lib.souscriptions or {}) do ns.souscrire(nom) end
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -91,7 +92,7 @@ function ns.effacer(nom)
   end
   for _, f in ipairs(r.base or {}) do GameDataDB[f] = type(GameDataDB[f]) == "table" and {} or nil end
   if r.sv then _G[r.sv] = {} end
-  if nom == "objets" then ns.itemsReady() end -- le balayage repart de 1 (s'il est demandé)
+  if nom == "objets" then ns.itemsReady() end -- le balayage repart de 1 (s'il est souscrit)
 end
 
 local function noms()
@@ -101,25 +102,25 @@ local function noms()
   return t
 end
 
--- /gdata demandes | effacer <type> | demander <type|tout> ; rend true si la commande est la sienne.
-function ns.demandesCommand(cmd, rest)
-  if cmd == "demandes" then
-    print("GameData : types de données demandés par les add-ons (relevés sur chaque personnage à sa connexion) :")
+-- /gdata souscriptions | effacer <type> | souscrire <type|tout> ; rend true si la commande est la sienne.
+function ns.souscriptionsCommand(cmd, rest)
+  if cmd == "souscriptions" then
+    print("GameData : souscriptions des add-ons aux types de données (relevés sur chaque personnage à sa connexion) :")
     for _, nom in ipairs(noms()) do
-      local quand = GameDataDB.demandes and GameDataDB.demandes[nom]
-      local etat = not quand and "jamais demandé"
-        or ns.demande(nom) and ("demandé le " .. date("%Y-%m-%d", quand) .. ", relevé")
-        or ("dernière demande le " .. date("%Y-%m-%d", quand) .. ", plus relevé")
+      local quand = GameDataDB.souscriptions and GameDataDB.souscriptions[nom]
+      local etat = not quand and "aucune souscription"
+        or ns.souscrit(nom) and ("souscrit le " .. date("%Y-%m-%d", quand) .. ", relevé")
+        or ("plus de souscription depuis 30 jours (dernière le " .. date("%Y-%m-%d", quand) .. "), plus relevé")
       print(("  %s : %s%s"):format(nom, etat, aDesDonnees(RANGEMENT[nom]) and " (données gardées)" or ""))
     end
-    print("  /gdata effacer <type> : effacer ses données. /gdata demander <type|tout> : le demander toi-même.")
+    print("  /gdata effacer <type> : effacer ses données. /gdata souscrire <type|tout> : y souscrire toi-même.")
     return true
   end
-  if cmd ~= "effacer" and cmd ~= "demander" then return false end
+  if cmd ~= "effacer" and cmd ~= "souscrire" then return false end
   local nom = rest:lower()
-  if cmd == "demander" and nom == "tout" then
-    for _, n in ipairs(noms()) do ns.demander(n) end
-    print("GameData : tous les types demandés ; relevés dès maintenant (objets : à la prochaine connexion).")
+  if cmd == "souscrire" and nom == "tout" then
+    for _, n in ipairs(noms()) do ns.souscrire(n) end
+    print("GameData : souscrit à tous les types ; relevés dès maintenant (objets : à la prochaine connexion).")
     return true
   end
   if not RANGEMENT[nom] then
@@ -129,10 +130,10 @@ function ns.demandesCommand(cmd, rest)
   if cmd == "effacer" then
     ns.effacer(nom)
     print(("GameData : données « %s » effacées%s. /reload pour l'écrire sur le disque."):format(nom,
-      ns.demande(nom) and " (le type est encore demandé : il sera relevé à nouveau)" or ""))
+      ns.souscrit(nom) and " (le type a encore une souscription : il sera relevé à nouveau)" or ""))
   else
-    ns.demander(nom)
-    print(("GameData : « %s » demandé ; relevé sur chaque personnage à sa connexion, pendant 30 jours."):format(nom))
+    ns.souscrire(nom)
+    print(("GameData : « %s » souscrit ; relevé sur chaque personnage à sa connexion, pendant 30 jours."):format(nom))
   end
   return true
 end

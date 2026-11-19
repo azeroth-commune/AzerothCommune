@@ -8,7 +8,7 @@
 -- Un perso n'est lisible que connecté : chaque perso apparaît après une connexion. La banque, le courrier
 -- et les recettes ne se lisent que fenêtre ouverte : ouvre-les une fois par perso.
 -- Chaque lecture tourne sous pcall : une API absente sur ce client devient une ligne dans `errors`.
--- Seuls les types de données demandés par un add-on sont relevés (Demandes.lua, /gdata demandes).
+-- Seuls les types de données auxquels un add-on a souscrit sont relevés (Souscriptions.lua, /gdata souscriptions).
 
 local _, ns = ...
 GameDataAPI = ns -- lu par Handshake (prix, stocks), le Négoce et LibCommune (recettesConnues)
@@ -157,7 +157,7 @@ local function char()
 end
 
 local function run(name, fn)
-  if not ns.champDemande(name) then return end -- son type n'est pas demandé (Demandes.lua)
+  if not ns.champSouscrit(name) then return end -- aucune souscription à son type (Souscriptions.lua)
   local c = char()
   local ok, result = pcall(fn, c)
   if ok then c[name], c.errors[name], c.scanned[name] = result, nil, now()
@@ -167,7 +167,7 @@ end
 ns.now, ns.char, ns.run, ns.charKey = now, char, run, charKey
 
 local function scanAddons()
-  if not ns.demande("add-ons installés") then return end
+  if not ns.souscrit("add-ons installés") then return end
   local t = {}
   for i = 1, C_AddOns.GetNumAddOns() do
     local name, title, notes, _, reason = C_AddOns.GetAddOnInfo(i)
@@ -273,7 +273,7 @@ local itemTicker
 local function setItemScan(on)
   GameDataDB.item_scan = on
   if itemTicker then itemTicker:Cancel(); itemTicker = nil end
-  if on and ns.demande("objets") then
+  if on and ns.souscrit("objets") then
     itemTicker = C_Timer.NewTicker(TICK, function()
       local ok, err = pcall(itemTick)
       if not ok then
@@ -295,7 +295,7 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
     GameDataItems = GameDataItems or {}
     itemsReady()
   elseif event == "PLAYER_LOGIN" then
-    ns.retenirDemandes()
+    ns.retenirSouscriptions()
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)
     C_Timer.NewTicker(60, scanAll)
     setItemScan(GameDataDB.item_scan)
@@ -366,7 +366,7 @@ SlashCmdList.GAMEDATA = function(msg)
   local cmd, rest = (msg or ""):match("^%s*(%S*)%s*(.-)$")
   if cmd:lower() == "cout" and ns.costCommand then return ns.costCommand(rest) end
   if cmd:lower() == "export" then return ns.exportCommand(rest:lower()) end
-  if ns.demandesCommand(cmd:lower(), rest) then return end
+  if ns.souscriptionsCommand(cmd:lower(), rest) then return end
   msg = (msg or ""):lower()
   if msg == "objets" then
     setItemScan(not GameDataDB.item_scan)
