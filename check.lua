@@ -97,9 +97,7 @@ GameDataDB.chars["Belegard-Test"], GameDataDB.chars["Sans-Metier"] = c, { errors
 local rc = ns.recettesConnues()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
-GameDataAPI = ns
 assert(LibStub("LibCommune-1.0"):Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
-GameDataAPI = ns -- comme après le chargement de GameData.lua
 print("GameData : vérifications OK")
 -- Mécréant : le plan d'achat d'un objet (prix sûr, débit, quantité).
 assert(loadfile("GameData/Flip.lua"))("GameData", ns)
