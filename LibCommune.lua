@@ -121,7 +121,8 @@ function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
       i = i + 1
       local c = file[i]
       if not c then if fini then fini() end return end
-      if IsPlayerSpell(c[1]) then
+      local ok, connue = pcall(IsPlayerSpell, c[1]) -- un ID que ce client ignore n'arrête pas le relevé
+      if ok and connue then
         local m = metiers[c[2]] or { known = {} }
         metiers[c[2]], m.rank, m.max = m, miens[c[2]][1], miens[c[2]][2]
         m.known[c[1]] = m.known[c[1]] or true
