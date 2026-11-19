@@ -7,7 +7,7 @@ Du code seulement, jamais de données sauvegardées — les données relevées n
 
 ```lua
 local lib = LibStub("LibCommune-1.0")
-lib:Demander("recettes connues")                    -- sans GameData : lance le relevé de repli
+lib:Souscrire("recettes connues")                   -- avec GameData : relevé sur tous tes personnages ; sans lui : relevé de repli
 local d, raison = lib:Lire("recettes connues", "tous") -- nil = personnage connecté, ou « Prénom Nom-Royaume »
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
 --       persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }

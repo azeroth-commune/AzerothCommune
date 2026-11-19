@@ -48,7 +48,7 @@ print("LibCommune : GameData présent OK")
 -- Type absent du catalogue : indisponible, avec sa raison.
 d, raison = lib:Lire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
-d, raison = lib:Demander("cours de la bourse")
+d, raison = lib:Souscrire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 print("LibCommune : type inconnu OK")
 
@@ -60,12 +60,13 @@ for _ in pairs(lib.types) do nTypes = nTypes + 1 end
 assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
 for _, nom in ipairs(attendus) do assert(lib.types[nom] and type(lib.types[nom].gamedata) == "string", "au catalogue : " .. nom) end
 assert(not lib.types.objets.leger and not lib.types["cours de l'HV"].leger and lib.types.inventaires.leger, "lourds : HV et objets")
--- Demande avec GameData : transmise à GameDataAPI.demander (qui la retient pour le joueur), et gardée pour la session.
+-- Souscription avec GameData : transmise à GameDataAPI.souscrire (qui la retient pour le joueur), et gardée pour la session.
 local transmis = {}
-GameDataAPI.demander = function(t) transmis[#transmis + 1] = t end
-for _, nom in ipairs(attendus) do assert(lib:Demander(nom), "demande : " .. nom) end
-assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque demande transmise à GameData")
-assert(lib.demandes.objets and lib.demandes["recettes connues"], "et retenue pour la session")
+GameDataAPI.souscrire = function(t) transmis[#transmis + 1] = t end
+for _, nom in ipairs(attendus) do assert(lib:Souscrire(nom), "souscription : " .. nom) end
+assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscription transmise à GameData")
+assert(lib.souscriptions.objets and lib.souscriptions["recettes connues"], "et retenue pour la session")
+assert(lib.Demander == lib.Souscrire, "ancien nom gardé")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
 GameDataAPI.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, ["Alt Dupont-Kerys"] = { bank = {} } } } end
 local inv = assert(lib:Lire("inventaires"))
@@ -79,8 +80,8 @@ assert(d == nil and raison == "pas encore relevé", "aucun marchand : " .. tostr
 GameDataAPI.objets = function() return nil end
 d, raison = lib:Lire("objets")
 assert(d == nil and raison == "pas encore relevé", "objets absents : " .. tostring(raison))
-lib.demandes = {}
-print("LibCommune : catalogue et demandes avec GameData OK")
+lib.souscriptions = {}
+print("LibCommune : catalogue et souscriptions avec GameData OK")
 
 -- GameData absent : relevé de repli du personnage connecté, en mémoire ; rien n'est écrit chez l'hôte.
 GameDataAPI = nil
@@ -89,9 +90,9 @@ local avant = {}
 for k in pairs(_G) do avant[k] = true end
 d, raison = lib:Lire("recettes connues")
 assert(d == nil and raison == "pas encore relevé", "rien de relevé : " .. tostring(raison))
-assert(lib:Demander("recettes connues"))
--- Sans GameData, pas de relevé de repli pour les autres types (lourds, ou pas encore écrits) ; la demande reste acceptée.
-assert(lib:Demander("objets") and lib:Demander("inventaires"), "demande sans GameData")
+assert(lib:Souscrire("recettes connues"))
+-- Sans GameData, pas de relevé de repli pour les autres types (lourds, ou pas encore écrits) ; la souscription reste acceptée.
+assert(lib:Souscrire("objets") and lib:Souscrire("inventaires"), "souscription sans GameData")
 for _, nom in ipairs({ "objets", "cours de l'HV", "inventaires", "marchands" }) do
   d, raison = lib:Lire(nom)
   assert(d == nil and raison == "pas de GameData", nom .. " sans GameData : " .. tostring(raison))

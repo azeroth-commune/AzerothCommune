@@ -3,9 +3,9 @@
 -- sauvegardées que dans GameData).
 --
 -- Accès aux données relevées, deux gestes :
---   lib:Demander(type)           : l'add-on déclare qu'il a besoin de ce type de données. Avec GameData, la demande est
---                                  retenue pour tous les personnages du joueur (GameData ne relève que les types demandés,
---                                  et cesse après ~30 jours sans demande) ; sans lui, elle vaut le temps de la session.
+--   lib:Souscrire(type)          : l'add-on souscrit à ce type de données (il en a besoin). Avec GameData, la souscription
+--                                  vaut pour tous les personnages du joueur (GameData ne relève que les types souscrits, et
+--                                  cesse après ~30 jours sans souscription) ; sans lui, elle vaut le temps de la session.
 --   lib:Lire(type, personnage)   : les données, ou nil et la raison (« type inconnu », « pas de GameData »,
 --                                  « pas encore relevé »). personnage = « Nom-Royaume » (sur Forever « Prénom Nom-Royaume »),
 --                                  nil pour le personnage connecté, « tous » pour tous les personnages relevés.
@@ -182,18 +182,20 @@ lib.cadre:SetScript("OnEvent", function(_, evenement)
   C_Timer.After(0.5, function() if mien == jeton then pcall(releveDeRepli) end end)
 end)
 
--- Les types demandés pendant cette session : GameData les retient à la connexion (une demande faite pendant le
--- chargement arrive avant que ses SavedVariables soient lues). Sans GameData, une demande vaut le temps de la session.
-lib.demandes = lib.demandes or {}
+-- Les types souscrits pendant cette session : GameData les retient à la connexion (une souscription faite pendant le
+-- chargement arrive avant que ses SavedVariables soient lues). Sans GameData, elle vaut le temps de la session.
+lib.souscriptions = lib.souscriptions or {}
 
-function lib:Demander(typeDeDonnees)
+function lib:Souscrire(typeDeDonnees)
   local t = TYPES[typeDeDonnees]
   if not t then return nil, "type inconnu" end
-  self.demandes[typeDeDonnees] = true
-  if GameDataAPI and GameDataAPI.demander then GameDataAPI.demander(typeDeDonnees) end
+  self.souscriptions[typeDeDonnees] = true
+  if GameDataAPI and GameDataAPI.souscrire then GameDataAPI.souscrire(typeDeDonnees) end
   if t.repli then for _, e in ipairs(EVENEMENTS) do pcall(self.cadre.RegisterEvent, self.cadre, e) end end
   return true
 end
+-- ponytail: ancien nom, Handshake sur main appelle encore lib:Demander("recettes connues") ; à retirer après sa fusion.
+lib.Demander = lib.Souscrire
 
 function lib:Lire(typeDeDonnees, personnage)
   local t = TYPES[typeDeDonnees]
