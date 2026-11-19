@@ -127,18 +127,16 @@ print = realPrint
 assert(GameDataMarket["R-Alliance"].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
 assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
 print("GameData : vérifications OK")
--- Tableaux : tri par colonne, cases vides toujours en bas, égalités dans l'ordre d'arrivée.
+-- Fenêtre, tableaux, montants, noms d'objets : dans LibCommune (testés par LibCommune/check.lua), plus de copie ici.
 assert(loadfile("GameData/Window.lua"))("GameData", ns)
 assert(ns.exportList and ns.hubTools and ns.hubTools[1][1] == "Acheter ou fabriquer", "boutons d'export et outils du hub, ouverts aux consommateurs")
-local cols = { { key = "h", get = function(r) return r.h end }, { key = "n", get = function(r) return r.n end } }
-local rows = { { n = "b", h = 5 }, { n = "a" }, { n = "c", h = 9 }, { n = "d", h = 5 } }
-ns.sortRows(rows, cols, { key = "h", desc = true })
-assert(rows[1].n == "c" and rows[2].n == "b" and rows[3].n == "d" and rows[4].n == "a", "gain/h décroissant, vide en bas")
-ns.sortRows(rows, cols, { key = "h", desc = false })
-assert(rows[1].n == "b" and rows[2].n == "d" and rows[3].n == "c" and rows[4].n == "a", "croissant, vide toujours en bas")
-ns.sortRows(rows, cols, { key = "n", desc = false })
-assert(rows[1].n == "a" and rows[4].n == "d")
-print("GameData : tri des tableaux OK")
+for _, k in ipairs({ "newWindow", "newTable", "sortRows", "money", "moneyShort", "moneySigned", "itemLabel", "findItem" }) do
+  assert(ns[k] == nil, "copie de l'outil commun " .. k .. " encore dans GameData")
+end
+for _, f in ipairs({ "GameData.lua", "Window.lua" }) do
+  assert(not io.open("GameData/" .. f):read("*a"):find("BeAGoodPal", 1, true), f .. " : l'export passe par LibCommune")
+end
+print("GameData : outils communs pris dans LibCommune OK")
 
 -- Le négoce vit dans l'add-on Négoce (#2) : ni ses fichiers dans le TOC, ni ses exports, ni ses outils dans le hub.
 local toc = io.open("GameData/GameData.toc"):read("*a")

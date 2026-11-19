@@ -10,7 +10,7 @@
 -- Chaque lecture tourne sous pcall : une API absente sur ce client devient une ligne dans `errors`.
 
 local _, ns = ...
-GameDataAPI = ns -- lu par Handshake (prix, stocks, fenêtres) et LibCommune (recettesConnues)
+GameDataAPI = ns -- lu par Handshake (prix, stocks), le Négoce et LibCommune (recettesConnues)
 
 local function now() return date("%Y-%m-%d %H:%M:%S") end
 -- Sur Forever, UnitName("player") renvoie prénom, nom de famille (le 2e retour n'est pas le royaume) ;
@@ -310,7 +310,7 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
   end
 end)
 
--- /gdata export <quoi> : envoie une partie de la base par image (BeAGoodPal.Export), sans /reload.
+-- /gdata export <quoi> : envoie une partie de la base par image (export de LibCommune), sans /reload.
 local EXPORTS = {
   perso = function() return { [charKey()] = char() } end,
   persos = function() return GameDataDB.chars end,
@@ -337,7 +337,8 @@ local EXPORTS = {
 }
 ns.exports = EXPORTS -- un add-on consommateur (le Négoce : mecreant, journal) y ajoute les siens, avec un bouton dans ns.exportList
 function ns.exportCommand(what)
-  if not (BeAGoodPal and BeAGoodPal.Export) then return print("GameData : l'export par image demande le cœur Be a Good Pal.") end
+  local lib = LibStub and LibStub("LibCommune-1.0", true)
+  if not (lib and lib.Exporter) then return print("GameData : l'export par image demande LibCommune.") end
   local get = EXPORTS[what]
   if what == "" and ns.toggleExportWindow then return ns.toggleExportWindow() end -- /gdata export : la fenêtre
   if not get then
@@ -348,7 +349,7 @@ function ns.exportCommand(what)
   end
   if what == "perso" or what == "persos" then scanAll() end
   print("GameData : préparation de l'export « " .. what .. " »…")
-  local ok, err = pcall(function() BeAGoodPal.Export(get(), "gamedata-" .. what) end)
+  local ok, err = pcall(function() lib.Exporter(get(), "gamedata-" .. what) end)
   if not ok then
     GameDataDB.errors.export = ns.now() .. " " .. what .. " : " .. tostring(err)
     print("|cffe64d4dGameData : l'export « " .. what .. " » a planté :|r " .. tostring(err))
