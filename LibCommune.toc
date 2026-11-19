@@ -1,0 +1,6 @@
+## Interface: 16001
+## Title: LibCommune
+## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (recettes connues), avec ou sans GameData. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
+## Version: 1.0.1
+LibStub.lua
+LibCommune.lua
