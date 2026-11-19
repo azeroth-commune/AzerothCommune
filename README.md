@@ -20,7 +20,27 @@ local d, lot = lib:Lire("marchands")
 -- lot mixte (marchands : vus en jeu et base VendorData) : une ligne d'une autre provenance porte la sienne
 local lignes, provenance = lib.Fusionner({ { donnees = a, provenance = "relevé direct" }, { donnees = b, provenance = "autre add-on" } })
 -- pour chaque clé, la ligne de la provenance la plus fiable gagne ; une provenance inconnue passe en dernier ; sources intactes
+local hv, lot = lib:Lire("cours de l'HV")           -- type lourd : par fournisseurs (Fournisseurs.lua), puis GameData
+local l = hv and hv.objet(2772)                     -- ton HV : { min, qty, auctions, tiers, hist, sources = { champ = fournisseur } }
+-- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile }
+-- raison : « pas de GameData ni de fournisseur » (jamais de relevé de repli), « pas encore relevé »
 ```
+
+### Fournisseurs (cours de l'HV)
+
+Un fournisseur tient un type de données pour le joueur : l'API publique d'un autre add-on d'abord, à défaut ses
+SavedVariables (fragile, si sa licence le permet), en dernier le relevé de GameData. Pour chaque champ, le premier
+présent qui a l'objet :
+
+| Champ | Fournisseurs, dans l'ordre |
+|---|---|
+| `min` (prix unitaire le plus bas) | Auctionator (`Auctionator.API.v1`) > TSM (`TSM_API`, non essayé) > AuctionDB (SavedVariables, fragile) > GameData |
+| `qty` (quantité en vente) | AuctionDB > GameData |
+| `auctions` (annonces), `tiers` (paliers) | GameData |
+| `hist` (`{ {heure, min, qté}, … }`) | AuctionDB (scans des derniers jours) > GameData (12 derniers scans) |
+
+GameData ne garde pas de copie de ce qu'un fournisseur présent donne : il ne relève que `lib:ChampsARelever("cours de l'HV")`.
+Un autre add-on ne dit pas sous quel build il a relevé : son lot n'a ni build ni date.
 
 Avec GameData, la lib lit sa base (`GameDataAPI.recettesConnues`) ; sans lui, relevé de repli : le personnage connecté,
 en mémoire, le temps de la session, jamais dans les SavedVariables de l'add-on hôte.
@@ -47,7 +67,7 @@ lib.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles
 ```
 
 Le bouton loupe (capture) des fenêtres n'apparaît que si un add-on le demande (`lib.captureDansLesFenetres`, posé par
-Be a Good Pal). `Interface.lua`, `Capture.lua` et `Regroupement.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
+Be a Good Pal). `Interface.lua`, `Capture.lua`, `Regroupement.lua` et `Fournisseurs.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
 la plus récente sert. `Capture.lua` se charge aussi hors du jeu après `LibStub.lua` (`lib.PagesExport`,
 `lib.GrilleExport`).
 

@@ -7,15 +7,16 @@
 --                                  vaut pour tous les personnages du joueur (GameData ne relève que les types souscrits, et
 --                                  cesse après ~30 jours sans souscription) ; sans lui, elle vaut le temps de la session.
 --   lib:Lire(type, personnage)   : les données et leur lot, ou nil et la raison (« type inconnu », « pas de GameData »,
---                                  « pas encore relevé »). personnage = « Nom-Royaume » (sur Forever « Prénom Nom-Royaume »),
+--                                  « pas encore relevé », « pas de GameData ni de fournisseur »). personnage = « Nom-Royaume » (sur Forever « Prénom Nom-Royaume »),
 --                                  nil pour le personnage connecté, « tous » pour tous les personnages relevés.
 -- Lot : { provenance, build, version, date, perime } — d'où viennent les données (lib.provenances, du plus fiable au moins
 -- fiable), le build du client (GetBuildInfo) et la date du relevé ; perime = true : figé sous un autre build, peut-être
 -- périmé. Pour un type par personnage, le lot va aussi par personnage : { persos = { [personnage] = lot } }. Dans un lot
 -- mixte (marchands : vus en jeu et base VendorData), une ligne d'une autre provenance porte la sienne (champ provenance).
 -- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session.
+-- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe par eux d'abord (Fournisseurs.lua).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 4
+local MAJOR, MINOR = "LibCommune-1.0", 5
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -36,7 +37,10 @@ local TYPES = {
   marchands = { leger = true, gamedata = "marchands" }, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
   ["prix des vols"] = { leger = true, gamedata = "prixDesVols" }, -- { [départ] = { [arrivée] = prix } }
   ["add-ons installés"] = { leger = true, gamedata = "addonsInstalles" }, -- { [dossier] = { title, version, … } }
-  ["cours de l'HV"] = { gamedata = "coursHV" }, -- { hv = { [royaume-faction] = { items, hist, … } }, depot = { rate24, min } }
+  -- { objet = fn(itemID) -> { min, qty, auctions, tiers, hist, sources }, depot = { rate24, min }, hv = le relevé de
+  --   GameData ({ [royaume-faction] = { items, hist, … } }, seulement les champs qu'aucun fournisseur ne donne) } :
+  --   par fournisseurs (Fournisseurs.lua), puis le relevé de GameData
+  ["cours de l'HV"] = { gamedata = "coursHV" },
   objets = { gamedata = "objets" }, -- { [itemID] = { name, class, price, stack, … } }
 }
 lib.types = TYPES -- lecture seule : GameData y vérifie qu'il rend chaque type
@@ -247,9 +251,11 @@ function lib:Lire(typeDeDonnees, personnage)
   if not t then return nil, "type inconnu" end
   local fournir = GameDataAPI and GameDataAPI[t.gamedata]
   local d, lot
-  if fournir then
-    d, lot = fournir() -- lecture seule : ce sont les tables de GameData
-  else
+  if fournir then d, lot = fournir() end -- lecture seule : ce sont les tables de GameData
+  if self.LireParFournisseurs and self.fournisseurs[typeDeDonnees] then
+    return self:LireParFournisseurs(typeDeDonnees, d, lot, fournir ~= nil)
+  end
+  if not fournir then
     local moi = personnageConnecte()
     if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
     if not next(self.repli.metiers) then return nil, "pas encore relevé" end
