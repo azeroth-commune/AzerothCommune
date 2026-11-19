@@ -37,6 +37,12 @@ local alt = assert(lib:Lire("recettes connues", "Alt Dupont-Kerys"))
 assert(alt.persos["Alt Dupont-Kerys"].Forge.rank == 50 and not alt.persos[MOI], "un personnage donné")
 local d, raison = lib:Lire("recettes connues", "Inconnu-Kerys")
 assert(d == nil and raison == "pas encore relevé", "personnage jamais connecté : " .. tostring(raison))
+local seules = { recettes = base.recettes, persos = {} } -- recettes vues, aucun perso relevé (perso supprimé…)
+GameDataAPI.recettesConnues = function() return seules end
+assert(lib:Lire("recettes connues", "tous").recettes[3307], "« tous » rend les recettes vues même sans perso")
+GameDataAPI.recettesConnues = function() return { recettes = {}, persos = {} } end
+d, raison = lib:Lire("recettes connues", "tous")
+assert(d == nil and raison == "pas encore relevé", "base vide : " .. tostring(raison))
 print("LibCommune : GameData présent OK")
 
 -- Type absent du catalogue : indisponible, avec sa raison.

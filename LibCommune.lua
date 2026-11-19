@@ -124,6 +124,6 @@ function lib:Lire(typeDeDonnees, personnage)
     if not d.persos[p] then return nil, "pas encore relevé" end
     d = { recettes = d.recettes, persos = { [p] = d.persos[p] } }
   end
-  if not next(d.persos) then return nil, "pas encore relevé" end
+  if not next(d.persos) and not next(d.recettes) then return nil, "pas encore relevé" end
   return d
 end
