@@ -1,7 +1,8 @@
 -- GameData, partie commerce : recettes, maîtres de métier, marchands et hôtel des ventes.
 --   GameDataDB.recipes[clé]  : chaque recette vue dans une fenêtre de métier, avec ce qu'elle produit et ses
 --                              composants. Clé = ID du sort de la recette quand le jeu le donne, sinon « Métier:Nom ».
---   chars[perso].recipes      : par métier, rang, maximum et recettes connues (clé -> difficulté).
+--   chars[perso].recipes      : par métier, rang, maximum et recettes connues (clé -> difficulté,
+--                              ou true quand relevée sans fenêtre).
 --   GameDataDB.trainers[npc]  : ce que chaque maître enseigne, à quel prix, quel rang et quel niveau requis.
 --   GameDataDB.vendors[npc]   : ce que chaque marchand vend, à quel prix, par combien, en stock limité ou non.
 --   GameDataDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
@@ -63,13 +64,14 @@ local function scanTradeSkill(c)
   for id, rec in pairs(r.recettes) do GameDataDB.recipes[id] = rec end
   GameDataDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
   c.recipes = c.recipes or {}
+  if not lib.RangerRecettes then return saveProfession(c, r.metier, r.rang, r.max, r.connues) end -- LibCommune mineure 1
   lib:RangerRecettes(c.recipes, r).scanned = ns.now() -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
 end
 
 -- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par LibCommune.
 local function scanKnownRecipes()
   local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not lib then return end
+  if not (lib and lib.ReleverRecettesSansFenetre) then return end -- absente, ou mineure 1
   local c = ns.char()
   c.recipes = c.recipes or {}
   lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes)
