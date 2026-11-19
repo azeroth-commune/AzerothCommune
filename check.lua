@@ -75,3 +75,22 @@ assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameD
 for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI", "global écrit par la lib : " .. k) end
 assert(HoteDB.reglages.x == 1 and next(HoteDB, next(HoteDB)) == nil, "SavedVariables de l'hôte intactes")
 print("LibCommune : GameData absent, relevé de repli OK")
+
+-- Deux copies de la lib (deux add-ons qui l'embarquent), mineures différentes : la plus récente sert, quel que soit
+-- l'ordre de chargement, et elle reprend le relevé de repli de la précédente.
+local source = assert(io.open("LibCommune/LibCommune.lua")):read("*a")
+local mineure = tonumber(source:match('local MAJOR, MINOR = "LibCommune%-1%.0", (%d+)'))
+local function copie(m, marque)
+  local s = source:gsub('(local MAJOR, MINOR = "LibCommune%-1%.0", )%d+', "%1" .. m) .. ("\nlib.marque = %q\n"):format(marque)
+  assert(loadstring(s))()
+end
+local premier = cadre.onEvent
+copie(mineure + 1, "récente")
+local recent = cadre.onEvent
+copie(mineure - 1, "ancienne") -- chargée après, mais plus vieille : ignorée
+local servie, m = LibStub("LibCommune-1.0")
+assert(servie == lib and m == mineure + 1 and servie.marque == "récente", "la plus récente sert : " .. tostring(servie.marque))
+assert(servie:Lire("recettes connues").persos[MOI].Minage.known[3307], "le relevé de repli survit à la mise à niveau")
+local nouveau = cadres[#cadres]
+assert(nouveau == cadre and recent ~= premier and cadre.onEvent == recent, "un seul cadre d'événements, mené par la copie récente")
+print("LibCommune : deux copies, la plus récente sert OK")
