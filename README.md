@@ -20,14 +20,36 @@ local d, lot = lib:Lire("marchands")
 -- lot mixte (marchands : vus en jeu et base VendorData) : une ligne d'une autre provenance porte la sienne
 local lignes, provenance = lib.Fusionner({ { donnees = a, provenance = "relevé direct" }, { donnees = b, provenance = "autre add-on" } })
 -- pour chaque clé, la ligne de la provenance la plus fiable gagne ; une provenance inconnue passe en dernier ; sources intactes
+local hv, lot = lib:Lire("cours de l'HV")           -- type lourd : scan de GameData et fournisseurs (Fournisseurs.lua)
+local l = hv and hv.objet(2772)                     -- ton HV : { min, qty, auctions, tiers, hist, age, sources = { champ = fournisseur } }
+-- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile }
+-- raison : « pas de GameData ni de fournisseur » (jamais de relevé de repli), « pas encore relevé »
 ```
 
-Avec GameData, la lib lit sa base (`GameDataAPI.recettesConnues`) ; sans lui, relevé de repli : le personnage connecté,
-en mémoire, le temps de la session, jamais dans les SavedVariables de l'add-on hôte.
+### Fournisseurs (cours de l'HV)
 
-Les recettes connues sont relevées à la connexion sans ouvrir la fenêtre du métier (`IsPlayerSpell` sur les recettes
-déjà vues et la réserve Classic de Handshake si elle est là ; difficulté inconnue : `true`), quelques-unes par image et
-jamais en combat ; l'ouverture de la fenêtre complète le relevé (recettes non apprises, composants, difficulté) et prime.
+Un fournisseur tient un type de données pour le joueur : l'API publique d'un autre add-on d'abord, à défaut ses
+SavedVariables (fragile, si sa licence le permet), en dernier le relevé de GameData. On ne copie pas ce qui est lourd
+et qu'un fournisseur tient déjà ; ce que le scan de GameData vient de voir est gardé et fait foi.
+
+- **Avec un scan de GameData pour ton HV** : `min`, `qty`, `auctions`, `tiers` de son dernier scan, « relevé direct » ;
+  un objet absent de ce scan est plus en vente (`min` nil, `qty` 0), même si un autre add-on l'a « vu » récemment.
+  `hist` : AuctionDB s'il a scanné l'HV il y a moins de 6 h (GameData n'en garde alors pas de copie,
+  `lib:ChampsARelever("cours de l'HV")`), sinon celui de GameData, sinon celui d'AuctionDB.
+- **Sans** (pas de GameData, ou pas encore de scan de cet HV) : les fournisseurs seuls, jamais de relevé de repli.
+
+| Champ | Fournisseurs, dans l'ordre (sans scan de GameData) |
+|---|---|
+| `min` (prix unitaire le plus bas) | Auctionator (`Auctionator.API.v1`, seulement si son âge est 0) > TSM (`TSM_API`, non essayé) > AuctionDB |
+| `qty` (quantité en vente), `hist` (`{ {heure, min, qté}, … }`) | AuctionDB |
+| `age` | Auctionator : jours depuis qu'il a vu l'objet |
+
+- L'âge 0 d'Auctionator veut dire **« vu aujourd'hui »** (jour calendaire, toute recherche du jour), pas « vu au dernier
+  scan » : c'est le mieux qu'il dise ; un âge plus grand : plus en vente (`min` nil, `age` rendu).
+- AuctionDB (SavedVariables, fragile ; GPL v3 dans son LICENSE, LGPLv3 dans son TOC) : un point qui n'est pas du dernier
+  scan de la maison (ou plus récent : persos de confiance) veut dire plus en vente (`min` nil, `qty` 0), l'historique
+  reste. Sa `qty` compte aussi les enchères sans achat immédiat ; celle de GameData, seulement l'achat immédiat.
+- Un autre add-on ne dit pas sous quel build il a relevé : son lot n'a ni build ni date.
 
 ## Outils communs
 
@@ -47,7 +69,7 @@ lib.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles
 ```
 
 Le bouton loupe (capture) des fenêtres n'apparaît que si un add-on le demande (`lib.captureDansLesFenetres`, posé par
-Be a Good Pal). `Interface.lua`, `Capture.lua` et `Regroupement.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
+Be a Good Pal). `Interface.lua`, `Capture.lua`, `Regroupement.lua` et `Fournisseurs.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
 la plus récente sert. `Capture.lua` se charge aussi hors du jeu après `LibStub.lua` (`lib.PagesExport`,
 `lib.GrilleExport`).
 
