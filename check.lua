@@ -98,135 +98,22 @@ local rc = ns.recettesConnues()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(LibStub("LibCommune-1.0"):Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
-print("GameData : vérifications OK")
--- Mécréant : le plan d'achat d'un objet (prix sûr, débit, quantité).
-assert(loadfile("GameData/Flip.lua"))("GameData", ns)
-local H = 3600
-local hist = { { 0, 1000, 2000 }, { 16 * H, 1100, 1500 }, { 32 * H, 1200, 1800 }, { 48 * H, 1300, 1200 } } -- 1 100 partis en 48 h
-local plan = ns.flipPlan(450, 1, { min = 1400, qty = 1285 }, hist)
-assert(plan and math.abs(plan.safe - 1075) < 0.01, "prix sûr = 1er quartile des minimums")
-assert(math.abs(plan.perDay - 550) < 0.01 and math.abs(plan.net - (1075 * 0.95 - 450)) < 0.01)
-assert(plan.qty == 293 and plan.grade == "B", "moitié de 2 jours de débit, réduite par le stock (" .. tostring(plan.qty) .. ")")
-assert(ns.flipPlan(450, 20, { min = 1400, qty = 1285 }, hist).qty == 280, "arrondi aux lots du marchand")
-assert(ns.flipPlan(450, 1, { min = 900, qty = 1285 }, hist).safe == 899, "creux actuel : un cuivre sous le moins cher")
-assert(ns.flipPlan(450, 1, { min = 1400, qty = 5000 }, hist) == nil, "plus de 5 jours de stock : saturé")
-assert(ns.flipPlan(1000, 1, { min = 1400, qty = 100 }, hist) == nil, "marge sous 15 %")
-local alone = ns.flipPlan(450, 1, { min = 1400, qty = 100 }, nil)
-assert(alone and not alone.qty and alone.grade == "C", "sans historique : marge seulement, pas de quantité")
-print("GameData : Mécréant OK")
-local h = { items = { [3857] = "1794652988,440,580,412 1794654915,475,500,601 1794660135,329,484,752" } }
-local long = ns.ahdbHistory(h, 3857)
-assert(#long == 3 and long[3][2] == 329 and long[3][3] == 752 and long[3][4] == 484, "historique AuctionDB lu")
-print("GameData : historique AuctionDB OK")
-
--- Trajet : le marchand le plus rapide parmi les plus proches, vols au prix noté chez le maître de vol.
-CreateVector2D = function(x, y) return { GetXY = function() return x, y end } end
-C_Map = C_Map or {}
-C_Map.GetWorldPosFromMapPos = function(map, v) local x, y = v:GetXY() return 0, CreateVector2D(x * 1000, y * 1000) end
-GameDataDB.taxi = { ["Forgefer"] = { ["Hurlevent"] = 1500 } }
-ShortestPathForever = { API = { EstimateDetail = function(_, _, _, map, x)
-  if x > 0.5 then return { seconds = 900, legs = { { mode = "walk" } } } end                         -- loin, à pied
-  return { seconds = 300, legs = { { mode = "walk" }, { mode = "flight", to = "Hurlevent" } } }      -- proche, un vol
-end } }
-local t = ns.travelFor({ point = { 1, 0.2, 0.2, "Garyl" } }, { 1, 0.1, 0.1 })
-assert(t and t.seconds == 2 * 300 + 120 and t.flights == 2 and t.flightCost == 3000 and not t.guessed, "aller-retour, 2 vols notés")
-GameDataDB.taxi = {}
-assert(ns.travelFor({ point = { 1, 0.2, 0.2 } }, { 1, 0.1, 0.1 }).guessed, "prix de vol inconnu : estimé")
--- Emplacement d'un PNJ sans Questie : zone QuestieDB (1519) -> carte 1453, table décodée depuis QuestieDB.
-LibQuestieDB = { Support = { Get = function() return { private = {
-  areaIdToUiMapId = "return { [1519] = 1453, [2257] = 7 }", areaIdToUiMapIdOverride = "return { [2257] = 0 }" } } end } }
-NpcDB = { spawns = function(npc) return npc == 1286 and { [1519] = { { 64.6, 71.3 } }, [2257] = { { 1, 1 } } } or nil end }
-local viaNpc = ns.travelFor({ npcs = { 1286 } }, { 1453, 0.6, 0.7 })
-assert(viaNpc and viaNpc.point[1] == 1453 and math.abs(viaNpc.point[2] - 0.646) < 1e-9, "marchand placé sans Questie (tram ignoré)")
-print("GameData : trajet OK")
-
--- Budget : 293 charbons à 4 pa 50 = 13 po 18 ; avec 5 po on en prend 111, gain recalculé ; un lot hors de prix : écarté.
-local deal = ns.flipPlan(450, 1, { min = 1400, qty = 1285 }, hist)
-assert(ns.capToBudget(deal, 50000) and deal.qty == 111 and deal.capped and deal.cost == 111 * 450, "ramené à ton or")
-assert(math.abs(deal.profit - 111 * deal.net) < 0.01)
-local lotDeal = ns.flipPlan(450, 20, { min = 1400, qty = 1285 }, hist)
-assert(not ns.capToBudget(lotDeal, 5000), "un lot de 20 à 90 pa avec 50 pa : hors de portée")
-print("GameData : budget OK")
--- Dépôt : charbon (revente 125, pile de 10) = 30 % de 125 = 37,5 par unité, minimum 1 pa pour l'annonce entière ;
--- pioche (revente 16, non empilable) = une annonce par pioche, donc 1 pa chacune.
-local withDep = ns.flipPlan(450, 1, { min = 1400, qty = 1285 }, hist, { sell = 125, stack = 10, rate = 0.30, min = 100 })
-assert(math.abs(withDep.net - (1075 * 0.95 - 450 - 37.5)) < 0.01, "dépôt au taux")
-assert(math.abs(ns.profitOf(withDep, 2) - (2 * (withDep.net + 37.5) - 100)) < 0.01, "2 charbons : une annonce au minimum 1 pa")
-assert(math.abs(ns.profitOf(withDep, 100) - 100 * withDep.net) < 0.01, "100 charbons : le taux dépasse le minimum")
-local pick = ns.flipPlan(9, 1, { min = 300, qty = 50 }, hist, { sell = 16, stack = 1, rate = 0.30, min = 100 })
-assert(pick and pick.deposit == 100, "non empilable : 1 pa par objet")
-print("GameData : dépôt OK")
-
--- Journal : bilan par objet (achat chez le marchand, mise en vente, vente lue dans le courrier).
-hooksecurefunc = function() end
-C_Container, C_AuctionHouse = C_Container or {}, C_AuctionHouse or {}
-assert(loadfile("GameData/Ledger.lua"))("GameData", ns)
-time = os.time
-GameDataDB.ledger = {
-  { t = time(), kind = "achat_marchand", id = 3857, qty = 100, money = -45000 },
-  { t = time(), kind = "mise_hv", id = 3857, qty = 100, money = -3750 },
-  { t = time(), kind = "vente_hv", id = 3857, qty = 60, money = 79800 + 3750 }, -- 60 × 14 pa − 5 % + dépôt rendu
-  { t = time(), kind = "retour_hv", id = 3857, qty = 10, money = 0 },
-}
-local sum, total = ns.ledgerSummary()
-assert(#sum == 1 and sum[1].bought == 100 and sum[1].sold == 60 and sum[1].onSale == 30, "quantités")
-assert(total == -45000 - 3750 + 83550 and sum[1].money == total, "bilan = entrées − sorties")
-print("GameData : journal OK")
-
--- Achat en gros : épices par lots de 5, 20 par appel, 3 cases libres ; on en veut 100 -> 3 piles puis « sacs pleins ».
-local calls, free, tick = {}, 3, nil
-MerchantFrame = { IsShown = function() return true end }
-GetMerchantNumItems = function() return 1 end
-GetMerchantItemID = function() return 2678 end
-C_MerchantFrame = { GetItemInfo = function() return { price = 9, stackCount = 5 } end }
-GetMerchantItemMaxStack = function() return 20 end
-GetMoney = function() return 1000000 end
-NUM_BAG_SLOTS = 0
-C_Container.GetContainerNumFreeSlots = function() return free, 0 end
-C_Container.GetContainerNumSlots = function() return 0 end
-BuyMerchantItem = function(_, q) calls[#calls + 1] = q; free = free - 1 end
-C_Timer.NewTicker = function(_, fn) tick = fn return { Cancel = function() tick = nil end } end
-C_Item.GetItemNameByID = function() return "Epices douces" end
-StaticPopupDialogs = {}
-local printed = {}
-local realPrint = print
-print = function(s) printed[#printed + 1] = s end
-assert(loadfile("GameData/BulkBuy.lua"))("GameData", ns)
-local clock = 1000
-GetTime = function() clock = clock + 1 return clock end -- chaque tick avance d'une seconde : l'attente des sacs passe
-ns.bulkBuy(2678, 100)
-for _ = 1, 10 do if tick then tick() end end
+-- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
+C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
+  GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
+GetRealmName, UnitFactionGroup, time, GameDataMarket = function() return "R" end, function() return "Alliance" end, os.time, {}
+local scanned, realPrint = 0, print
+ns.marketScanned = function() scanned = scanned + 1 end
+print = noop
+commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
+commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
 print = realPrint
-assert(#calls == 3 and calls[1] == 20 and calls[3] == 20, "3 piles de 20")
-assert(printed[#printed]:find("60 acheté") and printed[#printed]:find("sacs pleins"), printed[#printed])
-print("GameData : achat en gros OK")
-
--- Charbon réel (18/11/2026) : couche bon marché à 4-4,6 pa, l'étage haut à 13,5 pa ne part pas -> écarté (4 pa < achat).
-local coalHist = { { 0, 440, 3000, 1349 }, { 12 * 3600, 450, 2500, 1349 }, { 24 * 3600, 400, 2030, 1349 } }
-local coalNow = { min = 400, qty = 2179, tiers = { { price = 400, qty = 14 }, { price = 465, qty = 300 }, { price = 1349, qty = 800 } } }
-assert(ns.flipPlan(450, 1, coalNow, coalHist, { sell = 125, stack = 10, rate = 0.20, min = 1 }) == nil, "charbon écarté")
-print("GameData : charbon écarté OK")
-
--- Ventes vues dans l'onglet « Ventes » de l'HV : 26 charbons à 4 pa 63 (total 12 038), inscrits tout de suite.
-Enum = Enum or {}
-Enum.AuctionStatus = { Active = 0, Sold = 1 }
-C_AuctionHouse.GetNumOwnedAuctions = function() return 1 end
-C_AuctionHouse.GetOwnedAuctionInfo = function() return { auctionID = 77, status = 1, quantity = 26, buyoutAmount = 12038, itemKey = { itemID = 3857 } } end
-GameDataDB.ledger, GameDataDB.ledger_sold = { { t = time(), kind = "mise_hv", id = 3857, qty = 26, money = -650, deposit = 650 } }, {}
-local frames2 = {}
-CreateFrame = function() local fr = { RegisterEvent = function() end }; fr.SetScript = function(self, _, fn) self.fn = fn end; frames2[#frames2 + 1] = fr; return fr end
-assert(loadfile("GameData/Ledger.lua"))("GameData", ns)
-ns.charKey = function() return "Belegard-Test" end
-local lf = frames2[#frames2]
-lf.fn(lf, "OWNED_AUCTIONS_UPDATED")
-lf.fn(lf, "OWNED_AUCTIONS_UPDATED") -- deuxième passage : pas de doublon
-local sales = {}
-for _, e in ipairs(GameDataDB.ledger) do if e.kind == "vente_hv" then sales[#sales + 1] = e end end
-assert(#sales == 1 and sales[1].money == math.floor(12038 * 0.95) + 650 and sales[1].unit == 463, "vente inscrite une fois")
-print("GameData : ventes de l'onglet HV OK")
-
+assert(GameDataMarket["R-Alliance"].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
+assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
+print("GameData : vérifications OK")
 -- Tableaux : tri par colonne, cases vides toujours en bas, égalités dans l'ordre d'arrivée.
 assert(loadfile("GameData/Window.lua"))("GameData", ns)
+assert(ns.exportList and ns.hubTools and ns.hubTools[1][1] == "Acheter ou fabriquer", "boutons d'export et outils du hub, ouverts aux consommateurs")
 local cols = { { key = "h", get = function(r) return r.h end }, { key = "n", get = function(r) return r.n end } }
 local rows = { { n = "b", h = 5 }, { n = "a" }, { n = "c", h = 9 }, { n = "d", h = 5 } }
 ns.sortRows(rows, cols, { key = "h", desc = true })
@@ -237,23 +124,9 @@ ns.sortRows(rows, cols, { key = "n", desc = false })
 assert(rows[1].n == "a" and rows[4].n == "d")
 print("GameData : tri des tableaux OK")
 
--- Marchand signalé absent (clic droit dans Mécréant) : écarté des PNJ proposés.
-UnitFactionGroup = function() return "Alliance" end
-ItemDB = { vendors = function() return { 15011, 1286 } end }
-NpcDB.friendlyToFaction = function() return "AH" end
-GameDataDB.flip_absent = { [15011] = "Wagner Hammerstrike" }
-local vend = ns.questieVendors(3857)
-assert(#vend == 1 and vend[1] == 1286, "Wagner écarté")
-print("GameData : marchands absents OK")
-
--- Alertes HV : charbon habituellement à ~4 pa 60, 40 en sac.
-CreateFrame = function() return { RegisterEvent = noop, SetScript = noop } end
-assert(loadfile("GameData/Alerts.lua"))("GameData", ns)
-local H = 3600
-local coalUsual = { { 0, 460, 2000 }, { 6 * H, 450, 1900 }, { 12 * H, 470, 1800 }, { 18 * H, 455, 1700 }, { 24 * H, 700, 300 } }
-local s = ns.sellSignal({ min = 700, qty = 300 }, coalUsual, 125, 40, 0.20, 24 * H)
-assert(s and s.price == 699 and s.usual == 457.5 and s.owned == 40, "charbon à 7 pa : alerte")
-assert(not ns.sellSignal({ min = 500, qty = 300 }, coalUsual, 125, 40, 0.20, 24 * H), "4 pa 99 : pas assez au-dessus")
-assert(not ns.sellSignal({ min = 700, qty = 300 }, coalUsual, 125, 5, 0.20, 24 * H), "5 charbons : moins de 50 pa, pas d'alerte")
-assert(not ns.sellSignal({ min = 700, qty = 300 }, { coalUsual[1], coalUsual[2], coalUsual[5] }, 125, 40, 0.20, 24 * H), "2 scans : habituel inconnu")
-print("GameData : alertes HV OK")
+-- Le négoce vit dans l'add-on Négoce (#2) : ni ses fichiers dans le TOC, ni ses exports, ni ses outils dans le hub.
+local toc = io.open("GameData/GameData.toc"):read("*a")
+for _, f in ipairs({ "Flip", "Ledger", "Alerts", "BulkBuy" }) do assert(not toc:find(f .. ".lua", 1, true), f .. ".lua encore dans le TOC") end
+assert(not ns.exports.journal and not ns.exports.mecreant and #ns.hubTools == 1, "plus d'export ni d'outil du négoce")
+for _, e in ipairs(ns.exportList) do assert(e[1] ~= "journal" and e[1] ~= "mecreant", "bouton d'export du négoce") end
+print("GameData : sans négoce OK")

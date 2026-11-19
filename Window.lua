@@ -1,5 +1,5 @@
 -- GameData : cadre de fenêtre commun, bouton de la minicarte et fenêtre d'export.
---   Minicarte : clic gauche = fenêtre GameData : outils (acheter ou fabriquer, Mécréant) et exports (ouvre / replie), clic droit = « Acheter ou fabriquer »,
+--   Minicarte : clic gauche = fenêtre GameData : outils (acheter ou fabriquer, ceux du Négoce s'il est là) et exports (ouvre / replie), clic droit = « Acheter ou fabriquer »,
 --               glisser = le déplacer autour de la carte (position gardée).
 --   Export : un bouton par partie de la base ; chaque export est photographié en grilles de couleurs
 --            (BeAGoodPal.Export), puis relu hors du jeu par tools/crop_captures.py. Sans /reload.
@@ -90,18 +90,19 @@ function ns.sortRows(list, cols, sort)
 end
 
 -- Un vrai tableau : en-têtes cliquables (clic = trier sur cette colonne, re-clic = sens inverse), tri gardé dans
--- GameDataDB.sort[name], lignes alternées, défilement.
+-- GameDataDB.sort[name] (ou opts.store[name] : un add-on consommateur garde ses tris chez lui), lignes alternées, défilement.
 --   cols : { key, title, w, get = function(ligne) → valeur de tri, fmt = function(valeur, ligne) → texte,
 --            align = "LEFT"/"RIGHT", asc = true (premier clic croissant), icon = function(ligne) → texture,
 --            button = function(ligne) → libellé, click = function(ligne), tip = "aide de l'en-tête" }
---   opts : { name, sort = clé par défaut, desc, top, bottom, rowH, tooltip = function(ligne, GameTooltip),
+--   opts : { name, sort = clé par défaut, desc, store, top, bottom, rowH, tooltip = function(ligne, GameTooltip),
 --            onClick = function(ligne, bouton) }
 -- Renvoie le tableau (t:SetData(liste)) et sa largeur, pour dimensionner la fenêtre.
 local GAP = 6
 function ns.newTable(parent, cols, opts)
-  GameDataDB.sort = GameDataDB.sort or {}
+  if not opts.store then GameDataDB.sort = GameDataDB.sort or {} end
+  local store = opts.store or GameDataDB.sort
   local t = { data = {}, rows = {} }
-  t.sort = GameDataDB.sort[opts.name] or { key = opts.sort, desc = opts.desc ~= false }
+  t.sort = store[opts.name] or { key = opts.sort, desc = opts.desc ~= false }
   local rowH, width = opts.rowH or 20, 0
   for _, c in ipairs(cols) do width = width + c.w + GAP end
   local header = CreateFrame("Frame", nil, parent)
@@ -140,7 +141,7 @@ function ns.newTable(parent, cols, opts)
       b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
       b:SetScript("OnClick", function()
         if t.sort.key == c.key then t.sort.desc = not t.sort.desc else t.sort = { key = c.key, desc = not c.asc } end
-        GameDataDB.sort[opts.name] = t.sort
+        store[opts.name] = t.sort
         t:Refresh()
       end)
       if c.tip then
@@ -271,31 +272,28 @@ local EXPORTS = {
   { "hv", "Hôtel des ventes", "le dernier scan : prix le plus bas, quantité, 3 premiers paliers" },
   { "addons", "Add-ons", "les add-ons installés : version, auteur, dépendances" },
   { "erreurs", "Diagnostic", "erreurs de scan et derniers événements vus" },
-  { "mecreant", "Mécréant", "les affaires proposées, avec PNJ, faction et trajet (diagnostic)" },
-  { "journal", "Journal", "tes achats, ventes, mises en vente et retours, avec le bilan par objet" },
 }
+ns.exportList = EXPORTS
+
+-- Les outils du hub : { libellé, ouvrir, nom de sa fenêtre }. Un add-on consommateur (le Négoce) y ajoute les siens
+-- avant la première ouverture du hub.
+-- ponytail: une rangée de 4 boutons de 118 px ; passer à deux rangées si un 5e outil arrive.
+ns.hubTools = { { "Acheter ou fabriquer", function() if ns.openCraftWindow then ns.openCraftWindow() end end } }
 
 local exportFrame
 local function buildExport()
   local f = ns.newWindow("GameDataExportFrame", "GameData", 500, 160 + #EXPORTS * 34) -- 4 outils de 118 px
-  -- Ouvrir un outil referme ce menu : les deux fenêtres ne se superposent pas.
-  local function show(name, toggle)
-    return function()
-      f:Hide()
-      local w = _G[name]
-      if w and w:IsShown() then w:Raise() else toggle() end
-    end
-  end
-  local tools = { { "Acheter ou fabriquer", function() f:Hide(); if ns.openCraftWindow then ns.openCraftWindow() end end },
-    { "Mécréant", show("GameDataFlipFrame", function() ns.toggleFlipWindow() end) },
-    { "Journal", show("GameDataLedgerFrame", function() ns.toggleLedgerWindow() end) },
-    { "Alertes HV", show("GameDataAlertFrame", function() ns.toggleAlertWindow() end) } }
-  for i, t in ipairs(tools) do
+  for i, t in ipairs(ns.hubTools) do
     local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     b:SetSize(114, 24)
     b:SetPoint("TOPLEFT", 14 + (i - 1) * 118, -40)
     b:SetText(t[1])
-    b:SetScript("OnClick", t[2])
+    -- Ouvrir un outil referme ce menu : les deux fenêtres ne se superposent pas ; déjà ouvert, il passe devant.
+    b:SetScript("OnClick", function()
+      f:Hide()
+      local w = t[3] and _G[t[3]]
+      if w and w:IsShown() then w:Raise() else t[2]() end
+    end)
   end
   local head = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   head:SetPoint("TOPLEFT", 14, -78)

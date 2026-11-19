@@ -170,7 +170,7 @@ end
 -- (AuctionDB) l'a déjà demandé, on lit simplement les mêmes données.
 -- Paliers gardés : jusqu'à couvrir 60 % de ce qui est en vente (et au moins 2 000 unités), au plus 60 prix. Les 8
 -- premiers ne voyaient que la fine couche bon marché d'un marché à deux étages (le charbon : 530 unités à 4-5 pa,
--- le gros à 13 pa, le 18/11/2026) ; Mécréant a besoin de l'échelle pour son « prix de file ».
+-- le gros à 13 pa, le 18/11/2026) ; le Négoce lit l'échelle entière.
 local SCAN_COOLDOWN, BATCH, TIERS = 15 * 60, 2000, 60
 local ahOpen, reading, lastRequest, readAt = false, false, 0, nil
 
@@ -236,7 +236,7 @@ local function readReplicate()
     GameDataMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = hist }
     reading, readAt = false, GetTime()
     print(("GameData : hôtel des ventes lu, %d enchères. /reload pour l'écrire sur le disque."):format(n))
-    if ns.ahAlerts then safe("auction_alerts", ns.ahAlerts) end
+    safe("market_scanned", ns.marketScanned)
   end
   step()
 end
@@ -264,6 +264,10 @@ local function learnDeposit()
   local function median(t) table.sort(t) return t[math.floor((#t + 1) / 2)] end
   GameDataDB.deposit = { rate24 = median(rates), min = #mins > 0 and median(mins) or nil, checked = ns.now() }
 end
+
+-- Appelé après chaque lecture de l'HV. Un add-on qui veut réagir au scan frais (le Négoce) s'y accroche :
+-- hooksecurefunc(GameDataAPI, "marketScanned", fn).
+function ns.marketScanned() end
 
 local function requestScan()
   if GetTime() - lastRequest < SCAN_COOLDOWN then return end
@@ -310,14 +314,6 @@ f:SetScript("OnEvent", function(_, event)
     safe("taxi", scanTaxi)
   elseif event == "AUCTION_HOUSE_SHOW" then
     ahOpen = true
-    safe("auction_spot", function() -- où est ton HV : la destination de retour des itinéraires de Mécréant
-      local map = C_Map.GetBestMapForUnit("player")
-      local pos = map and C_Map.GetPlayerMapPosition(map, "player")
-      if pos then
-        local x, y = pos:GetXY()
-        GameDataDB.ah_spot = { map = map, x = x, y = y, zone = GetSubZoneText() ~= "" and GetSubZoneText() or GetZoneText() }
-      end
-    end)
     safe("auction_request", requestScan)
     C_Timer.After(2, function() safe("auction_deposit", learnDeposit) end)
   elseif event == "AUCTION_HOUSE_CLOSED" then
