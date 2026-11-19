@@ -42,3 +42,21 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     assertTrue(ok)
     assertTrue(fini)
 end)
+
+test("catalogue : chaque type a son accesseur dans GameData", function()
+    local lib = LibStub("LibCommune-1.0")
+    for nom, t in pairs(lib.types) do
+        assertType("function", GameDataAPI[t.gamedata])
+        local data, raison = lib:Lire(nom, "tous")
+        if not data then assertEquals("pas encore relevé", raison) end
+    end
+end)
+
+test("demande retenue par GameData avec sa date, pour tout le joueur", function()
+    local lib = LibStub("LibCommune-1.0")
+    -- Handshake a demandé les recettes connues pendant le chargement : retenu à la connexion
+    assertType("number", GameDataDB.demandes and GameDataDB.demandes["recettes connues"])
+    assertTrue(lib:Demander("marchands"))
+    assertType("number", GameDataDB.demandes.marchands)
+    assertTrue(GameDataAPI.demande("marchands"))
+end)
