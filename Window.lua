@@ -71,6 +71,7 @@ local function buildExport()
 end
 
 function ns.toggleExportWindow()
+  if not lib then return print("GameData : la fenêtre demande LibCommune.") end
   exportFrame = exportFrame or buildExport()
   exportFrame:SetShown(not exportFrame:IsShown())
 end
