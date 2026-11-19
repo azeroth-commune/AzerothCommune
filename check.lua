@@ -256,11 +256,16 @@ assert(retire.min == nil and retire.qty == 0 and retire.sources.qty == "GameData
 assert(lotHV.provenance == "relevé direct" and lotHV.build == 64000 and lotHV.fournisseur == nil and lotHV.releve == lotGD, "lot : relevé direct")
 assert(lotHV.champs.min == "GameData" and lotHV.champs.qty == "GameData" and lotHV.champs.hist == "AuctionDB" and lotHV.fragile, "d'où vient chaque champ")
 assert(hv.depot.rate24 == 0.3 and hv.hv["Kerys-Alliance"], "dépôt et relevé de GameData")
--- AuctionDB plus frais (7 h) : l'historique de GameData d'abord, celui d'AuctionDB pour un objet que GameData n'a pas.
+-- AuctionDB plus frais (7 h) : son historique reste le bon (des jours de points ; GameData vient peut-être de recommencer
+-- le sien, un seul point) ; celui de GameData seulement pour un objet qu'AuctionDB n'a pas. (Relecture de Negoce#1 : avec
+-- l'historique de GameData d'abord, Mécréant passait de 97 affaires à 3 et les Alertes de 51 à 0 sur les vraies données.)
 SV_ADB.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
+marche.hist[2772] = { { T + 3600, 100, 5 } } -- GameData vient de recommencer son historique : un seul point
 hv, lotHV = lib:Lire("cours de l'HV")
-assert(hv.objet(2840).sources.hist == "GameData" and hv.objet(2772).sources.hist == "AuctionDB", "historique : GameData > AuctionDB pas frais")
-assert(lotHV.champs.hist == "GameData", "lot : historique de GameData")
+assert(hv.objet(2772).sources.hist == "AuctionDB" and hv.objet(2772).hist[1][1] == T, "historique : AuctionDB même pas frais, avant le point unique de GameData")
+assert(hv.objet(2840).sources.hist == "GameData", "historique de GameData pour un objet qu'AuctionDB n'a pas")
+marche.hist[2772] = nil
+assert(lotHV.champs.hist == "AuctionDB", "lot : historique d'AuctionDB")
 -- GameData sans scan de cet HV : les fournisseurs seuls.
 marche = nil
 GameDataAPI.coursHV = function() return { hv = { ["Kerys-Horde"] = {} } }, lotGD end
