@@ -47,9 +47,26 @@ lib.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles
 ```
 
 Le bouton loupe (capture) des fenêtres n'apparaît que si un add-on le demande (`lib.captureDansLesFenetres`, posé par
-Be a Good Pal). `Interface.lua` et `Capture.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
+Be a Good Pal). `Interface.lua`, `Capture.lua` et `Regroupement.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
 la plus récente sert. `Capture.lua` se charge aussi hors du jeu après `LibStub.lua` (`lib.PagesExport`,
 `lib.GrilleExport`).
+
+## Regroupement en jeu
+
+Les add-ons Azeroth Commune présents se regroupent : **un seul bouton de minicarte** « Azeroth Commune » et **une seule
+entrée** dans les options du jeu (Options > Add-ons), une sous-page par add-on. Seul, un add-on garde son icône sur le
+bouton et sa page est l'entrée elle-même.
+
+```lua
+lib.Regrouper{ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
+  ouvrir = ns.toggleExportWindow,             -- clic sur le bouton (seul) ou sur sa ligne du menu
+  reglages = function(page, ancre) end,       -- facultatif : ses réglages, posés sur sa page sous le bouton « Ouvrir »
+  store = function() return GameDataDB end }  -- facultatif : où garder l'angle du bouton (minimap_angle)
+```
+
+Bouton : clic = l'add-on seul, sinon la liste ; clic droit = les réglages ; glisser = le déplacer. L'angle est écrit
+dans le store de chaque add-on regroupé et lu dans le premier qui en a un ; la lib ne garde rien. Tout se construit à
+l'entrée en jeu, une fois ; les pages n'ont ni `OnShow` ni `OnRefresh` (rien à nous quand on ferme les options).
 
 Développement : lien symbolique de ce dossier dans `Interface/AddOns/` (chargée seule par `LibCommune.toc`) ; les add-ons
 la déclarent en `## OptionalDeps: LibCommune`. Test hors ligne, depuis le dossier parent : `luajit LibCommune/check.lua`.

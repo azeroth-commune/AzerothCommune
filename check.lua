@@ -332,3 +332,124 @@ local boucle = {}
 boucle.moi = boucle
 assert(lib.JsonSur(boucle).moi == nil, "boucle coupée")
 print("LibCommune : pages et grilles d'export OK")
+
+---------------------------------------------------------------------------------------------------
+-- Regroupement (Regroupement.lua, LibCommune#3) : un seul bouton de minicarte, une seule entrée des options, une
+-- sous-page par add-on ; seul, un add-on n'a qu'un bouton et une entrée. Cadres factices : toute méthode existe.
+local function regroupement()
+  local etat = { boutons = {}, categories = {}, sous = {}, inscrites = 0, ouvertes = {}, menus = {} }
+  local function cadre(nom)
+    local f = { scripts = {}, points = {} }
+    setmetatable(f, { __index = function() return noop end })
+    f.SetScript = function(self, quoi, fn) self.scripts[quoi] = fn end
+    f.SetPoint = function(self, ...) self.points = { ... } end
+    f.CreateTexture = function() return cadre() end
+    f.CreateFontString = function() local t = cadre(); t.SetText = function(s, x) s.texte = x end; return t end
+    f.SetTexture = function(self, t) self.texture = t end
+    if nom then _G[nom] = f end
+    return f
+  end
+  CreateFrame = function(_, nom)
+    local f = cadre(nom)
+    if nom == "AzerothCommuneMinimapButton" then etat.boutons[#etat.boutons + 1] = f end
+    return f
+  end
+  Minimap = cadre()
+  Minimap.GetWidth = function() return 140 end
+  Minimap.GetCenter = function() return 500, 500 end
+  Minimap.GetEffectiveScale = function() return 1 end
+  GameTooltip = cadre()
+  local connecte = false
+  IsLoggedIn = function() return connecte end
+  C_AddOns = { GetAddOnMetadata = function(d, k) return k == "Notes" and ("notes de " .. d) or nil end }
+  local id = 0
+  local function categorie(page, nom) id = id + 1; return { page = page, nom = nom, GetID = function() return "cat" .. id end } end
+  Settings = {
+    RegisterCanvasLayoutCategory = function(page, nom) local c = categorie(page, nom); etat.categories[#etat.categories + 1] = c; return c end,
+    RegisterAddOnCategory = function() etat.inscrites = etat.inscrites + 1 end,
+    RegisterCanvasLayoutSubcategory = function(parent, page, nom)
+      local c = categorie(page, nom); c.parent = parent; etat.sous[#etat.sous + 1] = c; return c
+    end,
+    OpenToCategory = function(i) etat.ouvertes[#etat.ouvertes + 1] = i end,
+  }
+  MenuUtil = { CreateContextMenu = function(_, gen)
+    local m = {}
+    local menu = { CreateTitle = function(_, t) m[#m + 1] = { titre = t } end, CreateDivider = noop,
+      CreateButton = function(_, t, fn) m[#m + 1] = { t, fn } end }
+    gen(nil, menu)
+    etat.menus[#etat.menus + 1] = m
+  end }
+  for _, k in ipairs({ "regroupes", "boutonCommun", "categorie", "cadreRegroupement" }) do lib[k] = nil end
+  lib.versions.regroupement = nil
+  assert(loadfile("LibCommune/Regroupement.lua"))()
+  local function connexion()
+    connecte = true
+    lib.cadreRegroupement.scripts.OnEvent(lib.cadreRegroupement, "PLAYER_LOGIN")
+  end
+  return etat, connexion
+end
+
+-- Deux add-ons (GameData puis Handshake, dans l'ordre de chargement) : rien avant l'entrée en jeu, puis un bouton,
+-- une entrée « Azeroth Commune », deux sous-pages dans l'ordre d'arrivée.
+GameDataDB, HandshakeDB = { minimap_angle = 90 }, {}
+local ouverts = {}
+local etat, connexion = regroupement()
+local gd = { nom = "GameData", dossier = "GameData", icone = "icone-gd", ouvrir = function() ouverts[#ouverts + 1] = "gd" end,
+  store = function() return GameDataDB end }
+local reglagesFaits = 0
+local hs = { nom = "Handshake", dossier = "Handshake", icone = "icone-hs", ouvrir = function() ouverts[#ouverts + 1] = "hs" end,
+  store = function() return HandshakeDB end, reglages = function(page, ancre) reglagesFaits = reglagesFaits + 1; assert(page and ancre) end }
+lib.Regrouper(gd)
+lib.Regrouper(hs)
+assert(#etat.boutons == 0 and #etat.categories == 0, "rien de construit avant l'entrée en jeu")
+connexion()
+assert(#etat.boutons == 1 and #etat.categories == 1 and etat.inscrites == 1, "un bouton, une entrée")
+assert(etat.categories[1].nom == "Azeroth Commune", etat.categories[1].nom)
+assert(#etat.sous == 2 and etat.sous[1].nom == "GameData" and etat.sous[2].nom == "Handshake", "une sous-page par add-on, dans l'ordre")
+assert(etat.sous[1].parent == etat.categories[1] and gd.categorie == etat.sous[1], "sous Azeroth Commune")
+assert(reglagesFaits == 1, "les réglages de l'add-on posés une fois sur sa page")
+local bouton = etat.boutons[1]
+assert(bouton.icone.texture ~= "icone-gd", "plusieurs add-ons : l'icône commune")
+-- Position : l'angle d'avant (GameDataDB.minimap_angle = 90°) est gardé ; glisser l'écrit chez chaque add-on.
+assert(math.abs(bouton.points[4]) < 1e-6 and math.abs(bouton.points[5] - 76) < 1e-6, "angle gardé : en haut de la carte")
+GetCursorPosition = function() return 400, 500 end -- à gauche du centre : 180°
+bouton.scripts.OnDragStart(bouton)
+bouton.scripts.OnUpdate(bouton)
+bouton.scripts.OnDragStop(bouton)
+assert(GameDataDB.minimap_angle == 180 and HandshakeDB.minimap_angle == 180, "nouvel angle écrit chez chaque add-on")
+assert(math.abs(bouton.points[4] + 76) < 1e-6, "bouton déplacé")
+-- Clic : la liste des add-ons ; chaque ligne ouvre le sien ; clic droit : les réglages.
+bouton.scripts.OnClick(bouton, "LeftButton")
+local m = etat.menus[1]
+assert(m and m[1].titre == "Azeroth Commune" and m[2][1]:find("GameData") and m[3][1]:find("Handshake") and m[4][1] == "Réglages", "menu")
+m[3][2]()
+assert(ouverts[1] == "hs", "la ligne Handshake ouvre Handshake")
+bouton.scripts.OnClick(bouton, "RightButton")
+assert(etat.ouvertes[1] == etat.categories[1]:GetID(), "clic droit : l'entrée Azeroth Commune")
+-- Une 2e entrée en jeu (ou un add-on chargé plus tard) : toujours un bouton, une entrée ; le retardataire a sa sous-page.
+connexion()
+lib.Regrouper({ nom = "Négoce", ouvrir = noop })
+assert(#etat.boutons == 1 and #etat.categories == 1 and etat.inscrites == 1 and #etat.sous == 3 and etat.sous[3].nom == "Négoce", "tard")
+-- Une 2e copie du fichier, même version (un autre add-on qui embarque la lib) : ignorée.
+local avantCopie = lib.Regrouper
+assert(loadfile("LibCommune/Regroupement.lua"))()
+assert(lib.Regrouper == avantCopie, "copie pas plus récente ignorée")
+lib.versions.regroupement = 0 -- la copie chargée était plus vieille : la nouvelle la remplace et reprend bouton et entrée
+assert(loadfile("LibCommune/Regroupement.lua"))()
+connexion()
+assert(lib.Regrouper ~= avantCopie and #lib.regroupes == 3 and #etat.boutons == 1 and #etat.categories == 1 and #etat.sous == 3, "reprise")
+print("LibCommune : regroupement de plusieurs add-ons OK")
+
+-- Un seul add-on : un bouton (son icône, le clic l'ouvre), une entrée qui est sa page, aucune sous-page.
+etat, connexion = regroupement()
+ouverts = {}
+GameDataDB, gd.categorie = { minimap_angle = 90 }, nil
+lib.Regrouper(gd)
+connexion()
+assert(#etat.boutons == 1 and #etat.categories == 1 and #etat.sous == 0, "un bouton, une entrée, rien de plus")
+assert(etat.categories[1].nom == "Azeroth Commune" and gd.categorie == etat.categories[1], "l'entrée est la page de l'add-on")
+bouton = etat.boutons[1]
+assert(bouton.icone.texture == "icone-gd", "seul : son icône")
+bouton.scripts.OnClick(bouton, "LeftButton")
+assert(ouverts[1] == "gd" and #etat.menus == 0, "seul : le clic l'ouvre, sans menu")
+print("LibCommune : un seul add-on OK")
