@@ -3,6 +3,6 @@
 ## Category: Libraries
 ## Category-frFR: Bibliothèques
 ## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (recettes connues), avec ou sans GameData. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
-## Version: 1.0.1
+## Version: 1.0.2
 LibStub.lua
 LibCommune.lua

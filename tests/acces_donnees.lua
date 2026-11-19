@@ -27,3 +27,18 @@ end)
 test("GameData expose recettesConnues à la lib", function()
     assertType("function", GameDataAPI and GameDataAPI.recettesConnues)
 end)
+
+test("recettes connues sans fenêtre : l'API de Forever est là et le relevé tourne", function()
+    assertType("function", IsPlayerSpell)
+    assertType("function", GetProfessions)
+    assertType("function", GetProfessionInfo)
+    local lib = LibStub("LibCommune-1.0")
+    local metiers, fini = {}, false
+    -- sans recette candidate (réserve de Handshake mise de côté), le relevé finit tout de suite, sans attendre d'image
+    local reserve = HandshakeClassicRecipes
+    HandshakeClassicRecipes = nil
+    local ok = lib:ReleverRecettesSansFenetre(metiers, {}, function() fini = true end)
+    HandshakeClassicRecipes = reserve
+    assertTrue(ok)
+    assertTrue(fini)
+end)
