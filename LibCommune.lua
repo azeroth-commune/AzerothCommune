@@ -9,7 +9,7 @@
 --                                  nil pour le personnage connecté, « tous » pour tous les personnages relevés.
 -- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session.
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 1
+local MAJOR, MINOR = "LibCommune-1.0", 2
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -17,7 +17,7 @@ if not lib then return end -- une copie aussi récente est déjà chargée : c'e
 -- objets) attendrait GameData ou un fournisseur. gamedata : la fonction de GameDataAPI qui rend ce type.
 local TYPES = {
   -- { recettes = { [clé] = { profession, name, output, reagents, … } },
-  --   persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté } } } } }
+  --   persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
   ["recettes connues"] = { leger = true, gamedata = "recettesConnues" },
 }
 
@@ -77,23 +77,89 @@ function lib:ReleverRecettes()
   return r
 end
 
+-- Range un relevé de la fenêtre (r) dans metiers = { [métier] = { rank, max, known } } : sa liste prime ; une recette
+-- connue qu'elle ne liste pas du tout (trouvée sans fenêtre) reste. Rend l'entrée du métier.
+function lib:RangerRecettes(metiers, r)
+  for id, v in pairs(metiers[r.metier] and metiers[r.metier].known or {}) do
+    if type(id) == "number" and not r.recettes[id] then r.connues[id] = v end -- clé « Métier:Nom » : ancien relevé, pas reprise
+  end
+  metiers[r.metier] = { rank = r.rang, max = r.max, known = r.connues }
+  return metiers[r.metier]
+end
+
+---------------------------------------------------------------------------------------------------
+-- Relevé des recettes connues sans la fenêtre : sur Forever, IsPlayerSpell(ID du sort de la recette) dit vrai pour une
+-- recette connue (idée vue dans Mastercraft, dont le code n'est pas repris). Pour chaque métier du personnage, interroge
+-- les recettes candidates : celles déjà relevées (recettes = { [ID] = { profession, … } }) et la réserve Classic de
+-- Handshake si elle est chargée. PAR_IMAGE par image, jamais en combat (reprise à PLAYER_REGEN_ENABLED). Fusionne dans
+-- metiers = { [métier] = { rank, max, known } } : ajoute les connues qui manquent (true), ne retire rien, garde la
+-- difficulté lue en fenêtre. fini() une fois tout interrogé.
+local PAR_IMAGE = 60
+
+function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
+  if not (IsPlayerSpell and GetProfessions) then return nil, "API absente" end
+  local miens = {}
+  for _, index in pairs({ GetProfessions() }) do -- des index, avec des trous
+    local nom, _, rang, max = GetProfessionInfo(index)
+    if nom then miens[nom] = { rang, max } end
+  end
+  local file, vu = {}, {}
+  local function candidate(id, metier)
+    if type(id) == "number" and miens[metier] and not vu[id] then vu[id], file[#file + 1] = true, { id, metier } end
+  end
+  for id, rec in pairs(recettes or {}) do candidate(id, rec.profession) end
+  -- ponytail: la réserve de Handshake nomme les métiers en français ; sur un client d'une autre langue elle ne sert pas.
+  for id, c in pairs(HandshakeClassicRecipes or {}) do candidate(id, c[4]) end -- { objet, min, max, métier, … }
+  local i = 0
+  local function image()
+    if InCombatLockdown() then
+      self.reprise = image -- ponytail: un seul relevé en pause à la fois (il n'y en a qu'un par session)
+      pcall(self.cadre.RegisterEvent, self.cadre, "PLAYER_REGEN_ENABLED")
+      return
+    end
+    for _ = 1, PAR_IMAGE do
+      i = i + 1
+      local c = file[i]
+      if not c then if fini then fini() end return end
+      if IsPlayerSpell(c[1]) then
+        local m = metiers[c[2]] or { known = {} }
+        metiers[c[2]], m.rank, m.max = m, miens[c[2]][1], miens[c[2]][2]
+        m.known[c[1]] = m.known[c[1]] or true
+      end
+    end
+    C_Timer.After(0, image)
+  end
+  image()
+  return true
+end
+
 ---------------------------------------------------------------------------------------------------
 -- Relevé de repli (sans GameData) : en mémoire, dans la lib, jamais dans les SavedVariables de l'add-on hôte.
 -- Gardé d'une mineure à l'autre : une copie plus récente reprend ce que la précédente a relevé.
 lib.repli = lib.repli or { recettes = {}, metiers = {} }
 lib.cadre = lib.cadre or CreateFrame("Frame")
-local EVENEMENTS = { "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" }
+local EVENEMENTS = { "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" }
 
 local function releveDeRepli()
   local r = lib:ReleverRecettes()
   if not r then return end -- ponytail: « liste pas à jour » attend le TRADE_SKILL_LIST_UPDATE suivant, sans réessai minuté
   for cle, rec in pairs(r.recettes) do lib.repli.recettes[cle] = rec end
-  lib.repli.metiers[r.metier] = { rank = r.rang, max = r.max, known = r.connues }
+  lib:RangerRecettes(lib.repli.metiers, r)
 end
 
 local jeton = 0
-lib.cadre:SetScript("OnEvent", function()
+lib.cadre:SetScript("OnEvent", function(_, evenement)
+  if evenement == "PLAYER_REGEN_ENABLED" then -- fin du combat : le relevé sans fenêtre reprend (GameData compris)
+    local reprise = lib.reprise
+    lib.reprise = nil
+    if reprise then reprise() end
+    return
+  end
   if GameDataAPI and GameDataAPI.recettesConnues then return end -- GameData relève et sauvegarde pour tout le monde
+  if evenement == "PLAYER_LOGIN" then
+    C_Timer.After(5, function() lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes) end)
+    return
+  end
   jeton = jeton + 1 -- ces événements arrivent en rafale : un seul relevé, une demi-seconde après
   local mien = jeton
   C_Timer.After(0.5, function() if mien == jeton then pcall(releveDeRepli) end end)
