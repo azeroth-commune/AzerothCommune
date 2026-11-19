@@ -154,3 +154,98 @@ lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes)
 assert(lib.repli.metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")
 HandshakeClassicRecipes = nil
 print("LibCommune : fenêtre après le relevé sans fenêtre OK")
+
+---------------------------------------------------------------------------------------------------
+-- Outils communs (Interface.lua, Capture.lua) : tri des tableaux, montants, noms d'objets, pages et grilles d'export.
+assert(loadfile("LibCommune/Interface.lua"))()
+assert(loadfile("LibCommune/Capture.lua"))()
+local versions = { interface = lib.versions.interface, capture = lib.versions.capture }
+lib.Argent = "marque"
+assert(loadfile("LibCommune/Interface.lua"))() -- une 2e copie de même version (un autre add-on) : ignorée
+assert(lib.Argent == "marque" and lib.versions.interface == versions.interface, "une copie pas plus récente n'écrase rien")
+assert(loadfile("LibCommune/Interface.lua"))()
+lib.versions.interface = 0
+assert(loadfile("LibCommune/Interface.lua"))() -- la version chargée était plus vieille : la nouvelle la remplace
+assert(type(lib.Argent) == "function" and lib.versions.interface == versions.interface, "une copie plus récente remplace")
+print("LibCommune : outils, la plus récente sert OK")
+
+-- Tri : par colonne, cases vides toujours en bas, égalités dans l'ordre d'arrivée.
+local cols = { { key = "h", get = function(r) return r.h end }, { key = "n", get = function(r) return r.n end } }
+local rows = { { n = "b", h = 5 }, { n = "a" }, { n = "c", h = 9 }, { n = "d", h = 5 } }
+lib.TrierLignes(rows, cols, { key = "h", desc = true })
+assert(rows[1].n == "c" and rows[2].n == "b" and rows[3].n == "d" and rows[4].n == "a", "décroissant, vide en bas")
+lib.TrierLignes(rows, cols, { key = "h", desc = false })
+assert(rows[1].n == "b" and rows[2].n == "d" and rows[3].n == "c" and rows[4].n == "a", "croissant, vide toujours en bas")
+lib.TrierLignes(rows, cols, { key = "n", desc = false })
+assert(rows[1].n == "a" and rows[4].n == "d")
+assert(lib.TrierLignes(rows, cols, { key = "inconnue" })[1].n == "a", "colonne inconnue : ordre gardé")
+print("LibCommune : tri des tableaux OK")
+
+-- Montants : arrondis, version courte (pc oubliés au-delà d'1 po, pa au-delà de 100 po), signée.
+GetCoinTextureString = function(c, taille) return c .. (taille and ("@" .. taille) or "") end
+assert(lib.Argent(1234.6) == "1235" and lib.Argent(nil) == "?")
+assert(lib.ArgentCourt(nil) == "–" and lib.ArgentCourt(0.2) == "0" and lib.ArgentCourt(9999) == "9999@10")
+assert(lib.ArgentCourt(12345) == "12300@10" and lib.ArgentCourt(-1234567) == "1230000@10", "arrondis : " .. lib.ArgentCourt(12345))
+assert(lib.ArgentSigne(150) == "|cff59cc73+150@10|r" and lib.ArgentSigne(-150) == "|cffe64d4d-150@10|r" and lib.ArgentSigne(nil) == "–")
+C_CurrencyInfo = { GetCoinTextureString = function(c) return "moderne " .. c end }
+assert(lib.Argent(5) == "moderne 5", "l'API moderne d'abord")
+C_CurrencyInfo = nil
+print("LibCommune : montants OK")
+
+-- Noms d'objets : base de l'add-on, puis client, sinon demandé au serveur et retenu (dans garde) à son arrivée.
+local client, demandesServeur = { [3] = { "Cuivre", "|lien3|" } }, {}
+C_Item = { GetItemInfo = function(id) local i = client[id]; if i then return i[1], i[2] end end,
+  RequestLoadItemDataByID = function(id) demandesServeur[#demandesServeur + 1] = id end }
+local objets = { [1] = { name = "Barre de fer", link = "|lien1|" }, [2] = { name = "Toile de lin" } }
+assert(lib.NomObjet(1, objets) == "|lien1|" and lib.NomObjet(2, objets) == "Toile de lin" and lib.NomObjet(3, objets) == "|lien3|")
+assert(#demandesServeur == 0, "un objet connu n'est pas demandé")
+local garde = {}
+assert(lib.NomObjet(4, objets, garde) == "objet 4" and lib.NomObjet(4, objets, garde) == "objet 4")
+assert(#demandesServeur == 1 and demandesServeur[1] == 4, "demandé une seule fois au serveur")
+client[4] = { "Épice", "|lien4|" }
+local cadreObjets = cadres[#cadres]
+assert(cadreObjets == lib.cadreObjets, "écoute ITEM_DATA_LOAD_RESULT")
+cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 4, true)
+assert(garde[4] and garde[4].link == "|lien4|" and lib.NomObjet(4, objets) == "|lien4|", "nom arrivé : retenu dans garde")
+assert(select(2, lib.RetenirObjet(3, garde)) == "|lien3|" and garde[3].name == "Cuivre", "connu du client : retenu tout de suite")
+local recettes = { [7] = { name = "Fonte du cuivre", output = 2840 } }
+assert(lib.TrouverObjet("|Hitem:2589:0|h", objets) == 2589 and lib.TrouverObjet("42") == 42, "lien, ID")
+assert(lib.TrouverObjet("barre DE fer", objets, recettes) == 1 and lib.TrouverObjet("fonte du cuivre", objets, recettes) == 2840)
+assert(lib.TrouverObjet("rien", objets, recettes) == nil and lib.TrouverObjet("rien") == nil)
+print("LibCommune : noms d'objets OK")
+
+-- Export : pages (en-tête + morceau), grille de couleurs, et retour grille -> octets -> donnée, comme le décodeur.
+local N = lib.EXPORT_N
+local data = {}
+for i = 1, lib.EXPORT_PAGE_BYTES * 2 + 77 do data[i] = string.char((i * 37 + math.floor(i / 7)) % 256) end
+data = table.concat(data)
+local pages = lib.PagesExport(data, 4242)
+assert(#pages == 3 and pages[1]:sub(1, 4) == "BGP1", "3 pages")
+local relu = {}
+for p, page in ipairs(pages) do
+  local g = lib.GrilleExport(page)
+  assert(#g == N * N)
+  for c = 0, N - 1 do assert(g[c + 1] == (c % 2 == 0 and 0 or 7), "damier de la ligne 0") end
+  for c = 1, N - 2 do assert(g[(N - 1) * N + c + 1] == c % 8, "palette de la dernière ligne") end
+  local bits, octets, acc, n = {}, {}, 0, 0
+  for r = 1, N - 2 do for c = 1, N - 2 do bits[#bits + 1] = g[r * N + c + 1] end end
+  for _, s in ipairs(bits) do
+    acc, n = acc * 8 + s, n + 3
+    if n >= 8 then n = n - 8; local d = 2 ^ n; octets[#octets + 1] = string.char(math.floor(acc / d)); acc = acc % d end
+  end
+  local b = table.concat(octets)
+  local function u16(i) return b:byte(i) * 256 + b:byte(i + 1) end
+  assert(b:sub(1, 4) == "BGP1" and u16(5) * 65536 + u16(7) == 4242 and u16(9) == p and u16(11) == #pages, "en-tête page " .. p)
+  local chunk = b:sub(17, 16 + u16(13))
+  local somme = 0
+  for i = 1, #chunk do somme = (somme + chunk:byte(i)) % 65536 end
+  assert(somme == u16(15), "somme de contrôle page " .. p)
+  relu[p] = chunk
+end
+assert(table.concat(relu) == data, "aller-retour de l'export")
+local trou = lib.JsonSur({ [0] = "a", [5] = { 1, 2 }, liste = { "x", "y" } })
+assert(trou["0"] == "a" and trou["5"][2] == 2 and trou.liste[2] == "y", "clés numériques à trous en texte, listes gardées")
+local boucle = {}
+boucle.moi = boucle
+assert(lib.JsonSur(boucle).moi == nil, "boucle coupée")
+print("LibCommune : pages et grilles d'export OK")
