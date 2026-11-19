@@ -334,21 +334,8 @@ local EXPORTS = {
   end,
   addons = function() return GameDataDB.addons end,
   erreurs = function() return { base = GameDataDB.errors, perso = char().errors, events = GameDataDB.events } end,
-  journal = function() return { operations = GameDataDB.ledger, bilan = (ns.ledgerSummary()) } end,
-  mecreant = function() -- ce que la fenêtre Mécréant propose, avec les PNJ et leur faction (diagnostic)
-    local list = ns.flipOpportunities()
-    local out = { faction = UnitFactionGroup("player"), money = GetMoney(), reserve = GameDataDB.flip_reserve,
-      questie = NpcDB ~= nil, spf = ShortestPathForever ~= nil, deals = {} }
-    for i, e in ipairs(list) do
-      if i > 40 then break end
-      local npcs, fromQuestie = ns.vendorFactions(e.id)
-      out.deals[i] = { id = e.id, where = e.where, unit = e.unit, qty = e.qty, capped = e.capped, profit = e.profit,
-        perHour = e.perHour, base = e.base, travel = e.travel, questieVendors = fromQuestie, npcs = npcs }
-    end
-    return out
-  end,
 }
-ns.exports = EXPORTS -- un add-on consommateur (le Négoce) y ajoute les siens, avec un bouton dans ns.exportList
+ns.exports = EXPORTS -- un add-on consommateur (le Négoce : mecreant, journal) y ajoute les siens, avec un bouton dans ns.exportList
 function ns.exportCommand(what)
   if not (BeAGoodPal and BeAGoodPal.Export) then return print("GameData : l'export par image demande le cœur Be a Good Pal.") end
   local get = EXPORTS[what]
@@ -373,19 +360,6 @@ SlashCmdList.GAMEDATA = function(msg)
   local cmd, rest = (msg or ""):match("^%s*(%S*)%s*(.-)$")
   if cmd:lower() == "cout" and ns.costCommand then return ns.costCommand(rest) end
   if cmd:lower() == "export" then return ns.exportCommand(rest:lower()) end
-  if cmd:lower() == "mecreant" or cmd:lower() == "mécréant" then return ns.toggleFlipWindow() end
-  if cmd:lower() == "stop" and ns.stopBulkBuy then return ns.stopBulkBuy() end
-  if cmd:lower() == "opportunites" or cmd:lower() == "opportunités" then return ns.toggleAlertWindow() end
-  if cmd:lower() == "alertes" then
-    GameDataDB.alerts_off = not GameDataDB.alerts_off or nil
-    return print("GameData : alertes de l'HV " .. (GameDataDB.alerts_off and "coupées." or "activées."))
-  end
-  if cmd:lower() == "absents" then -- marchands signalés absents de Forever dans Mécréant
-    if rest:lower() == "vider" then GameDataDB.flip_absent = nil; return print("GameData : liste des marchands absents vidée.") end
-    local n = 0
-    for npc, where in pairs(GameDataDB.flip_absent or {}) do n = n + 1; print(("  %d  %s"):format(npc, tostring(where))) end
-    return print(("GameData : %d marchand(s) signalé(s) absent(s). /gdata absents vider pour tout reprendre."):format(n))
-  end
   msg = (msg or ""):lower()
   if msg == "objets" then
     setItemScan(not GameDataDB.item_scan)

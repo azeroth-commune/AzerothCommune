@@ -1,5 +1,5 @@
 -- GameData : cadre de fenêtre commun, bouton de la minicarte et fenêtre d'export.
---   Minicarte : clic gauche = fenêtre GameData : outils (acheter ou fabriquer, Mécréant) et exports (ouvre / replie), clic droit = « Acheter ou fabriquer »,
+--   Minicarte : clic gauche = fenêtre GameData : outils (acheter ou fabriquer, ceux du Négoce s'il est là) et exports (ouvre / replie), clic droit = « Acheter ou fabriquer »,
 --               glisser = le déplacer autour de la carte (position gardée).
 --   Export : un bouton par partie de la base ; chaque export est photographié en grilles de couleurs
 --            (BeAGoodPal.Export), puis relu hors du jeu par tools/crop_captures.py. Sans /reload.
@@ -272,8 +272,6 @@ local EXPORTS = {
   { "hv", "Hôtel des ventes", "le dernier scan : prix le plus bas, quantité, 3 premiers paliers" },
   { "addons", "Add-ons", "les add-ons installés : version, auteur, dépendances" },
   { "erreurs", "Diagnostic", "erreurs de scan et derniers événements vus" },
-  { "mecreant", "Mécréant", "les affaires proposées, avec PNJ, faction et trajet (diagnostic)" },
-  { "journal", "Journal", "tes achats, ventes, mises en vente et retours, avec le bilan par objet" },
 }
 ns.exportList = EXPORTS
 
