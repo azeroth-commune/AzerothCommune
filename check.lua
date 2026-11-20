@@ -14,7 +14,9 @@ UnitName = function() return "Belegard", "Marteaudefer" end
 GetRealmName = function() return "Kerys" end
 GetBuildInfo = function() return "1.16.1", "64000", "Nov 1 2026", 11601 end
 date = os.date
-local MOI = "Belegard Marteaudefer-Kerys"
+-- Un personnage est identifié par son GUID (LibCommune#19) : persos est rangé par GUID.
+local MOI, ALT = "Player-1-0000BE1E", "Player-1-00000A17"
+UnitGUID = function(u) if u == "player" then return MOI end end
 
 assert(loadfile("LibCommune/LibStub.lua"))()
 assert(loadfile("LibCommune/LibCommune.lua"))()
@@ -28,18 +30,18 @@ local base = {
     [2662] = { profession = "Forge", name = "Cuirasse en cuivre", output = 2852 } },
   persos = {
     [MOI] = { Minage = { rank = 140, max = 225, known = { [3307] = "optimal" } } },
-    ["Alt Dupont-Kerys"] = { Forge = { rank = 50, max = 75, known = { [2662] = "easy" } } },
+    [ALT] = { Forge = { rank = 50, max = 75, known = { [2662] = "easy" } } },
   },
 }
 GameDataAPI = { recettesConnues = function() return base end }
 local tous = assert(lib:Lire("recettes connues", "tous"))
-assert(tous.persos[MOI].Minage.known[3307] and tous.persos["Alt Dupont-Kerys"].Forge.known[2662], "tous les personnages")
+assert(tous.persos[MOI].Minage.known[3307] and tous.persos[ALT].Forge.known[2662], "tous les personnages")
 assert(tous.recettes[2662].output == 2852, "et les recettes vues")
 local moi = assert(lib:Lire("recettes connues"))
-assert(moi.persos[MOI] and not moi.persos["Alt Dupont-Kerys"], "sans personnage : le personnage connecté")
-local alt = assert(lib:Lire("recettes connues", "Alt Dupont-Kerys"))
-assert(alt.persos["Alt Dupont-Kerys"].Forge.rank == 50 and not alt.persos[MOI], "un personnage donné")
-local d, raison = lib:Lire("recettes connues", "Inconnu-Kerys")
+assert(moi.persos[MOI] and not moi.persos[ALT], "sans personnage : le personnage connecté")
+local alt = assert(lib:Lire("recettes connues", ALT))
+assert(alt.persos[ALT].Forge.rank == 50 and not alt.persos[MOI], "un personnage donné")
+local d, raison = lib:Lire("recettes connues", "Player-1-0000DEAD")
 assert(d == nil and raison == "pas encore relevé", "personnage jamais connecté : " .. tostring(raison))
 local seules = { recettes = base.recettes, persos = {} } -- recettes vues, aucun perso relevé (perso supprimé…)
 GameDataAPI.recettesConnues = function() return seules end
@@ -55,6 +57,29 @@ assert(d == nil and raison == "type inconnu", tostring(raison))
 d, raison = lib:Souscrire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 print("LibCommune : type inconnu OK")
+
+-- Personnage : GUID, adresse « Prénom-Royaume » (royaume normalisé, jamais le nom de famille), nom « Prénom Nom ».
+GetNormalizedRealmName = function() return "CAMWOWEU4Realm8PvP" end
+local R = "CAMWOWEU4Realm8PvP"
+assert(lib.Adresse("Solarin") == "Solarin-" .. R, "sans royaume : le nôtre")
+assert(lib.Adresse("Solarin Ydenah") == "Solarin-" .. R, "nom de famille (GetUnitName(true) sur Forever) : pas un royaume")
+assert(lib.Adresse("Belegard Marteaudefer-" .. R) == "Belegard-" .. R, "nom de famille et royaume")
+assert(lib.Adresse("Bob-AutreRoyaume") == "Bob-AutreRoyaume", "avec royaume")
+assert(lib.Adresse("Riwanon", "Kerys des Bois") == "Riwanon-KerysdesBois" and lib.Adresse("Bob", "CAMWOW EU4 Realm 8 PvP") == "Bob-" .. R,
+  "prénom et royaume brut : normalisé")
+assert(lib.Adresse("Bob|cff") == nil and lib.Adresse("") == nil and lib.Adresse(nil) == nil, "nom piégé ou vide : nil")
+assert(lib.Destinataire("Bob-" .. R) == "Bob" and lib.Destinataire("Bob") == "Bob", "chuchotement sur notre royaume : prénom seul")
+assert(lib.Destinataire("Bob-AutreRoyaume") == "Bob-AutreRoyaume" and lib.Destinataire("Bob|cff") == "Bob|cff", "autre royaume ; illisible tel quel")
+local moiP = lib.Personnage()
+assert(moiP.guid == MOI and moiP.adresse == "Belegard-" .. R and moiP.nom == "Belegard Marteaudefer", "personnage connecté")
+assert(lib.Personnage(MOI).nom == "Belegard Marteaudefer", "par son GUID")
+local gdAvant = GameDataAPI
+GameDataAPI = nil
+assert(lib.Personnage(ALT) == nil, "autre GUID sans GameData : inconnu")
+GameDataAPI = { personnage = function(g) if g == ALT then return { guid = ALT, adresse = "Alt-" .. R, nom = "Alt Dupont" } end end }
+assert(lib.Personnage(ALT).nom == "Alt Dupont" and lib.Personnage("Player-1-0000DEAD") == nil, "un personnage du joueur : la fiche de GameData")
+GameDataAPI = gdAvant
+print("LibCommune : personnage OK")
 
 -- Catalogue : les types que GameData relève, chacun léger ou lourd, avec son accesseur dans GameDataAPI.
 local attendus = { "inventaires", "réputations", "métiers et compétences", "quêtes terminées", "recettes connues",
@@ -72,12 +97,12 @@ assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscrip
 assert(lib.souscriptions.objets and lib.souscriptions["recettes connues"], "et retenue pour la session")
 assert(lib.Demander == lib.Souscrire, "ancien nom gardé")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
-GameDataAPI.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, ["Alt Dupont-Kerys"] = { bank = {} } } } end
+GameDataAPI.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, [ALT] = { bank = {} } } } end
 local inv = assert(lib:Lire("inventaires"))
-assert(inv.persos[MOI].bags.Backpack.size == 16 and not inv.persos["Alt Dupont-Kerys"], "inventaires du personnage connecté")
-assert(lib:Lire("inventaires", "tous").persos["Alt Dupont-Kerys"], "inventaires de tous")
+assert(inv.persos[MOI].bags.Backpack.size == 16 and not inv.persos[ALT], "inventaires du personnage connecté")
+assert(lib:Lire("inventaires", "tous").persos[ALT], "inventaires de tous")
 GameDataAPI.marchands = function() return { [1234] = { name = "Marchand", items = {} } } end
-assert(assert(lib:Lire("marchands", "Alt Dupont-Kerys"))[1234].name == "Marchand", "marchands : une table pour le joueur")
+assert(assert(lib:Lire("marchands", ALT))[1234].name == "Marchand", "marchands : une table pour le joueur")
 GameDataAPI.marchands = function() return {} end
 d, raison = lib:Lire("marchands")
 assert(d == nil and raison == "pas encore relevé", "aucun marchand : " .. tostring(raison))
@@ -94,12 +119,12 @@ local _, lot = lib:Lire("marchands")
 assert(lot == lotM and lot.provenance == "relevé direct" and lot.build == 64000 and lot.date, "lot d'un type pour le joueur")
 local lotA, lotB = { provenance = "relevé direct", build = 63000, perime = true }, { provenance = "relevé direct", build = 64000 }
 GameDataAPI.inventaires = function()
-  return { persos = { [MOI] = { bags = {} }, ["Alt Dupont-Kerys"] = { bags = {} } } }, { persos = { [MOI] = lotB, ["Alt Dupont-Kerys"] = lotA } }
+  return { persos = { [MOI] = { bags = {} }, [ALT] = { bags = {} } } }, { persos = { [MOI] = lotB, [ALT] = lotA } }
 end
 _, lot = lib:Lire("inventaires")
-assert(lot.persos[MOI] == lotB and lot.persos["Alt Dupont-Kerys"] == nil, "lot du personnage lu seulement")
+assert(lot.persos[MOI] == lotB and lot.persos[ALT] == nil, "lot du personnage lu seulement")
 _, lot = lib:Lire("inventaires", "tous")
-assert(lot.persos["Alt Dupont-Kerys"].perime and lot.persos["Alt Dupont-Kerys"].build == 63000, "lots de tous, figé sous un autre build : peut-être périmé")
+assert(lot.persos[ALT].perime and lot.persos[ALT].build == 63000, "lots de tous, figé sous un autre build : peut-être périmé")
 GameDataAPI.inventaires = function() return { persos = { [MOI] = {} } } end -- un GameData d'avant les lots
 d, lot = lib:Lire("inventaires")
 assert(d and lot.persos[MOI] == nil, "sans lot fourni : les données quand même")
@@ -165,7 +190,7 @@ assert(lib:Lire("recettes connues", "tous").persos[MOI], "tous = le personnage c
 local _, lotRepli = lib:Lire("recettes connues")
 lotRepli = lotRepli.persos[MOI]
 assert(lotRepli.provenance == "relevé direct" and lotRepli.build == 64000 and lotRepli.version == "1.16.1" and lotRepli.date, "lot du relevé de repli")
-d, raison = lib:Lire("recettes connues", "Alt Dupont-Kerys")
+d, raison = lib:Lire("recettes connues", ALT)
 assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameData : " .. tostring(raison))
 -- Inventaires sans GameData (Handshake#1) : le personnage connecté, ses sacs lus à l'instant et sa banque vue cette
 -- session (relevée à l'ouverture, en mémoire ; fermée, elle n'est plus lue).
@@ -194,7 +219,7 @@ cadre.onEvent(cadre, "PLAYERBANKSLOTS_CHANGED")
 local _, lotInv = lib:Lire("inventaires")
 assert(lib:Lire("inventaires").persos[MOI].bank.Bank.items[1].count == 9, "banque fermée : la dernière vue reste")
 assert(lotInv.persos[MOI].provenance == "relevé direct" and lotInv.persos[MOI].date, "lot des inventaires de repli")
-d, raison = lib:Lire("inventaires", "Alt Dupont-Kerys")
+d, raison = lib:Lire("inventaires", ALT)
 assert(d == nil and raison == "pas de GameData", "inventaires d'un autre personnage sans GameData : " .. tostring(raison))
 for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI" or k == "C_Container", "global écrit par la lib : " .. k) end
 assert(HoteDB.reglages.x == 1 and next(HoteDB, next(HoteDB)) == nil, "SavedVariables de l'hôte intactes")
