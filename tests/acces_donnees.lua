@@ -122,9 +122,12 @@ end)
 test("lire par GUID : persos rangé par GUID", function()
     local lib = LibStub("LibCommune-1.0")
     local data = lib:Lire("inventaires", "tous")
-    if data then
-        for cle in pairs(data.persos) do assertTrue(cle:find("^Player%-") ~= nil) end
-    end
+    if not data then SlashCmdList.GAMEDATA("") data = lib:Lire("inventaires", "tous") end -- /gdata : relevé tout de suite
+    assertNotNil(data, "inventaires relevés par GameData")
+    local n = 0
+    for cle in pairs(data.persos) do n = n + 1; assertTrue(cle:find("^Player%-") ~= nil, "clé " .. cle) end
+    assertTrue(n > 0, "au moins le personnage connecté")
     local moi = lib:Lire("inventaires", UnitGUID("player"))
-    if moi then assertNotNil(moi.persos[UnitGUID("player")]) end
+    assertNotNil(moi and moi.persos[UnitGUID("player")], "lu par son GUID")
+    assertEquals(lib.Personnage().nom, moi.persos[UnitGUID("player")].character.name)
 end)
