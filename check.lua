@@ -314,6 +314,25 @@ assert(d == nil and raison == "pas encore relevé", "GameData sans relevé, sans
 GameDataAPI = nil
 print("LibCommune : fournisseurs des cours de l'HV OK")
 
+-- Signal « type relevé à nouveau » (#14) : rappels par type ; avec GameData, son scan de l'HV (marketScanned), accroché
+-- une seule fois, à l'enregistrement ou à la connexion s'il est chargé après ; un rappel qui plante ne prive pas les autres.
+hooksecurefunc = function(t, nom, fn) local avant = t[nom]; t[nom] = function(...) avant(...); fn(...) end end
+local erreurs, recus = {}, {}
+geterrorhandler = function() return function(e) erreurs[#erreurs + 1] = e end end
+assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type inconnu")
+assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
+assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
+assert(not lib.accrocheGameData, "sans GameData : rien à accrocher")
+GameDataAPI = { marketScanned = noop, recettesConnues = function() return base end } -- GameData chargé après
+lib.cadre.onEvent(lib.cadre, "PLAYER_LOGIN")
+GameDataAPI.marketScanned()
+assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "scan de l'HV : rappels appelés, erreur rendue au jeu")
+lib:QuandReleve("cours de l'HV", noop) -- accroché une seule fois
+GameDataAPI.marketScanned()
+assert(#recus == 2, "un seul crochet : " .. #recus)
+lib.rappels["cours de l'HV"], GameDataAPI = nil, nil
+print("LibCommune : signal « type relevé à nouveau » OK")
+
 -- Deux copies de la lib (deux add-ons qui l'embarquent), mineures différentes : la plus récente sert, quel que soit
 -- l'ordre de chargement, et elle reprend le relevé de repli de la précédente.
 local source = assert(io.open("LibCommune/LibCommune.lua")):read("*a")
@@ -348,6 +367,8 @@ IsPlayerSpell = function(id) demandees[id] = true; parImage = parImage + 1; retu
 HandshakeClassicRecipes = { [9001] = { 2840, 1, 1, "Minage", "Barre de cuivre", { 2770, 1 } },
   [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 } } }
 for id = 10000, 10149 do HandshakeClassicRecipes[id] = { 1, 1, 1, "Minage", "Recette " .. id, {} } end
+local signaux = 0
+lib:QuandReleve("recettes connues", function() signaux = signaux + 1 end)
 cadre.onEvent(cadre, "PLAYER_LOGIN")
 assert(#images == 1 and parImage == 0, "relevé différé après la connexion")
 local nImages, maxParImage = 0, 0
@@ -372,6 +393,7 @@ assert(sans.rank == 150 and sans.max == 225, "rang et maximum du métier")
 local n = 0 for _ in pairs(sans.known) do n = n + 1 end
 assert(sans.known[3307] and sans.known[9001] and sans.known[10100] and n == 3, "recettes connues relevées sans fenêtre : " .. n)
 assert(not lib:Lire("recettes connues").persos[MOI]["Pêche"], "aucune recette connue trouvée : métier pas inventé")
+assert(signaux == 1, "relevé de repli sans fenêtre fini : signalé une fois")
 print("LibCommune : recettes connues sans fenêtre OK")
 
 -- Puis la fenêtre de métier s'ouvre (3307 apprise, 3308 non) : sa liste prime, sans doublon ni perte.
@@ -381,6 +403,8 @@ local apres = lib:Lire("recettes connues").persos[MOI].Minage
 n = 0 for _ in pairs(apres.known) do n = n + 1 end
 assert(apres.known[3307] == "optimal" and not apres.known[3308] and apres.rank == 140, "la fenêtre prime")
 assert(apres.known[9001] and apres.known[10100] and n == 3, "rien de perdu, rien en double : " .. n)
+assert(signaux == 2, "relevé de repli en fenêtre : signalé")
+lib.rappels["recettes connues"] = nil
 -- Fenêtre déjà relevée, relevé sans fenêtre ensuite (ex. ouverte pendant le relevé) : rien d'écrasé.
 lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes)
 assert(lib.repli.metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")

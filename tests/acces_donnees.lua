@@ -91,3 +91,18 @@ test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé d
         assertType("table", sac.items)
     end
 end)
+
+test("signal « type relevé à nouveau » : le scan de l'HV de GameData appelle les rappels", function()
+    local lib = LibStub("LibCommune-1.0")
+    local _, raison = lib:QuandReleve("pas un type", print)
+    assertEquals("type inconnu", raison)
+    local recus = {}
+    local function rappel(t) recus[#recus + 1] = t end
+    assertTrue(lib:QuandReleve("cours de l'HV", rappel))
+    assertTrue(lib.accrocheGameData)
+    GameDataAPI.marketScanned() -- ce que GameData appelle à la fin d'une lecture de l'HV
+    local l = lib.rappels["cours de l'HV"]
+    for i = #l, 1, -1 do if l[i] == rappel then table.remove(l, i) end end
+    assertEquals(1, #recus)
+    assertEquals("cours de l'HV", recus[1])
+end)

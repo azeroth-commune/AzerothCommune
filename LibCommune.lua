@@ -16,8 +16,9 @@
 -- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session
 -- (recettes connues ; inventaires : sacs lus à l'instant, banque vue cette session).
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
+--   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 6
+local MAJOR, MINOR = "LibCommune-1.0", 7
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -232,16 +233,51 @@ end
 function lib.EstSac(n) return n == "Backpack" or n == "Keyring" or n == "ReagentBag" or n:find("^Bag_") ~= nil end
 function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 
+---------------------------------------------------------------------------------------------------
+-- Signal « type relevé à nouveau ». Les rappels sont gardés d'une mineure à l'autre (lib.rappels) ; un rappel qui plante
+-- ne prive pas les autres ni le relevé (erreur rendue au gestionnaire du jeu).
+lib.rappels = lib.rappels or {}
+
+function lib:QuandReleve(typeDeDonnees, fn)
+  if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
+  self.rappels[typeDeDonnees] = self.rappels[typeDeDonnees] or {}
+  table.insert(self.rappels[typeDeDonnees], fn)
+  self.AccrocherGameData()
+  pcall(self.cadre.RegisterEvent, self.cadre, "PLAYER_LOGIN") -- GameData chargé après l'add-on qui s'enregistre
+  return true
+end
+
+function lib:Signaler(typeDeDonnees)
+  for _, fn in ipairs(self.rappels[typeDeDonnees] or {}) do
+    local ok, err = pcall(fn, typeDeDonnees)
+    if not ok and geterrorhandler then geterrorhandler()(err) end
+  end
+end
+
+-- Relevés de GameData : il appelle GameDataAPI.marketScanned après chaque scan de l'HV. Une seule fois par session, toutes
+-- mineures confondues (le crochet appelle la lib, donc sa mineure la plus récente).
+-- ponytail: seul l'HV a un signal côté GameData ; les autres types relevés par lui ne signalent pas encore.
+function lib.AccrocherGameData()
+  if lib.accrocheGameData or not (GameDataAPI and GameDataAPI.marketScanned) then return end
+  lib.accrocheGameData = true
+  hooksecurefunc(GameDataAPI, "marketScanned", function() lib:Signaler("cours de l'HV") end)
+end
+
 local function releveDeRepli()
   local r = lib:ReleverRecettes()
   if not r then return end -- ponytail: « liste pas à jour » attend le TRADE_SKILL_LIST_UPDATE suivant, sans réessai minuté
   for cle, rec in pairs(r.recettes) do lib.repli.recettes[cle] = rec end
   lib:RangerRecettes(lib.repli.metiers, r)
   lib.repli.lot = lotDuJour()
+  lib:Signaler("recettes connues")
 end
 
 local jeton, banqueOuverte = 0, false
 lib.cadre:SetScript("OnEvent", function(_, evenement)
+  if evenement == "PLAYER_LOGIN" then -- tous les add-ons sont chargés : GameData aussi, s'il est là
+    lib.AccrocherGameData()
+    if not lib.souscriptions["recettes connues"] then return end
+  end
   if evenement == "PLAYER_REGEN_ENABLED" then -- fin du combat : le relevé sans fenêtre reprend (GameData compris)
     local reprise = lib.reprise
     lib.reprise = nil
@@ -253,13 +289,17 @@ lib.cadre:SetScript("OnEvent", function(_, evenement)
     banqueOuverte = banqueOuverte or evenement == "BANKFRAME_OPENED"
     if banqueOuverte and not (GameDataAPI and GameDataAPI.inventaires) then -- GameData relève la banque pour tout le monde
       lib.repli.banque, lib.repli.lotBanque = lib.Conteneurs(lib.EstBanque), lotDuJour()
+      lib:Signaler("inventaires")
     end
     return
   end
   if GameDataAPI and GameDataAPI.recettesConnues then return end -- GameData relève et sauvegarde pour tout le monde
   if evenement == "PLAYER_LOGIN" then
     C_Timer.After(5, function()
-      lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes, function() lib.repli.lot = lotDuJour() end)
+      lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes, function()
+        lib.repli.lot = lotDuJour()
+        lib:Signaler("recettes connues")
+      end)
     end)
     return
   end
