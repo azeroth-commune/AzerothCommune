@@ -89,6 +89,11 @@ test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé d
         assertTrue(lib.EstSac(nom))
         assertType("number", sac.size)
         assertType("table", sac.items)
+        for _, it in ipairs(sac.items) do -- chaque objet : son ID, sa quantité et son lien (LibCommune#20)
+            assertType("number", it.id)
+            assertType("number", it.count)
+            assertType("string", it.link)
+        end
     end
 end)
 

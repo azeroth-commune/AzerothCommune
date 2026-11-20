@@ -257,7 +257,8 @@ local EVENEMENTS = {
 }
 
 -- Conteneurs d'Enum.BagIndex dont le nom passe le filtre (sacs, banque, onglets : ce que ce client a), lus à l'instant :
--- { [nom] = { size, items = { { id, count }, … } } } (même forme que GameData).
+-- { [nom] = { size, items = { { id, count, link }, … } } } (même forme que GameData). Seule lecture des sacs : GameData,
+-- le Négoce et Handshake passent par elle.
 function lib.Conteneurs(garder)
   local out, vus = {}, {}
   for nom, sac in pairs(Enum.BagIndex or {}) do
@@ -268,7 +269,7 @@ function lib.Conteneurs(garder)
         local items = {}
         for slot = 1, taille do
           local it = C_Container.GetContainerItemInfo(sac, slot)
-          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount } end
+          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink } end
         end
         out[nom] = { size = taille, items = items }
       end
