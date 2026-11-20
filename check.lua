@@ -269,7 +269,7 @@ assert(lotHV.fournisseur == "Auctionator" and lotHV.champs.qty == "AuctionDB" an
 -- scan est plus en vente, même si Auctionator l'a vu aujourd'hui. L'historique : AuctionDB s'il est frais (pas de copie).
 local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19 10:00:00" }
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
-  hist = { [2840] = { { 1, 40, 3 } } } }
+  hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
 GameDataAPI = { coursHV = function() return { hv = { ["Kerys-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end }
 hv, lotHV = lib:Lire("cours de l'HV")
 cuivre = hv.objet(2772)
@@ -280,6 +280,7 @@ assert(retire.min == nil and retire.qty == 0 and retire.sources.qty == "GameData
 assert(lotHV.provenance == "relevé direct" and lotHV.build == 64000 and lotHV.fournisseur == nil and lotHV.releve == lotGD, "lot : relevé direct")
 assert(lotHV.champs.min == "GameData" and lotHV.champs.qty == "GameData" and lotHV.champs.hist == "AuctionDB" and lotHV.fragile, "d'où vient chaque champ")
 assert(hv.depot.rate24 == 0.3 and hv.hv["Kerys-Alliance"], "dépôt et relevé de GameData")
+assert(lotHV.scan.time == T and lotHV.scan.scanned == "2026-11-19 10:00:00" and lotHV.scan.items == nil, "lot : le dernier scan de ton HV (#13)")
 -- AuctionDB plus frais (7 h) : son historique reste le bon (des jours de points ; GameData vient peut-être de recommencer
 -- le sien, un seul point) ; celui de GameData seulement pour un objet qu'AuctionDB n'a pas. (Relecture de Negoce#1 : avec
 -- l'historique de GameData d'abord, Mécréant passait de 97 affaires à 3 et les Alertes de 51 à 0 sur les vraies données.)
@@ -294,7 +295,7 @@ assert(lotHV.champs.hist == "AuctionDB", "lot : historique d'AuctionDB")
 marche = nil
 GameDataAPI.coursHV = function() return { hv = { ["Kerys-Horde"] = {} } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
-assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator", "pas de scan de cet HV : fournisseurs")
+assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator" and lotHV.scan == nil, "pas de scan de cet HV : fournisseurs")
 -- HV neutre ou faction inconnue : rien ne plante.
 local faction = UnitFactionGroup
 UnitFactionGroup = function() return nil end
@@ -312,6 +313,25 @@ local d, raison = lib:Lire("cours de l'HV")
 assert(d == nil and raison == "pas encore relevé", "GameData sans relevé, sans fournisseur : " .. tostring(raison))
 GameDataAPI = nil
 print("LibCommune : fournisseurs des cours de l'HV OK")
+
+-- Signal « type relevé à nouveau » (#14) : rappels par type ; avec GameData, son scan de l'HV (marketScanned), accroché
+-- une seule fois, à l'enregistrement ou à la connexion s'il est chargé après ; un rappel qui plante ne prive pas les autres.
+hooksecurefunc = function(t, nom, fn) local avant = t[nom]; t[nom] = function(...) avant(...); fn(...) end end
+local erreurs, recus = {}, {}
+geterrorhandler = function() return function(e) erreurs[#erreurs + 1] = e end end
+assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type inconnu")
+assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
+assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
+assert(not lib.accrocheGameData, "sans GameData : rien à accrocher")
+GameDataAPI = { marketScanned = noop, recettesConnues = function() return base end } -- GameData chargé après
+lib.cadre.onEvent(lib.cadre, "PLAYER_LOGIN")
+GameDataAPI.marketScanned()
+assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "scan de l'HV : rappels appelés, erreur rendue au jeu")
+lib:QuandReleve("cours de l'HV", noop) -- accroché une seule fois
+GameDataAPI.marketScanned()
+assert(#recus == 2, "un seul crochet : " .. #recus)
+lib.rappels["cours de l'HV"], GameDataAPI = nil, nil
+print("LibCommune : signal « type relevé à nouveau » OK")
 
 -- Deux copies de la lib (deux add-ons qui l'embarquent), mineures différentes : la plus récente sert, quel que soit
 -- l'ordre de chargement, et elle reprend le relevé de repli de la précédente.
@@ -347,6 +367,8 @@ IsPlayerSpell = function(id) demandees[id] = true; parImage = parImage + 1; retu
 HandshakeClassicRecipes = { [9001] = { 2840, 1, 1, "Minage", "Barre de cuivre", { 2770, 1 } },
   [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 } } }
 for id = 10000, 10149 do HandshakeClassicRecipes[id] = { 1, 1, 1, "Minage", "Recette " .. id, {} } end
+local signaux = 0
+lib:QuandReleve("recettes connues", function() signaux = signaux + 1 end)
 cadre.onEvent(cadre, "PLAYER_LOGIN")
 assert(#images == 1 and parImage == 0, "relevé différé après la connexion")
 local nImages, maxParImage = 0, 0
@@ -371,6 +393,7 @@ assert(sans.rank == 150 and sans.max == 225, "rang et maximum du métier")
 local n = 0 for _ in pairs(sans.known) do n = n + 1 end
 assert(sans.known[3307] and sans.known[9001] and sans.known[10100] and n == 3, "recettes connues relevées sans fenêtre : " .. n)
 assert(not lib:Lire("recettes connues").persos[MOI]["Pêche"], "aucune recette connue trouvée : métier pas inventé")
+assert(signaux == 1, "relevé de repli sans fenêtre fini : signalé une fois")
 print("LibCommune : recettes connues sans fenêtre OK")
 
 -- Puis la fenêtre de métier s'ouvre (3307 apprise, 3308 non) : sa liste prime, sans doublon ni perte.
@@ -380,6 +403,8 @@ local apres = lib:Lire("recettes connues").persos[MOI].Minage
 n = 0 for _ in pairs(apres.known) do n = n + 1 end
 assert(apres.known[3307] == "optimal" and not apres.known[3308] and apres.rank == 140, "la fenêtre prime")
 assert(apres.known[9001] and apres.known[10100] and n == 3, "rien de perdu, rien en double : " .. n)
+assert(signaux == 2, "relevé de repli en fenêtre : signalé")
+lib.rappels["recettes connues"] = nil
 -- Fenêtre déjà relevée, relevé sans fenêtre ensuite (ex. ouverte pendant le relevé) : rien d'écrasé.
 lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes)
 assert(lib.repli.metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")

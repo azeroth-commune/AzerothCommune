@@ -25,8 +25,13 @@ local lignes, provenance = lib.Fusionner({ { donnees = a, provenance = "relevé 
 -- pour chaque clé, la ligne de la provenance la plus fiable gagne ; une provenance inconnue passe en dernier ; sources intactes
 local hv, lot = lib:Lire("cours de l'HV")           -- type lourd : scan de GameData et fournisseurs (Fournisseurs.lua)
 local l = hv and hv.objet(2772)                     -- ton HV : { min, qty, auctions, tiers, hist, age, sources = { champ = fournisseur } }
--- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile }
+-- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile,
+--         scan = { time, scanned } } : scan = le dernier scan de GameData pour ton HV (time() et date lisible), absent sans
+-- lui ; on ne lit pas hv.hv soi-même (forme interne de GameData)
 -- raison : « pas de GameData ni de fournisseur » (jamais de relevé de repli), « pas encore relevé »
+lib:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque nouveau relevé de ce type ; nil, « type inconnu »
+-- signalés : cours de l'HV (scan de GameData) ; sans GameData, le relevé de repli (recettes connues, banque des inventaires).
+-- Les autres relevés de GameData ne signalent pas encore. Un rappel qui plante ne prive pas les autres (erreur au jeu).
 ```
 
 ### Fournisseurs (cours de l'HV)

@@ -17,7 +17,7 @@
 -- seulement ; AuctionDB (GPL v3 dans son LICENSE, LGPLv3 dans son TOC) n'a pas d'API publique : ses SavedVariables, au
 -- format décrit dans son History.lua. Sa qty compte aussi les enchères sans achat immédiat.
 local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
-local VERSION = 1
+local VERSION = 2
 lib.versions = lib.versions or {}
 if (lib.versions.fournisseurs or 0) >= VERSION then return end
 lib.versions.fournisseurs = VERSION
@@ -100,7 +100,7 @@ lib.fournisseurs = {
 }
 
 -- Le dernier scan de GameData pour ton HV (GameDataAPI.coursHV : { hv = GameDataMarket, depot }), en lecteur du même
--- genre : un objet absent de ce scan est plus en vente.
+-- genre : un objet absent de ce scan est plus en vente. 2e retour : ce scan.
 local function lecteurGameData(d)
   local h = maison()
   local m = h and d and d.hv and d.hv[h]
@@ -109,7 +109,7 @@ local function lecteurGameData(d)
     local r = { qty = 0, hist = m.hist and m.hist[id] }
     for k, v in pairs(m.items and m.items[id] or {}) do r[k] = v end
     return r
-  end
+  end, m
 end
 
 local function presents(typeDeDonnees)
@@ -138,13 +138,16 @@ function lib:ChampsARelever(typeDeDonnees)
 end
 
 -- Appelé par lib:Lire pour un type qui a des fournisseurs ; d, lotGD : ce que rend GameData (nil sans lui ou sans relevé).
--- Rend { objet = fn(itemID) -> ligne ou nil, hv, depot } et le lot { provenance, fournisseur, champs, releve, fragile }.
+-- Rend { objet = fn(itemID) -> ligne ou nil, hv, depot } et le lot { provenance, fournisseur, champs, releve, fragile, scan }.
 -- ligne = { min, qty, auctions, tiers, hist, age, sources = { champ = nom du fournisseur } }. Lot : celui de GameData
 -- (relevé direct) s'il a scanné ton HV, sinon la provenance du premier fournisseur (« autre add-on » et son nom ; un autre
--- add-on ne dit pas son build : ni build ni date) ; champs = { champ = qui le donne } ; releve : le lot de GameData.
+-- add-on ne dit pas son build : ni build ni date) ; champs = { champ = qui le donne } ; releve : le lot de GameData ;
+-- scan = { time (heure du jeu, time()), scanned (date lisible) } : le dernier scan de GameData pour ton HV, absent sans lui
+-- (le lot de GameData vaut pour tous ses HV, scan pour le tien).
 function lib:LireParFournisseurs(typeDeDonnees, d, lotGD, avecGameData)
   local chaine = presents(typeDeDonnees)
-  local gd = avecGameData and lecteurGameData(d)
+  local gd, scan
+  if avecGameData then gd, scan = lecteurGameData(d) end
   if gd then -- son scan fait foi ; un fournisseur ne donne plus que ses champs lourds (l'historique), avant GameData
     -- même s'il n'est plus frais : un historique de plusieurs jours reste juste quand son dernier point a 7 h, alors que
     -- celui de GameData peut n'avoir qu'un point (il le recommence quand AuctionDB était frais). « frais » ne décide que
@@ -166,6 +169,7 @@ function lib:LireParFournisseurs(typeDeDonnees, d, lotGD, avecGameData)
   if gd then for k, v in pairs(lotGD or {}) do lot[k] = v end
   else lot.provenance, lot.fournisseur = chaine[1].provenance, chaine[1].nom end
   lot.champs, lot.releve = champs, lotGD
+  lot.scan = scan and { time = scan.time, scanned = scan.scanned }
   local function objet(id)
     local ligne, sources = {}, {}
     for _, f in ipairs(chaine) do
