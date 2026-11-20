@@ -294,12 +294,15 @@ _, lot = glib:Lire("inventaires", "tous")
 assert(lot.persos[A].perime and lot.persos[C].build == 64000, "lots de chaque perso")
 
 -- Lot mixte : le marchand 42 vu en jeu garde sa liste, le 7 (seulement dans VendorData) vient de la base, marqué.
-gns.VENDOR_DB = { [159] = { 25, 5, "42,7", 1, 20 } }
+-- Le 8 n'est amical que pour la Horde : absent pour un personnage de l'Alliance ; le 9 (Alliance) reste.
+gns.VENDOR_DB = { [159] = { 25, 5, "42,7,8H,9A", 1, 20 } }
 local m7
 m, lot = glib:Lire("marchands")
 m7 = m[7]
 assert(m[42].items[1].price == 30 and m[42].provenance == nil and lot == GameDataDB.lots.marchands, "vu en jeu > VendorData")
 assert(m7.provenance == "source externe" and m7.items[1].price == 25 and GameDataDB.vendors[7] == nil, "marchand pas vu : la base, sans rien sauvegarder")
+assert(m7.items[1].sell == 1 and m7.items[1].maxStack == 20, "ligne de la base : revente et taille de pile")
+assert(m[8] == nil and m[9].items[1].id == 159, "base : pas de PNJ amical pour la seule faction adverse")
 gdata("effacer marchands")
 m, lot = glib:Lire("marchands")
 assert(m[42].provenance == nil and m[42].items[1].price == 25 and lot.provenance == "source externe" and lot.perime, "seule la base : lot source externe, build inconnu")

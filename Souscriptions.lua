@@ -113,15 +113,20 @@ function ns.objets() return GameDataItems.items, GameDataDB.lots.objets end
 -- PNJ vend quoi : cMaNGOS, source externe ; prix, lots et piles : client Forever, extrait du client), dont la ligne vaut
 -- donc « source externe », la moins fiable de ses deux sources. La provenance la plus fiable gagne : un marchand vu en
 -- jeu prend toute sa liste au relevé (elle dit aussi ce qu'il ne vend pas), la base ne remplit que les marchands pas vus.
-local parPNJ -- ponytail: VendorData ne change pas en jeu, regroupée par PNJ une fois
+-- Une ligne de la base porte aussi la revente au marchand (sell) et la taille de pile (maxStack) ; un PNJ amical pour la
+-- seule faction adverse du personnage connecté n'en fait pas partie.
+local parPNJ, pourFaction -- ponytail: VendorData ne change pas en jeu, regroupée par PNJ une fois par faction
 local function vendorDataParPNJ()
-  if not parPNJ then
-    parPNJ = {}
+  local faction = (UnitFactionGroup("player") or ""):sub(1, 1) -- "A", "H", ou "" (pas encore connue : pas de filtre)
+  if pourFaction ~= faction then
+    parPNJ, pourFaction = {}, faction
     for id, d in pairs(ns.VENDOR_DB or {}) do
-      for pnj in d[3]:gmatch("%d+") do
-        pnj = tonumber(pnj)
-        parPNJ[pnj] = parPNJ[pnj] or { items = {} }
-        table.insert(parPNJ[pnj].items, { id = id, price = d[1], stack = d[2] })
+      for pnj, seule in d[3]:gmatch("(%d+)(%a?)") do
+        if seule == "" or faction == "" or seule == faction then
+          pnj = tonumber(pnj)
+          parPNJ[pnj] = parPNJ[pnj] or { items = {} }
+          table.insert(parPNJ[pnj].items, { id = id, price = d[1], stack = d[2], sell = d[4], maxStack = d[5] })
+        end
       end
     end
   end
