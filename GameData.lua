@@ -1,7 +1,8 @@
 -- GameData : une base de données du jeu, scannée en jouant, écrite dans les SavedVariables
 -- (WTF/Account/<COMPTE>/SavedVariables/GameData.lua, au /reload ou à la déconnexion).
---   GameDataDB.chars["Nom-Royaume"] : chaque perso (fiche, équipement, sacs, banque, courrier, monnaies,
---                                     réputations, métiers, compétences, recettes connues, quêtes terminées).
+--   GameDataDB.chars[GUID]          : chaque perso, sous son GUID (UnitGUID, LibCommune#19), avec son adresse
+--                                     (« Prénom-Royaume ») et son nom (« Prénom Nom ») ; fiche, équipement, sacs, banque,
+--                                     courrier, monnaies, réputations, métiers, compétences, recettes connues, quêtes.
 --   GameDataDB.recipes / trainers / vendors, GameDataMarket : voir Commerce.lua.
 --   GameDataDB.addons               : les add-ons installés (titre, version, auteur, dépendances, état).
 --   GameDataItems.items[itemID]     : tous les objets du jeu.
@@ -16,14 +17,9 @@
 local _, ns = ...
 GameDataAPI = ns -- lu par Handshake (prix, stocks), le Négoce et LibCommune (recettesConnues)
 
+local lib = LibStub("LibCommune-1.0") -- embarquée (OptionalDeps en développement) : personnage, relevé des recettes
+
 local function now() return date("%Y-%m-%d %H:%M:%S") end
--- Sur Forever, UnitName("player") renvoie prénom, nom de famille (le 2e retour n'est pas le royaume) ;
--- le nom complet est « Prénom Nom », comme le fait AddonFactory:GetPlayerName().
-local function playerName()
-  local first, last = UnitName("player")
-  return last and (first .. " " .. last) or first
-end
-local function charKey() return playerName() .. "-" .. GetRealmName() end
 
 -- Le lot d'un relevé fait maintenant, par GameData en jeu.
 local function build() return tonumber((select(2, GetBuildInfo()))) end
@@ -57,7 +53,7 @@ function scan.character()
   local _, class = UnitClass("player")
   local _, race = UnitRace("player")
   return {
-    name = playerName(), realm = GetRealmName(), class = class, race = race, level = UnitLevel("player"),
+    name = lib.Personnage().nom, realm = GetRealmName(), class = class, race = race, level = UnitLevel("player"),
     faction = UnitFactionGroup("player"), guild = GetGuildInfo("player"), money = GetMoney(),
     xp = UnitXP("player"), xp_max = UnitXPMax("player"), zone = GetZoneText(),
   }
@@ -153,10 +149,32 @@ function window.mail()
   return t
 end
 
+-- La fiche du perso connecté, sous son GUID, avec son adresse et son nom à jour (un renommage les change, pas le GUID).
+-- Une fiche d'avant le GUID (anciensPersos, clé « Prénom Nom-Royaume ») est reprise à la connexion de son perso.
 local function char()
-  local k = charKey()
-  GameDataDB.chars[k] = GameDataDB.chars[k] or { errors = {}, lots = {} }
-  return GameDataDB.chars[k]
+  local p = lib.Personnage()
+  local c = GameDataDB.chars[p.guid]
+  if not c then
+    local anciens = GameDataDB.anciensPersos or {}
+    local ancienne = p.nom .. "-" .. GetRealmName() -- la clé d'avant
+    c, anciens[ancienne] = anciens[ancienne] or { errors = {}, lots = {} }, nil
+    if not next(anciens) then GameDataDB.anciensPersos = nil end
+    ns.verifierFiche(c) -- reprise : ses lots figés sous un autre build sont peut-être périmés, comme au chargement
+    GameDataDB.chars[p.guid] = c
+  end
+  c.adresse, c.nom = p.adresse, p.nom
+  return c
+end
+
+-- Au chargement : les fiches d'avant le GUID sortent de chars (rangé par GUID) et attendent leur perso dans anciensPersos.
+-- ponytail: une fiche jamais reprise y reste (données relevées, rescannables) ; /gdata effacer ne la touche pas.
+local function rangerAnciensPersos()
+  for k, c in pairs(GameDataDB.chars) do
+    if not k:find("^Player%-") then
+      GameDataDB.anciensPersos = GameDataDB.anciensPersos or {}
+      GameDataDB.anciensPersos[k], GameDataDB.chars[k] = c, nil
+    end
+  end
 end
 
 -- fn(c) rend le champ relevé, et en 2e retour false s'il n'a rien relevé, "partiel" s'il n'en a relevé qu'une partie.
@@ -170,7 +188,7 @@ local function run(name, fn)
   else c.errors[name] = tostring(result) end
 end
 
-ns.now, ns.char, ns.run, ns.charKey = now, char, run, charKey
+ns.now, ns.char, ns.run = now, char, run
 
 local function scanAddons()
   if not ns.souscrit("add-ons installés") then return end
@@ -302,8 +320,10 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
     if GameDataDB.item_scan == nil then GameDataDB.item_scan = true end
     GameDataItems = GameDataItems or {}
     itemsReady()
+    rangerAnciensPersos()
     ns.verifierLots()
   elseif event == "PLAYER_LOGIN" then
+    char() -- la fiche du perso connecté, reprise tout de suite sous son GUID
     ns.retenirSouscriptions()
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)
     C_Timer.NewTicker(60, scanAll)
@@ -343,7 +363,7 @@ local function exportHV()
 end
 local EXPORTS = {
   { cle = "perso", libelle = "Mon perso", description = "fiche, sacs, banque, courrier, équipement, monnaies, réputations, métiers, quêtes",
-    donnees = function() scanAll() return { [charKey()] = char() } end },
+    donnees = function() scanAll() return { [lib.Personnage().guid] = char() } end },
   { cle = "persos", libelle = "Tous mes persos", description = "la même chose pour chaque perso déjà connecté",
     donnees = function() scanAll() return GameDataDB.chars end },
   { cle = "recettes", libelle = "Recettes", description = "toutes les recettes vues, avec produit et composants",

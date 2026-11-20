@@ -220,13 +220,17 @@ time, GetRealmName = os.time, function() return "Kerys" end
 local tickers
 C_Timer = { After = function(_, fn) fn() end, NewTicker = function(t) tickers[#tickers + 1] = t return { Cancel = noop } end }
 local sortie = {}
+local GUID = { Alice = "Player-1-0000A11C", Bob = "Player-1-00000B0B", Carl = "Player-1-0000CA71" }
+local NOM_DE_FAMILLE = {} -- 2e retour de UnitName sur Forever
 local function session(nom, souscriptions)
-  UnitName = function() return nom end
+  UnitName = function() return nom, NOM_DE_FAMILLE[nom] end
+  UnitGUID = function(u) if u == "player" then return GUID[nom] end end
   tickers, sortie = {}, {}
   LibStub = nil -- nouvelle session : la lib repart de zéro, seules les SavedVariables restent
   assert(loadfile("LibCommune/LibStub.lua"))()
   assert(loadfile("LibCommune/LibCommune.lua"))()
   assert(loadfile("LibCommune/Fournisseurs.lua"))()
+  assert(loadfile("LibCommune/Regroupement.lua"))() -- les exports déclarés (lib.Exports)
   frames = {} -- ceux de GameData : GameData.lua puis Commerce.lua
   local gns = {}
   for _, f in ipairs({ "GameData", "Commerce", "Souscriptions" }) do assert(loadfile("GameData/" .. f .. ".lua"))("GameData", gns) end
@@ -240,7 +244,7 @@ local function session(nom, souscriptions)
 end
 local function gdata(cmd) print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end; SlashCmdList.GAMEDATA(cmd); print = realPrint end
 local function objetsScannes() for _, t in ipairs(tickers) do if t == 0.5 then return true end end return false end
-local A, B, C = "Alice-Kerys", "Bob-Kerys", "Carl-Kerys"
+local A, B, C = GUID.Alice, GUID.Bob, GUID.Carl -- les fiches sont rangées par GUID (LibCommune#19)
 
 local gns, glib = session("Alice", { "inventaires" })
 assert(type(GameDataDB.souscriptions.inventaires) == "number", "souscription retenue avec sa date")
@@ -421,3 +425,40 @@ assert(fini and ca.lots.recipes == nil, "relevé sans fenêtre en cours : lot pa
 fini()
 assert(ca.lots.recipes and ca.lots.recipes.build == 64100, "relevé sans fenêtre fini : lot noté")
 print("GameData : lot des recettes connues, par métier OK")
+
+-- Fiches par GUID (LibCommune#19) : une base d'avant, rangée sous « Prénom Nom-Royaume » (le cas de Forever : prénom et
+-- nom de famille), sort de chars au chargement ; la fiche du perso connecté est reprise sous son GUID à sa connexion,
+-- avec son adresse et son nom, et ses lots figés sous un autre build sont marqués peut-être périmés ; celle d'un perso
+-- pas encore connecté attend dans anciensPersos, sans être lue par la lib, et /gdata effacer la touche aussi.
+GetNormalizedRealmName = function() return "Kerys" end
+NOM_DE_FAMILLE.Alice = "Dupont"
+GameDataDB = { souscriptions = { inventaires = os.time() }, chars = {
+  ["Alice Dupont-Kerys"] = { errors = {}, mail = { { subject = "d'Alice" } },
+    lots = { mail = { provenance = "relevé direct", build = 64000, date = "2026-11-01 12:00:00" } } },
+  ["Bob-Kerys"] = { errors = {}, lots = {}, mail = { { subject = "gardé" } }, quests_done = { 1 } } } }
+GameDataItems, GameDataMarket = nil, nil
+gns, glib = session("Alice")
+local fa = GameDataDB.chars[A]
+assert(fa and fa.mail[1].subject == "d'Alice", "fiche « Prénom Nom-Royaume » reprise sous le GUID")
+assert(fa.adresse == "Alice-Kerys" and fa.nom == "Alice Dupont", "adresse sans le nom de famille, nom avec : " .. tostring(fa.adresse))
+assert(fa.lots.mail.perime and fa.lots.mail.build == 64000, "reprise sous un nouveau build (64100) : lot peut-être périmé")
+assert(GameDataDB.chars["Alice Dupont-Kerys"] == nil and GameDataDB.chars["Bob-Kerys"] == nil, "plus d'ancienne clé dans chars")
+assert(GameDataDB.anciensPersos["Bob-Kerys"] and not GameDataDB.anciensPersos["Alice Dupont-Kerys"], "Bob attend sa connexion")
+for k in pairs(GameDataDB.chars) do assert(k:find("^Player%-"), "chars : seulement des GUID, pas " .. k) end
+local tousInv = glib:Lire("inventaires", "tous")
+for k in pairs(tousInv.persos) do assert(k:find("^Player%-"), "lu par la lib : seulement des GUID, pas " .. k) end
+assert(glib:Lire("inventaires", A).persos[A].mail, "Lire par GUID")
+local pa = glib.Personnage(A)
+assert(pa.guid == A and pa.adresse == "Alice-Kerys" and pa.nom == "Alice Dupont", "lib.Personnage : le perso connecté")
+assert(gns.personnage(A).nom == "Alice Dupont" and gns.personnage("Player-1-0000DEAD") == nil, "accesseur personnage de GameData")
+gdata("effacer quêtes terminées")
+assert(GameDataDB.anciensPersos["Bob-Kerys"].quests_done == nil, "effacer : aussi les fiches qui attendent leur perso")
+gns, glib = session("Bob")
+local fb = GameDataDB.chars[B]
+assert(fb.mail[1].subject == "gardé" and fb.quests_done == nil and GameDataDB.anciensPersos == nil, "Bob repris à sa connexion, champ effacé pas revenu")
+assert(glib.Personnage(A).nom == "Alice Dupont" and glib.Personnage(A).adresse == "Alice-Kerys", "un autre perso du joueur : sa fiche dans GameData")
+local exportPerso
+for _, e in ipairs(glib.Exports()) do if e.cle == "perso" then exportPerso = e end end
+assert(next(exportPerso.donnees()) == B, "export perso : sous le GUID")
+NOM_DE_FAMILLE.Alice = nil
+print("GameData : fiches par GUID, migration OK")

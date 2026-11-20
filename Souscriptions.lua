@@ -9,7 +9,7 @@ local _, ns = ...
 local DUREE = 30 * 24 * 3600
 
 -- Où chaque type de données du catalogue (LibCommune) range ce qu'il relève : champs de chaque perso
--- (GameDataDB.chars[perso][champ]), champs de GameDataDB, ou une SavedVariable entière.
+-- (GameDataDB.chars[GUID][champ]), champs de GameDataDB, ou une SavedVariable entière.
 local RANGEMENT = {
   inventaires = { persos = { "character", "equipped", "bags", "bank", "mail", "currencies" } },
   ["réputations"] = { persos = { "reputations" } },
@@ -64,16 +64,19 @@ function ns.verifierLots()
   for nom, r in pairs(RANGEMENT) do
     if not r.persos and not GameDataDB.lots[nom] and aDesDonnees(r) then GameDataDB.lots[nom] = { provenance = "relevé direct" } end
   end
-  local function marquer(l) if l.build ~= build then l.perime = true end end
-  for _, l in pairs(GameDataDB.lots) do marquer(l) end
-  for _, c in pairs(GameDataDB.chars) do
-    c.lots = c.lots or {}
-    for f in pairs(typeDuChamp) do
-      if c[f] ~= nil and not c.lots[f] then c.lots[f] = { provenance = "relevé direct", date = c.scanned and c.scanned[f] } end
-    end
-    c.scanned = nil -- la date du relevé est dans le lot
-    for _, l in pairs(c.lots) do marquer(l) end
+  for _, l in pairs(GameDataDB.lots) do if l.build ~= build then l.perime = true end end
+  for _, c in pairs(GameDataDB.chars) do ns.verifierFiche(c) end
+end
+-- Les lots d'une fiche de perso, vérifiés de même ; aussi pour une fiche d'avant le GUID, reprise à la connexion de son
+-- perso (char() de GameData.lua) après avoir attendu dans anciensPersos.
+function ns.verifierFiche(c)
+  local build = tonumber((select(2, GetBuildInfo())))
+  c.lots = c.lots or {}
+  for f in pairs(typeDuChamp) do
+    if c[f] ~= nil and not c.lots[f] then c.lots[f] = { provenance = "relevé direct", date = c.scanned and c.scanned[f] } end
   end
+  c.scanned = nil -- la date du relevé est dans le lot
+  for _, l in pairs(c.lots) do if l.build ~= build then l.perime = true end end
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -108,6 +111,11 @@ function ns.coursHV()
   if next(GameDataMarket) then return { hv = GameDataMarket, depot = GameDataDB.deposit }, GameDataDB.lots["cours de l'HV"] end
 end
 function ns.objets() return GameDataItems.items, GameDataDB.lots.objets end
+-- Lu par lib.Personnage(guid) : l'adresse et le nom d'un perso du joueur, gardés dans sa fiche à chaque connexion.
+function ns.personnage(guid)
+  local c = GameDataDB and GameDataDB.chars[guid]
+  return c and c.adresse and { guid = guid, adresse = c.adresse, nom = c.nom } or nil
+end
 
 -- Marchands : un lot mixte. Les marchands vus en jeu (relevé direct) et la base VendorData.lua, générée hors jeu (quel
 -- PNJ vend quoi : cMaNGOS, source externe ; prix, lots et piles : client Forever, extrait du client), dont la ligne vaut
@@ -145,11 +153,14 @@ end
 
 function ns.effacer(nom)
   local r = RANGEMENT[nom]
-  for _, c in pairs(GameDataDB.chars) do
-    for _, f in ipairs(r.persos or {}) do
-      c[f] = nil
-      if c.lots then c.lots[f] = nil end
-      if c.errors then c.errors[f] = nil end
+  -- les fiches d'avant le GUID aussi : sinon le champ effacé reviendrait à la reconnexion de leur perso
+  for _, fiches in ipairs({ GameDataDB.chars, GameDataDB.anciensPersos or {} }) do
+    for _, c in pairs(fiches) do
+      for _, f in ipairs(r.persos or {}) do
+        c[f] = nil
+        if c.lots then c.lots[f] = nil end
+        if c.errors then c.errors[f] = nil end
+      end
     end
   end
   for _, f in ipairs(r.base or {}) do GameDataDB[f] = type(GameDataDB[f]) == "table" and {} or nil end
