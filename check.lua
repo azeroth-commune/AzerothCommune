@@ -32,7 +32,12 @@ C_Item = {
 assert(loadfile("LibCommune/LibStub.lua"))()
 assert(loadfile("LibCommune/LibCommune.lua"))()
 assert(loadfile("LibCommune/Fournisseurs.lua"))()
+assert(loadfile("LibCommune/Regroupement.lua"))() -- bouton commun, outils et exports déclarés (LibCommune#3, #21)
 assert(loadfile("GameData/GameData.lua"))("GameData", ns)
+-- Un export déclaré à la lib (lib.Exports), par sa clé.
+local function export(cle)
+  for _, e in ipairs(LibStub("LibCommune-1.0").Exports()) do if e.cle == cle then return e end end
+end
 
 GameDataItems, GameDataDB = {}, { lots = {} }
 ns.itemsReady()
@@ -156,7 +161,7 @@ assert(l.min == 100 and l.sources.min == "GameData" and l.qty == 5 and l.hist[1]
 assert(lotLib.provenance == "relevé direct" and lotLib.champs.hist == "AuctionDB", "relevé direct")
 local retire = hvLib.objet(9999)
 assert(retire.min == nil and retire.qty == 0, "absent du scan de GameData : plus en vente, même vu aujourd'hui par Auctionator")
-assert(ns.exports.hv().items == "2772,100,5,1,100:5", "export comme avant")
+assert(export("hv").donnees().items == "2772,100,5,1,100:5", "export comme avant")
 -- AuctionDB plus frais (son dernier scan il y a 7 h) : GameData garde son historique, comme avant ; à la lecture,
 -- celui d'AuctionDB (plusieurs jours) passe quand même avant le point unique de GameData (relecture de Negoce#1).
 AuctionDBForeverSaved.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
@@ -166,17 +171,32 @@ assert(scanned == 3 and #hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100, "h
 assert(LibStub("LibCommune-1.0"):Lire("cours de l'HV").objet(2772).sources.hist == "AuctionDB", "lu : l'historique d'AuctionDB d'abord")
 Auctionator, AuctionDBForeverSaved = nil, nil
 print("GameData : fournisseurs des cours de l'HV OK")
-assert(ns.exports and ns.exports.hv, "registre des exports, ouvert aux consommateurs")
 print("GameData : vérifications OK")
 -- Fenêtre, tableaux, montants, noms d'objets : dans LibCommune (testés par LibCommune/check.lua), plus de copie ici.
-assert(loadfile("LibCommune/Regroupement.lua"))() -- bouton de minicarte et entrée des options communs (LibCommune#3)
 assert(loadfile("GameData/Window.lua"))("GameData", ns)
 local regroupe = LibStub("LibCommune-1.0").regroupes[1]
 GameDataDB = GameDataDB or {}
-assert(regroupe and regroupe.nom == "GameData" and regroupe.ouvrir == ns.toggleExportWindow and regroupe.store() == GameDataDB,
+local ouverte = 0
+local toggle = ns.toggleExportWindow
+ns.toggleExportWindow = function() ouverte = ouverte + 1 end
+regroupe.ouvrir()
+ns.toggleExportWindow = toggle
+assert(regroupe and regroupe.nom == "GameData" and ouverte == 1 and regroupe.store() == GameDataDB,
   "GameData regroupé : sa fenêtre au clic, l'angle du bouton dans GameDataDB")
 assert(not io.open("GameData/Window.lua"):read("*a"):find("GameDataMinimapButton", 1, true), "plus de bouton de minicarte à lui")
-assert(ns.exportList and ns.hubTools and ns.hubTools[1][1] == "Acheter ou fabriquer", "boutons d'export et outils du hub, ouverts aux consommateurs")
+-- Ses exports déclarés à la lib comme ceux de tout add-on ; plus de registre ni d'outils à lui (LibCommune#21).
+local cles = {}
+for _, e in ipairs(LibStub("LibCommune-1.0").Exports()) do
+  assert(e.addon == "GameData" and e.libelle and e.description and type(e.donnees) == "function", e.cle)
+  cles[#cles + 1] = e.cle
+end
+assert(table.concat(cles, ",") == "perso,persos,recettes,marchands,maitres,hv,addons,erreurs", table.concat(cles, ","))
+assert(ns.exports == nil and ns.exportList == nil and ns.hubTools == nil, "plus de registre d'exports ni d'outils dans GameData")
+local window = io.open("GameData/Window.lua"):read("*a")
+for _, mot in ipairs({ "Handshake", "Négoce", "Negoce", "Acheter ou fabriquer", "openCraftWindow" }) do
+  assert(not window:find(mot, 1, true), "Window.lua mentionne encore " .. mot)
+end
+assert(not io.open("GameData/GameData.lua"):read("*a"):find("Be a Good Pal Commandes", 1, true), "aide de /gdata : plus de module de Handshake")
 for _, k in ipairs({ "newWindow", "newTable", "sortRows", "money", "moneyShort", "moneySigned", "itemLabel", "findItem" }) do
   assert(ns[k] == nil, "copie de l'outil commun " .. k .. " encore dans GameData")
 end
@@ -188,8 +208,7 @@ print("GameData : outils communs pris dans LibCommune OK")
 -- Le négoce vit dans l'add-on Négoce (#2) : ni ses fichiers dans le TOC, ni ses exports, ni ses outils dans le hub.
 local toc = io.open("GameData/GameData.toc"):read("*a")
 for _, f in ipairs({ "Flip", "Ledger", "Alerts", "BulkBuy" }) do assert(not toc:find(f .. ".lua", 1, true), f .. ".lua encore dans le TOC") end
-assert(not ns.exports.journal and not ns.exports.mecreant and #ns.hubTools == 1, "plus d'export ni d'outil du négoce")
-for _, e in ipairs(ns.exportList) do assert(e[1] ~= "journal" and e[1] ~= "mecreant", "bouton d'export du négoce") end
+assert(not export("journal") and not export("mecreant"), "plus d'export du négoce")
 print("GameData : sans négoce OK")
 
 -- Souscriptions (GameData#4), sur plusieurs sessions qui partagent les SavedVariables : une souscription faite sur le

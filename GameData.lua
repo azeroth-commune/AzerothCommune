@@ -324,50 +324,71 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
   end
 end)
 
--- /gdata export <quoi> : envoie une partie de la base par image (export de LibCommune), sans /reload.
+-- Les exports de GameData (/gdata export <clé>, la fenêtre GameData) : chacun photographie une partie de la base en
+-- grilles (export de LibCommune), sans /reload. Déclarés à LibCommune comme ceux de tout add-on regroupé.
+-- HV en lignes compactes (65 pages en JSON complet avec l'historique, le 18/11/2026) : le dernier scan de ton HV,
+-- une ligne par objet « id,min,quantité,enchères,prix:qté prix:qté prix:qté » (3 premiers paliers).
+local function exportHV()
+  local h = GetRealmName() .. "-" .. UnitFactionGroup("player")
+  local m = GameDataMarket[h]
+  if not m then return { hv = h, absent = true } end
+  local lines = {}
+  for id, it in pairs(m.items or {}) do
+    local tiers = {}
+    for i = 1, math.min(3, #(it.tiers or {})) do tiers[i] = it.tiers[i].price .. ":" .. it.tiers[i].qty end
+    -- %.0f et pas %d : une annonce au prix maximum (~10 milliards de cuivre) dépasse les entiers de %d sur ce client
+    lines[#lines + 1] = ("%.0f,%.0f,%.0f,%.0f,%s"):format(id, it.min or 0, it.qty or 0, it.auctions or 0, table.concat(tiers, " "))
+  end
+  return { hv = h, scanned = m.scanned, auctions = m.auctions, format = "id,min,qty,auctions,tiers", items = table.concat(lines, "\n") }
+end
 local EXPORTS = {
-  perso = function() return { [charKey()] = char() } end,
-  persos = function() return GameDataDB.chars end,
-  recettes = function() return GameDataDB.recipes end,
-  marchands = function() return GameDataDB.vendors end,
-  maitres = function() return GameDataDB.trainers end,
-  -- HV en lignes compactes (65 pages en JSON complet avec l'historique, le 18/11/2026) : le dernier scan de ton HV,
-  -- une ligne par objet « id,min,quantité,enchères,prix:qté prix:qté prix:qté » (3 premiers paliers).
-  hv = function()
-    local h = GetRealmName() .. "-" .. UnitFactionGroup("player")
-    local m = GameDataMarket[h]
-    if not m then return { hv = h, absent = true } end
-    local lines = {}
-    for id, it in pairs(m.items or {}) do
-      local tiers = {}
-      for i = 1, math.min(3, #(it.tiers or {})) do tiers[i] = it.tiers[i].price .. ":" .. it.tiers[i].qty end
-      -- %.0f et pas %d : une annonce au prix maximum (~10 milliards de cuivre) dépasse les entiers de %d sur ce client
-      lines[#lines + 1] = ("%.0f,%.0f,%.0f,%.0f,%s"):format(id, it.min or 0, it.qty or 0, it.auctions or 0, table.concat(tiers, " "))
-    end
-    return { hv = h, scanned = m.scanned, auctions = m.auctions, format = "id,min,qty,auctions,tiers", items = table.concat(lines, "\n") }
-  end,
-  addons = function() return GameDataDB.addons end,
-  erreurs = function() return { base = GameDataDB.errors, perso = char().errors, events = GameDataDB.events } end,
+  { cle = "perso", libelle = "Mon perso", description = "fiche, sacs, banque, courrier, équipement, monnaies, réputations, métiers, quêtes",
+    donnees = function() scanAll() return { [charKey()] = char() } end },
+  { cle = "persos", libelle = "Tous mes persos", description = "la même chose pour chaque perso déjà connecté",
+    donnees = function() scanAll() return GameDataDB.chars end },
+  { cle = "recettes", libelle = "Recettes", description = "toutes les recettes vues, avec produit et composants",
+    donnees = function() return GameDataDB.recipes end },
+  { cle = "marchands", libelle = "Marchands", description = "ce que chaque marchand visité vend, et à quel prix",
+    donnees = function() return GameDataDB.vendors end },
+  { cle = "maitres", libelle = "Maîtres", description = "ce que chaque maître enseigne, prix et niveau requis",
+    donnees = function() return GameDataDB.trainers end },
+  { cle = "hv", libelle = "Hôtel des ventes", description = "le dernier scan : prix le plus bas, quantité, 3 premiers paliers",
+    donnees = exportHV },
+  { cle = "addons", libelle = "Add-ons", description = "les add-ons installés : version, auteur, dépendances",
+    donnees = function() return GameDataDB.addons end },
+  { cle = "erreurs", libelle = "Diagnostic", description = "erreurs de scan et derniers événements vus",
+    donnees = function() return { base = GameDataDB.errors, perso = char().errors, events = GameDataDB.events } end },
 }
-ns.exports = EXPORTS -- un add-on consommateur (le Négoce : mecreant, journal) y ajoute les siens, avec un bouton dans ns.exportList
+
+-- /gdata export <clé> : l'export déclaré sous cette clé par n'importe quel add-on regroupé (lib.Exports) ; sans clé, la
+-- fenêtre GameData.
 function ns.exportCommand(what)
   local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not (lib and lib.Exporter) then return print("GameData : l'export par image demande LibCommune.") end
-  local get = EXPORTS[what]
-  if what == "" and ns.toggleExportWindow then return ns.toggleExportWindow() end -- /gdata export : la fenêtre
-  if not get then
-    local names = {}
-    for k in pairs(EXPORTS) do names[#names + 1] = k end
-    table.sort(names)
-    return print("GameData : /gdata export " .. table.concat(names, " | "))
+  if not (lib and lib.Exporter and lib.Exports) then return print("GameData : l'export par image demande LibCommune.") end
+  if what == "" and ns.toggleExportWindow then return ns.toggleExportWindow() end
+  local e, cles = nil, {}
+  for _, x in ipairs(lib.Exports()) do
+    cles[#cles + 1] = x.cle
+    if x.cle == what then e = e or x end
   end
-  if what == "perso" or what == "persos" then scanAll() end
+  if not e then
+    table.sort(cles)
+    return print("GameData : /gdata export " .. table.concat(cles, " | "))
+  end
   print("GameData : préparation de l'export « " .. what .. " »…")
-  local ok, err = pcall(function() lib.Exporter(get(), "gamedata-" .. what) end)
+  local ok, err = pcall(function() lib.Exporter(e.donnees(), "gamedata-" .. what) end)
   if not ok then
     GameDataDB.errors.export = ns.now() .. " " .. what .. " : " .. tostring(err)
     print("|cffe64d4dGameData : l'export « " .. what .. " » a planté :|r " .. tostring(err))
   end
+end
+
+-- Bouton de la minicarte et entrée des options : ceux d'Azeroth Commune, communs aux add-ons présents (LibCommune#3).
+-- Clic (GameData seul) ou sa ligne du menu = la fenêtre GameData (Window.lua). L'angle reste dans GameDataDB.minimap_angle.
+local lib = LibStub and LibStub("LibCommune-1.0", true)
+if lib and lib.Regrouper then
+  lib.Regrouper({ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
+    ouvrir = function() ns.toggleExportWindow() end, store = function() return GameDataDB end, exports = EXPORTS })
 end
 
 SLASH_GAMEDATA1 = "/gdata"
@@ -393,5 +414,5 @@ SlashCmdList.GAMEDATA = function(msg)
   print("  " .. (ns.commerceStatus and ns.commerceStatus() or "Commerce.lua n'est pas chargé : recettes, marchands et HV ne sont pas lus."))
   for name, err in pairs(char().errors) do print("  erreur", name, err) end
   for name, err in pairs(GameDataDB.errors) do print("  erreur", name, err) end
-  print("  /reload pour écrire la base sur le disque. /gdata cout <objet> [quantité] : acheter ou fabriquer ? (module Be a Good Pal Commandes)")
+  print("  /reload pour écrire la base sur le disque. /gdata export : la fenêtre des exports.")
 end
