@@ -7,24 +7,25 @@
 --                                  vaut pour tous les personnages du joueur (GameData ne relève que les types souscrits, et
 --                                  cesse après ~30 jours sans souscription) ; sans lui, elle vaut le temps de la session.
 --   lib:Lire(type, personnage)   : les données et leur lot, ou nil et la raison (« type inconnu », « pas de GameData »,
---                                  « pas encore relevé », « pas de GameData ni de fournisseur »). personnage = « Nom-Royaume » (sur Forever « Prénom Nom-Royaume »),
---                                  nil pour le personnage connecté, « tous » pour tous les personnages relevés.
+--                                  « pas encore relevé », « pas de GameData ni de fournisseur »). personnage = son GUID, nil pour le
+--                                  personnage connecté, « tous » pour tous les personnages relevés.
 -- Lot : { provenance, build, version, date, perime } — d'où viennent les données (lib.provenances, du plus fiable au moins
 -- fiable), le build du client (GetBuildInfo) et la date du relevé ; perime = true : figé sous un autre build, peut-être
--- périmé. Pour un type par personnage, le lot va aussi par personnage : { persos = { [personnage] = lot } }. Dans un lot
+-- périmé. Pour un type par personnage, le lot va aussi par personnage : { persos = { [GUID] = lot } }. Dans un lot
 -- mixte (marchands : vus en jeu et base VendorData), une ligne d'une autre provenance porte la sienne (champ provenance).
 -- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session
 -- (recettes connues ; inventaires : sacs lus à l'instant, banque vue cette session).
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 7
+-- Personnage : lib.Personnage(guid) = { guid, adresse, nom } ; lib.Adresse(nom, royaume), lib.Destinataire(nom).
+local MAJOR, MINOR = "LibCommune-1.0", 8
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
 -- Catalogue des types de données (ceux que GameData relève). léger : relevable sans GameData, par un relevé de repli ;
 -- un type lourd (HV, catalogue des objets) attend GameData ou un fournisseur. parPerso : les données vont par personnage
--- ({ persos = { [personnage] = … } }, filtrées par lib:Lire), sinon une seule table pour le joueur. gamedata : la
+-- ({ persos = { [GUID] = … } }, filtrées par lib:Lire), sinon une seule table pour le joueur. gamedata : la
 -- fonction de GameDataAPI qui rend ce type. repli : le relevé de repli est écrit (recettes connues, inventaires).
 local TYPES = {
   -- persos[p] = { character (fiche, or), equipped, bags, bank, mail, currencies }
@@ -34,7 +35,7 @@ local TYPES = {
   ["métiers et compétences"] = { leger = true, parPerso = true, gamedata = "metiersEtCompetences" }, -- persos[p] = { professions, skills }
   ["quêtes terminées"] = { leger = true, parPerso = true, gamedata = "quetesTerminees" }, -- persos[p] = { questID, … }
   -- { recettes = { [clé] = { profession, name, output, reagents, … } },
-  --   persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
+  --   persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
   ["recettes connues"] = { leger = true, parPerso = true, gamedata = "recettesConnues", repli = true },
   ["maîtres de métier"] = { leger = true, gamedata = "maitresDeMetier" }, -- { [PNJ] = { services, filters, … } }
   marchands = { leger = true, gamedata = "marchands" }, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
@@ -86,10 +87,55 @@ local function lotDuJour()
   return { provenance = "relevé direct", build = tonumber(build), version = version, date = date("%Y-%m-%d %H:%M:%S") }
 end
 
--- Même clé que GameData : sur Forever, UnitName("player") rend prénom et nom de famille.
-local function personnageConnecte()
-  local first, last = UnitName("player")
-  return (last and (first .. " " .. last) or first) .. "-" .. GetRealmName()
+---------------------------------------------------------------------------------------------------
+-- Personnage (CONTEXT-MAP de l'atelier) : identifié par son GUID (UnitGUID), qui survit à un renommage. Son adresse,
+-- « Prénom-Royaume » au royaume normalisé (sans espace ni tiret), sert à lui envoyer un message ; son nom, « Prénom Nom »
+-- sur Forever, à l'afficher.
+-- Sur Forever, le 2e retour de UnitName, UnitFullName et GetUnitName(unité, true) est le NOM DE FAMILLE, pas le royaume
+-- (/handshake noms en jeu, 20/11/2026) : le royaume vient de GetNormalizedRealmName. Un nom de famille n'a ni tiret ni
+-- espace (refusé par le jeu) : dans une adresse, le dernier tiret sépare le prénom du royaume.
+local ADRESSE = "^[^%-|,:%s%c]+%-[^%-|,:%s%c]+$"
+local function monRoyaume() return ((GetNormalizedRealmName and GetNormalizedRealmName() or ""):gsub("[%s%-]", "")) end
+
+-- L'adresse d'un nom reçu (« Prénom », « Prénom-Royaume », « Prénom Nom », « Prénom Nom-Royaume ») ou d'un prénom et de
+-- son royaume (brut ou normalisé) : « Prénom-Royaume », notre royaume s'il n'y en a pas ; nil pour un nom piégé.
+function lib.Adresse(nom, royaume)
+  if type(nom) ~= "string" or nom == "" then return nil end
+  if not royaume then
+    local avant, apres = nom:match("^(.+)%-([^%-]+)$")
+    if apres then nom, royaume = avant, apres end
+  end
+  local prenom = nom:match("^[^%s%-]+")
+  if not prenom then return nil end
+  royaume = (royaume and royaume ~= "") and royaume:gsub("[%s%-]", "") or monRoyaume()
+  local adresse = prenom .. "-" .. royaume
+  return adresse:match(ADRESSE) and adresse or nil
+end
+
+-- À qui adresser un chuchotement : le prénom seul sur notre royaume (Forever lit « Prénom-Royaume » comme « Prénom
+-- NomDeFamille » : « Aucun joueur nommé 'Testeur CAMWOWEU4Realm8PvP' », 18/11/2026), sinon l'adresse ; un nom illisible
+-- est rendu tel quel.
+-- ponytail: un autre royaume garde « Prénom-Royaume », à vérifier le jour où on joue entre royaumes
+function lib.Destinataire(nom)
+  local adresse = lib.Adresse(nom)
+  if not adresse then return nom end
+  local prenom, royaume = adresse:match("^([^%-]+)%-(.+)$")
+  return royaume == monRoyaume() and prenom or adresse
+end
+
+-- { guid, adresse, nom } du personnage connecté (guid nil ou le sien), ou d'un personnage du joueur dont GameData a la
+-- fiche (écrite à chaque connexion de ce personnage) ; nil sinon.
+-- ponytail: pas de GetPlayerInfoByGUID pour un autre joueur (ni nom de famille, ni royaume vérifié sur Forever) ; à
+-- ajouter quand un add-on aura besoin du nom d'un autre joueur par son GUID.
+function lib.Personnage(guid)
+  local moi = UnitGUID("player")
+  if guid == nil or guid == moi then
+    local prenom, nomDeFamille = UnitName("player")
+    return { guid = moi, adresse = lib.Adresse(prenom),
+      nom = (nomDeFamille and nomDeFamille ~= "") and (prenom .. " " .. nomDeFamille) or prenom }
+  end
+  local fiche = GameDataAPI and GameDataAPI.personnage
+  return fiche and fiche(guid) or nil
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -333,7 +379,7 @@ function lib:Lire(typeDeDonnees, personnage)
     return self:LireParFournisseurs(typeDeDonnees, d, lot, fournir ~= nil)
   end
   if not fournir then
-    local moi = personnageConnecte()
+    local moi = UnitGUID("player")
     if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
     if typeDeDonnees == "inventaires" then
       d = { persos = { [moi] = { bags = lib.Conteneurs(lib.EstSac), bank = self.repli.banque } } }
@@ -349,7 +395,7 @@ function lib:Lire(typeDeDonnees, personnage)
   end
   lot = { persos = lot and lot.persos or {} }
   if personnage ~= "tous" then
-    local p = personnage or personnageConnecte()
+    local p = personnage or UnitGUID("player")
     if not d.persos[p] then return nil, "pas encore relevé" end
     local un = { persos = { [p] = d.persos[p] } }
     for k, v in pairs(d) do if k ~= "persos" then un[k] = v end end

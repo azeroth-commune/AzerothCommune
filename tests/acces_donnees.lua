@@ -106,3 +106,25 @@ test("signal « type relevé à nouveau » : le scan de l'HV de GameData appelle
     assertEquals(1, #recus)
     assertEquals("cours de l'HV", recus[1])
 end)
+
+test("personnage connecté : GUID, adresse au royaume normalisé, nom ; lu par son GUID", function()
+    local lib = LibStub("LibCommune-1.0")
+    local p = lib.Personnage()
+    assertType("string", p.guid)
+    assertEquals(UnitGUID("player"), p.guid)
+    local royaume = GetNormalizedRealmName():gsub("[%s%-]", "")
+    assertEquals((UnitName("player")) .. "-" .. royaume, p.adresse)
+    assertType("string", p.nom)
+    assertEquals((UnitName("player")), lib.Destinataire(p.adresse))
+    print("personnage : " .. p.guid .. " / " .. p.adresse .. " / " .. p.nom)
+end)
+
+test("lire par GUID : persos rangé par GUID", function()
+    local lib = LibStub("LibCommune-1.0")
+    local data = lib:Lire("inventaires", "tous")
+    if data then
+        for cle in pairs(data.persos) do assertTrue(cle:find("^Player%-") ~= nil) end
+    end
+    local moi = lib:Lire("inventaires", UnitGUID("player"))
+    if moi then assertNotNil(moi.persos[UnitGUID("player")]) end
+end)

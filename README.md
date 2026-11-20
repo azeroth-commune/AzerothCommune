@@ -8,15 +8,15 @@ Du code seulement, jamais de données sauvegardées — les données relevées n
 ```lua
 local lib = LibStub("LibCommune-1.0")
 lib:Souscrire("recettes connues")                   -- avec GameData : relevé sur tous tes personnages ; sans lui : relevé de repli
-local d, raison = lib:Lire("recettes connues", "tous") -- nil = personnage connecté, ou « Prénom Nom-Royaume »
+local d, raison = lib:Lire("recettes connues", "tous") -- nil = personnage connecté, ou son GUID
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
---       persos = { [personnage] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
+--       persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
 -- raison : « type inconnu », « pas de GameData », « pas encore relevé »
 -- sans GameData, relevé de repli (personnage connecté, en mémoire) : recettes connues ; inventaires = { bags (lus à
 -- l'instant), bank (vue cette session) } ; les autres types : « pas de GameData »
 lib.Conteneurs(lib.EstSac)                          -- sacs lus à l'instant : { [nom] = { size, items = { { id, count } } } }
 local d, lot = lib:Lire("marchands")
--- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [personnage] = lot } }
+-- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [GUID] = lot } }
 -- jamais nil quand d est là : {} (ou { persos = {} }) si GameData n'en donne pas (version d'avant les lots)
 -- provenance (lib.provenances) : « relevé direct » > « extrait du client » > « autre add-on » > « source externe »
 -- perime = true : figé sous un autre build du client, peut-être périmé (marqué par GameData au chargement)
@@ -33,6 +33,22 @@ lib:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque n
 -- signalés : cours de l'HV (scan de GameData) ; sans GameData, le relevé de repli (recettes connues, banque des inventaires).
 -- Les autres relevés de GameData ne signalent pas encore. Un rappel qui plante ne prive pas les autres (erreur au jeu).
 ```
+
+### Personnage
+
+Un personnage est identifié par son GUID (`UnitGUID`), qui survit à un renommage ; son adresse sert à lui envoyer un
+message, son nom à l'afficher.
+
+```lua
+local p = lib.Personnage()        -- le personnage connecté : { guid, adresse = "Belegard-CAMWOWEU4Realm8PvP", nom = "Belegard Marteaudefer" }
+lib.Personnage(guid)              -- un personnage du joueur dont GameData a la fiche, sinon nil
+lib.Adresse("Solarin Ydenah")     -- « Solarin-<notre royaume> » ; lib.Adresse("Bob", "Autre Royaume") = « Bob-AutreRoyaume » ; nom piégé : nil
+lib.Destinataire(adresse)         -- pour un chuchotement : le prénom seul sur notre royaume, sinon l'adresse
+```
+
+Sur Forever, le 2e retour de `UnitName`, `UnitFullName` et `GetUnitName(unité, true)` est le nom de famille, pas le
+royaume : le royaume vient de `GetNormalizedRealmName`. Un nom de famille n'a ni tiret ni espace : dans une adresse, le
+dernier tiret sépare le prénom du royaume.
 
 ### Fournisseurs (cours de l'HV)
 
