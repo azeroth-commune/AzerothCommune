@@ -25,7 +25,9 @@ local lignes, provenance = lib.Fusionner({ { donnees = a, provenance = "relevé 
 -- pour chaque clé, la ligne de la provenance la plus fiable gagne ; une provenance inconnue passe en dernier ; sources intactes
 local hv, lot = lib:Lire("cours de l'HV")           -- type lourd : scan de GameData et fournisseurs (Fournisseurs.lua)
 local l = hv and hv.objet(2772)                     -- ton HV : { min, qty, auctions, tiers, hist, age, sources = { champ = fournisseur } }
--- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile }
+-- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile,
+--         scan = { time, scanned } } : scan = le dernier scan de GameData pour ton HV (time() et date lisible), absent sans
+-- lui ; on ne lit pas hv.hv soi-même (forme interne de GameData)
 -- raison : « pas de GameData ni de fournisseur » (jamais de relevé de repli), « pas encore relevé »
 ```
 

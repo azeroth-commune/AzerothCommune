@@ -269,7 +269,7 @@ assert(lotHV.fournisseur == "Auctionator" and lotHV.champs.qty == "AuctionDB" an
 -- scan est plus en vente, même si Auctionator l'a vu aujourd'hui. L'historique : AuctionDB s'il est frais (pas de copie).
 local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19 10:00:00" }
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
-  hist = { [2840] = { { 1, 40, 3 } } } }
+  hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
 GameDataAPI = { coursHV = function() return { hv = { ["Kerys-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end }
 hv, lotHV = lib:Lire("cours de l'HV")
 cuivre = hv.objet(2772)
@@ -280,6 +280,7 @@ assert(retire.min == nil and retire.qty == 0 and retire.sources.qty == "GameData
 assert(lotHV.provenance == "relevé direct" and lotHV.build == 64000 and lotHV.fournisseur == nil and lotHV.releve == lotGD, "lot : relevé direct")
 assert(lotHV.champs.min == "GameData" and lotHV.champs.qty == "GameData" and lotHV.champs.hist == "AuctionDB" and lotHV.fragile, "d'où vient chaque champ")
 assert(hv.depot.rate24 == 0.3 and hv.hv["Kerys-Alliance"], "dépôt et relevé de GameData")
+assert(lotHV.scan.time == T and lotHV.scan.scanned == "2026-11-19 10:00:00" and lotHV.scan.items == nil, "lot : le dernier scan de ton HV (#13)")
 -- AuctionDB plus frais (7 h) : son historique reste le bon (des jours de points ; GameData vient peut-être de recommencer
 -- le sien, un seul point) ; celui de GameData seulement pour un objet qu'AuctionDB n'a pas. (Relecture de Negoce#1 : avec
 -- l'historique de GameData d'abord, Mécréant passait de 97 affaires à 3 et les Alertes de 51 à 0 sur les vraies données.)
@@ -294,7 +295,7 @@ assert(lotHV.champs.hist == "AuctionDB", "lot : historique d'AuctionDB")
 marche = nil
 GameDataAPI.coursHV = function() return { hv = { ["Kerys-Horde"] = {} } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
-assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator", "pas de scan de cet HV : fournisseurs")
+assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator" and lotHV.scan == nil, "pas de scan de cet HV : fournisseurs")
 -- HV neutre ou faction inconnue : rien ne plante.
 local faction = UnitFactionGroup
 UnitFactionGroup = function() return nil end
