@@ -170,13 +170,18 @@ assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameD
 -- Inventaires sans GameData (Handshake#1) : le personnage connecté, ses sacs lus à l'instant et sa banque vue cette
 -- session (relevée à l'ouverture, en mémoire ; fermée, elle n'est plus lue).
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bank = -1, BankBag_1 = 5 } }
-local slots = { [0] = { { itemID = 2772, stackCount = 5 } }, [1] = {}, [-1] = { { itemID = 2840, stackCount = 7 }, false } }
+local CHARBON = "|cffffffff|Hitem:2772::::::::60:::::::|h[Minerai de fer]|h|r"
+local slots = { [0] = { { itemID = 2772, stackCount = 5, hyperlink = CHARBON } }, [1] = {}, [-1] = { { itemID = 2840, stackCount = 7 }, false } }
 C_Container = { GetContainerNumSlots = function(b) return slots[b] and #slots[b] or 0 end,
   GetContainerItemInfo = function(b, s) return slots[b][s] or nil end }
 local inv = assert(lib:Lire("inventaires"))
 assert(inv.persos[MOI].bags.Backpack.items[1].id == 2772 and inv.persos[MOI].bags.Backpack.items[1].count == 5, "sacs lus à l'instant")
 assert(not inv.persos[MOI].bags.Bag_1 and not inv.persos[MOI].bags.Bank and not inv.persos[MOI].bank, "sac vide ignoré ; banque pas encore vue")
 assert(lib.EstSac("Bag_1") and lib.EstSac("ReagentBag") and not lib.EstSac("Bank") and lib.EstBanque("BankBag_1"), "sacs et banque")
+-- lib.Conteneurs rend aussi le lien de chaque objet (LibCommune#20 : seule lecture des sacs, GameData compris).
+local sacs = lib.Conteneurs(lib.EstSac)
+assert(sacs.Backpack.size == 1 and sacs.Backpack.items[1].link == CHARBON and sacs.Backpack.items[1].count == 5, "lien de l'objet")
+assert(inv.persos[MOI].bags.Backpack.items[1].link == CHARBON, "lien aussi dans le relevé de repli des inventaires")
 cadre.onEvent(cadre, "BANKFRAME_OPENED")
 slots[-1][1] = { itemID = 2840, stackCount = 9 }
 local banque = lib:Lire("inventaires", "tous").persos[MOI].bank
