@@ -626,3 +626,54 @@ assert(bouton.icone.texture == "icone-gd", "seul : son icône")
 bouton.scripts.OnClick(bouton, "LeftButton")
 assert(ouverts[1] == "gd" and #etat.menus == 0, "seul : le clic l'ouvre, sans menu")
 print("LibCommune : un seul add-on OK")
+
+-- Outils et exports déclarés par chaque add-on (LibCommune#21) : les outils sous la ligne de leur add-on dans le menu,
+-- les exports de tous les add-ons regroupés par lib.Exports(), un retardataire compris.
+etat, connexion = regroupement()
+local ouvertsOutils, devant = {}, 0
+local fenetreJournal = { shown = false, IsShown = function(s) return s.shown end, Raise = function() devant = devant + 1 end }
+NegoceLedgerFrame = fenetreJournal
+local gdx = { nom = "GameData", ouvrir = noop,
+  exports = { { cle = "perso", libelle = "Mon perso", description = "fiche", donnees = function() return { a = 1 } end } } }
+local neg = { nom = "Négoce", ouvrir = noop,
+  outils = { { libelle = "Mécréant", ouvrir = function() ouvertsOutils[#ouvertsOutils + 1] = "mecreant" end },
+             { libelle = "Journal", ouvrir = function() ouvertsOutils[#ouvertsOutils + 1] = "journal" end, fenetre = "NegoceLedgerFrame" } },
+  exports = { { cle = "journal", libelle = "Journal", donnees = function() return { b = 2 } end } } }
+lib.Regrouper(gdx)
+lib.Regrouper(neg)
+lib.Regrouper({ nom = "Handshake", ouvrir = noop })
+connexion()
+etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
+m = etat.menus[1]
+local lignes = {}
+for i = 2, #m do lignes[#lignes + 1] = (m[i][1]:gsub("|T.-|t ", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+assert(table.concat(lignes, ",") == "GameData,Négoce,        Mécréant,        Journal,Handshake,Réglages", table.concat(lignes, ","))
+m[4][2]()
+assert(ouvertsOutils[1] == "mecreant", "la ligne Mécréant ouvre Mécréant")
+m[5][2]()
+assert(ouvertsOutils[2] == "journal" and devant == 0, "fenêtre fermée : l'outil s'ouvre")
+fenetreJournal.shown = true
+m[5][2]()
+assert(#ouvertsOutils == 2 and devant == 1, "fenêtre déjà ouverte : elle passe devant, sans se refermer")
+local ex = lib.Exports()
+assert(#ex == 2 and ex[1].cle == "perso" and ex[1].addon == "GameData" and ex[1].libelle == "Mon perso" and ex[1].description == "fiche"
+  and ex[1].donnees().a == 1, "export de GameData")
+assert(ex[2].cle == "journal" and ex[2].addon == "Négoce" and ex[2].donnees().b == 2, "export du Négoce, après")
+-- Regroupé après l'entrée en jeu : ses outils au prochain clic, ses exports dans la liste.
+lib.Regrouper({ nom = "Tard", ouvrir = noop, outils = { { libelle = "Outil tardif", ouvrir = noop } },
+  exports = { { cle = "tard", libelle = "Tard", donnees = function() return {} end } } })
+etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
+assert(etat.menus[2][#etat.menus[2] - 1][1]:find("Outil tardif", 1, true), "outil du retardataire dans le menu")
+assert(lib.Exports()[3].cle == "tard", "export du retardataire")
+-- Déclarations incomplètes : refusées tout de suite, pas au clic.
+assert(not pcall(lib.Regrouper, { nom = "X", ouvrir = noop, outils = { { libelle = "sans ouvrir" } } }), "outil sans ouvrir")
+assert(not pcall(lib.Regrouper, { nom = "X", ouvrir = noop, exports = { { cle = "x", libelle = "x" } } }), "export sans donnees")
+-- Seul, un add-on avec des outils reste discret : le clic l'ouvre, sans menu.
+etat, connexion = regroupement()
+ouverts = {}
+lib.Regrouper({ nom = "Seul", ouvrir = function() ouverts[#ouverts + 1] = "seul" end, outils = neg.outils })
+connexion()
+etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
+assert(ouverts[1] == "seul" and #etat.menus == 0, "seul avec des outils : le clic l'ouvre")
+NegoceLedgerFrame = nil
+print("LibCommune : outils et exports des add-ons regroupés OK")

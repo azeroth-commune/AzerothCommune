@@ -1,18 +1,26 @@
 -- LibCommune : en jeu, les add-ons Azeroth Commune présents se regroupent (LibCommune#3) : un seul bouton de minicarte
 -- « Azeroth Commune » et une seule entrée dans les options du jeu (Options > Add-ons), une sous-page par add-on.
 --   lib.Regrouper{ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\…", ouvrir = fn,
---                  reglages = fn(page, ancre), store = fn() -> les SavedVariables de l'add-on }
+--                  reglages = fn(page, ancre), store = fn() -> les SavedVariables de l'add-on,
+--                  outils = { { libelle = "Journal", ouvrir = fn, fenetre = "NegoceLedgerFrame" }, … },
+--                  exports = { { cle = "journal", libelle = "Journal", description = "…", donnees = fn() -> table }, … } }
 --   dossier : le dossier de l'add-on (ses « Notes » du TOC décrivent sa page) ; reglages : facultatif, l'add-on pose
 --   ses réglages sur sa page, sous ancre (le bouton « Ouvrir ») ; store : facultatif, voir l'angle du bouton.
--- Bouton : clic = l'add-on s'il est seul, sinon la liste des add-ons ; clic droit = les réglages ; glisser = le déplacer.
--- Seul, un add-on garde son icône sur le bouton et sa page est l'entrée elle-même : un bouton, une entrée, rien de plus.
+--   outils : facultatif, une ligne par outil sous celle de l'add-on dans le menu du bouton ; fenetre (facultatif) : le
+--   nom de sa fenêtre, qui passe devant si elle est déjà ouverte au lieu d'être rouverte.
+--   exports : facultatif, ce que l'add-on sait photographier en grilles (export de Capture.lua) ; lib.Exports() rend
+--   ceux de tous les add-ons regroupés, que la fenêtre de GameData affiche en attendant un module de debug de la lib.
+-- Bouton : clic = l'add-on s'il est seul, sinon la liste des add-ons et de leurs outils ; clic droit = les réglages ;
+-- glisser = le déplacer.
+-- Seul, un add-on garde son icône sur le bouton et sa page est l'entrée elle-même : un bouton, une entrée, rien de plus
+-- (ses outils, s'il en a, restent dans sa propre fenêtre).
 -- Rien n'est sauvegardé ici : l'angle du bouton est écrit dans le store de chaque add-on regroupé (minimap_angle), et lu
 -- dans le premier qui en a un (GameDataDB.minimap_angle d'avant le regroupement reste donc valable).
 -- Tout se construit à l'entrée en jeu (SavedVariables chargées, add-ons présents connus), une seule fois. Les pages des
 -- réglages sont faites une fois pour toutes, sans OnShow, OnRefresh ni OnCommit : aucun code à nous ne tourne quand le
 -- joueur ouvre ou ferme les options (fermer revient au menu Échap, où du code d'add-on bloque Déconnexion / Quitter).
 local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : tests
-local VERSION = 1
+local VERSION = 2 -- 2 : outils et exports
 lib.versions = lib.versions or {}
 if (lib.versions.regroupement or 0) >= VERSION then return end
 lib.versions.regroupement = VERSION
@@ -39,6 +47,24 @@ end
 
 local function texte(icone, nom) return ("|T%s:16|t %s"):format(icone or ICONE, nom) end
 
+-- Ouvrir un outil : déjà ouvert, il passe devant (le rouvrir le refermerait).
+local function ouvrirOutil(o)
+  local w = o.fenetre and _G[o.fenetre]
+  if w and w:IsShown() then w:Raise() else o.ouvrir() end
+end
+
+-- Les exports de tous les add-ons regroupés, dans l'ordre d'arrivée : { cle, libelle, description, donnees, addon }.
+-- Lu à chaque appel : un add-on regroupé après l'entrée en jeu y est aussi.
+function lib.Exports()
+  local t = {}
+  for _, r in ipairs(lib.regroupes) do
+    for _, e in ipairs(r.exports or {}) do
+      t[#t + 1] = { cle = e.cle, libelle = e.libelle, description = e.description, donnees = e.donnees, addon = r.nom }
+    end
+  end
+  return t
+end
+
 ---------------------------------------------------------------------------------------------------
 -- Bouton de la minicarte (l'allure de l'ancien bouton de GameData), posé sur le bord à l'angle gardé.
 local function placer(b)
@@ -53,7 +79,12 @@ local function clic(b, bouton)
   if #r == 1 then return r[1].ouvrir() end
   MenuUtil.CreateContextMenu(b, function(_, menu)
     menu:CreateTitle(NOM)
-    for _, a in ipairs(r) do menu:CreateButton(texte(a.icone, a.nom), function() a.ouvrir() end) end
+    for _, a in ipairs(r) do
+      menu:CreateButton(texte(a.icone, a.nom), function() a.ouvrir() end)
+      for _, o in ipairs(a.outils or {}) do
+        menu:CreateButton("        |cffd8d8d8" .. o.libelle .. "|r", function() ouvrirOutil(o) end)
+      end
+    end
     menu:CreateDivider()
     menu:CreateButton("Réglages", ouvrirReglages)
   end)
@@ -186,6 +217,12 @@ end
 
 function lib.Regrouper(r)
   assert(type(r) == "table" and r.nom and type(r.ouvrir) == "function", "lib.Regrouper{ nom, ouvrir, … }")
+  for _, o in ipairs(r.outils or {}) do
+    assert(o.libelle and type(o.ouvrir) == "function", "lib.Regrouper{ outils = { { libelle, ouvrir, fenetre } } }")
+  end
+  for _, e in ipairs(r.exports or {}) do
+    assert(e.cle and e.libelle and type(e.donnees) == "function", "lib.Regrouper{ exports = { { cle, libelle, description, donnees } } }")
+  end
   lib.regroupes[#lib.regroupes + 1] = r
   if IsLoggedIn and IsLoggedIn() then rassembler() end -- add-on chargé après l'entrée en jeu
 end
