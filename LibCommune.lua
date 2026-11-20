@@ -18,7 +18,7 @@
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
-local MAJOR, MINOR = "LibCommune-1.0", 7
+local MAJOR, MINOR = "LibCommune-1.0", 8
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -211,7 +211,8 @@ local EVENEMENTS = {
 }
 
 -- Conteneurs d'Enum.BagIndex dont le nom passe le filtre (sacs, banque, onglets : ce que ce client a), lus à l'instant :
--- { [nom] = { size, items = { { id, count }, … } } } (même forme que GameData).
+-- { [nom] = { size, items = { { id, count, link }, … } } } (même forme que GameData). Seule lecture des sacs : GameData,
+-- le Négoce et Handshake passent par elle.
 function lib.Conteneurs(garder)
   local out, vus = {}, {}
   for nom, sac in pairs(Enum.BagIndex or {}) do
@@ -222,7 +223,7 @@ function lib.Conteneurs(garder)
         local items = {}
         for slot = 1, taille do
           local it = C_Container.GetContainerItemInfo(sac, slot)
-          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount } end
+          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink } end
         end
         out[nom] = { size = taille, items = items }
       end
