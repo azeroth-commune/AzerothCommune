@@ -34,15 +34,6 @@ assert(loadfile("LibCommune/LibCommune.lua"))()
 assert(loadfile("LibCommune/Fournisseurs.lua"))()
 assert(loadfile("GameData/GameData.lua"))("GameData", ns)
 
-local bags = ns.containers(ns.isBag)
-assert(bags.Backpack and bags.Bag_1 and bags.Keyring and bags.ReagentBag, "sacs manquants")
-assert(not bags.Bag_2, "un sac de 0 place ne doit pas apparaître")
-assert(not bags.Bank and not bags.Reagentbank, "la banque n'est pas un sac")
-local bank, n = ns.containers(ns.isBank), 0
-for _ in pairs(bank) do n = n + 1 end
-assert(n == 3, "banque : Bank, Reagentbank et un seul des deux noms de l'onglet 1, trouvé " .. n)
-assert(bags.Backpack.items[1].id == 100 and bags.Backpack.items[1].count == 3)
-
 GameDataItems, GameDataDB = {}, { lots = {} }
 ns.itemsReady()
 ns.itemTick()
@@ -235,6 +226,55 @@ local A, B, C = "Alice-Kerys", "Bob-Kerys", "Carl-Kerys"
 local gns, glib = session("Alice", { "inventaires" })
 assert(type(GameDataDB.souscriptions.inventaires) == "number", "souscription retenue avec sa date")
 assert(GameDataDB.chars[A].bags.Backpack, "A : inventaires relevés")
+
+-- Sacs et banque relevés par lib.Conteneurs (LibCommune#20) : exactement ce que rendait la copie de GameData d'avant,
+-- gardée ici comme référence.
+local function avant(keep)
+  local out, seen = {}, {}
+  for name, bag in pairs(Enum.BagIndex) do
+    if keep(name) and not seen[bag] then
+      seen[bag] = true
+      local size = C_Container.GetContainerNumSlots(bag)
+      if size and size > 0 then
+        local items = {}
+        for slot = 1, size do
+          local it = C_Container.GetContainerItemInfo(bag, slot)
+          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink } end
+        end
+        out[name] = { size = size, items = items }
+      end
+    end
+  end
+  return out
+end
+local function isBag(n) return n == "Backpack" or n == "Keyring" or n == "ReagentBag" or n:find("^Bag_") ~= nil end
+local function isBank(n) return n:find("[Bb]ank") ~= nil end
+local function pareil(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+  for k, v in pairs(a) do if not pareil(v, b[k]) then return false end end
+  for k in pairs(b) do if a[k] == nil then return false end end
+  return true
+end
+local bags = GameDataDB.chars[A].bags
+assert(bags.Backpack and bags.Bag_1 and bags.Keyring and bags.ReagentBag, "sacs manquants")
+assert(not bags.Bag_2, "un sac de 0 place ne doit pas apparaître")
+assert(not bags.Bank and not bags.Reagentbank, "la banque n'est pas un sac")
+assert(bags.Backpack.items[1].id == 100 and bags.Backpack.items[1].count == 3 and bags.Backpack.items[1].link == "l")
+assert(pareil(bags, avant(isBag)), "sacs : le même relevé qu'avant")
+frames[1].fn(frames[1], "BANKFRAME_OPENED")
+local bank, n = GameDataDB.chars[A].bank, 0
+for _ in pairs(bank) do n = n + 1 end
+assert(n == 3, "banque : Bank, Reagentbank et un seul des deux noms de l'onglet 1, trouvé " .. n)
+assert(pareil(bank, avant(isBank)), "banque : le même relevé qu'avant")
+-- Sans LibCommune : ni sacs ni banque relevés, la raison dans errors, la dernière banque vue reste.
+local vraiLibStub = LibStub
+LibStub = nil
+frames[1].fn(frames[1], "PLAYERBANKSLOTS_CHANGED")
+LibStub = vraiLibStub
+assert(GameDataDB.chars[A].errors.bank == "LibCommune absente : sacs et banque pas relevés" and GameDataDB.chars[A].bank == bank,
+  "sans LibCommune : " .. tostring(GameDataDB.chars[A].errors.bank))
+frames[1].fn(frames[1], "BANKFRAME_CLOSED")
+print("GameData : sacs et banque par lib.Conteneurs, comme avant OK")
 assert(not objetsScannes(), "objets sans souscription : pas de scan des objets")
 for _, t in pairs(glib.types) do assert(type(gns[t.gamedata]) == "function", "accesseur de GameData : " .. t.gamedata) end
 for nom in pairs(gns.rangement) do assert(glib.types[nom], "rangé mais pas au catalogue : " .. nom) end

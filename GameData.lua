@@ -42,30 +42,13 @@ local function noterLot(nom, entier, lots)
 end
 ns.build, ns.lot, ns.noterLot = build, lot, noterLot
 
--- Contenu des conteneurs d'Enum.BagIndex dont le nom passe le filtre. Lire l'enum plutôt qu'une liste
--- en dur : sacs, trousseau, sac de composants, onglets de banque… ce client n'a que ceux qu'il a.
--- Plusieurs noms peuvent viser le même conteneur : on ne le lit qu'une fois.
-local function containers(keep)
-  local out, seen = {}, {}
-  for name, bag in pairs(Enum.BagIndex) do
-    if keep(name) and not seen[bag] then
-      seen[bag] = true
-      local size = C_Container.GetContainerNumSlots(bag)
-      if size and size > 0 then
-        local items = {}
-        for slot = 1, size do
-          local it = C_Container.GetContainerItemInfo(bag, slot)
-          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink } end
-        end
-        out[name] = { size = size, items = items }
-      end
-    end
-  end
-  return out
+-- Sacs et banque : lus par LibCommune (lib.Conteneurs, avec les liens), seule lecture des sacs des add-ons. Sans elle,
+-- pas relevés : la raison va dans errors (run), comme pour les recettes.
+local function containers(filtre)
+  local lib = LibStub and LibStub("LibCommune-1.0", true)
+  if not (lib and lib.Conteneurs) then error("LibCommune absente : sacs et banque pas relevés", 0) end
+  return lib.Conteneurs(lib[filtre])
 end
-local function isBag(n) return n == "Backpack" or n == "Keyring" or n == "ReagentBag" or n:find("^Bag_") ~= nil end
-local function isBank(n) return n:find("[Bb]ank") ~= nil end
-ns.containers, ns.isBag, ns.isBank = containers, isBag, isBank
 
 -- Lisible à tout moment hors combat : à la connexion, puis toutes les 60 s.
 local scan = {}
@@ -89,7 +72,7 @@ function scan.equipped() -- 0 = munitions, 1-19 = équipement
   return t
 end
 
-function scan.bags() return containers(isBag) end
+function scan.bags() return containers("EstSac") end
 
 -- ponytail: monnaies, réputations et recettes repliées sous un en-tête ne sont pas lues (les déplier
 -- toucherait à l'interface du joueur) ; déplie-les une fois si une ligne manque.
@@ -149,7 +132,7 @@ function scan.quests_done() return C_QuestLog.GetAllCompletedQuestIDs() end
 -- Lisibles seulement fenêtre ouverte : lancées par les événements plus bas.
 local window = {}
 
-function window.bank() return containers(isBank) end
+function window.bank() return containers("EstBanque") end
 
 function window.mail()
   local t = {}
