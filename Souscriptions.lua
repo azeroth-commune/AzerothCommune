@@ -176,7 +176,7 @@ function ns.souscriptionsCommand(cmd, rest)
         or ("plus de souscription depuis 30 jours (dernière le " .. date("%Y-%m-%d", quand) .. "), plus relevé")
       print(("  %s : %s%s"):format(nom, etat, aDesDonnees(RANGEMENT[nom]) and " (données gardées)" or ""))
     end
-    print("  /gdata effacer <type> : effacer ses données. /gdata souscrire <type|tout> : y souscrire toi-même.")
+    print("  /gdata effacer <type> : effacer ses données. /gdata souscrire <type||tout> : y souscrire toi-même.")
     return true
   end
   if cmd ~= "effacer" and cmd ~= "souscrire" then return false end
