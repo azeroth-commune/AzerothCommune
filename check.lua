@@ -31,8 +31,11 @@ local function appelsInterdits(dossier, textes)
   return trouves
 end
 -- Le socle : ni LibStub, ni GameDataAPI, ni MINOR ou VERSION par fichier, ni les emplacements que Handshake remplissait.
+-- Ni aucun global d'un consommateur (#46 : les recettes Classic de Handshake lui sont remises) ; « Diagnostic » est aussi
+-- le libellé d'un export du socle, pas cherché.
 local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", "MINOR", "local VERSION", "lib.versions",
-  "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket" })
+  "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
+  "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
 assert(#fichiersCharges("AzerothCommune") == 9, "les fichiers des deux, dans une seule TOC")
 local nos = {}
@@ -115,6 +118,20 @@ d, raison = lib:Souscrire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 print("Azeroth Commune : type inconnu OK")
 
+-- Souscription avant le chargement de la base (un add-on sans « ## Dependencies: AzerothCommune », #45) : refusée, pas
+-- perdue en silence ; un seul avertissement par session, qui nomme l'add-on (sa pile) et rappelle la dépendance.
+do
+  local dits, vraiPrint = {}, print
+  print = function(m) dits[#dits + 1] = m end
+  debugstack = function() return '[string "@Interface/AddOns/Essai/Essai.lua"]:3: in main chunk\n' end
+  d, raison = lib:Souscrire("inventaires")
+  assert(d == nil and raison == "socle pas chargé", "trop tôt : " .. tostring(raison))
+  assert(lib:Souscrire("objets") == nil and #dits == 1, "un seul avertissement par session : " .. #dits)
+  assert(dits[1]:find("Essai", 1, true) and dits[1]:find("## Dependencies: AzerothCommune", 1, true), dits[1])
+  print, debugstack = vraiPrint, nil
+end
+print("Azeroth Commune : souscription avant la base OK")
+
 -- Personnage : GUID et nom « Prénom Nom », plus d'adresse (#35 : le jeu ne donne plus le royaume). Un chuchotement part
 -- vers « Prénom Nom », la forme que le serveur accepte (au prénom seul : « Aucun joueur nommé 'Belegard' », 21/11/2026).
 assert(lib.Destinataire("Belegard Marteaudefer") == "Belegard Marteaudefer", "chuchotement : le nom complet")
@@ -142,7 +159,7 @@ local dits, vraiPrint = {}, print
 print = function(m) dits[#dits + 1] = m end
 local buildAvant = GetBuildInfo
 GetBuildInfo = function() return "1.16.1", "71037", "Nov 21 2026", 11601 end
-lib.buildLu = nil -- une mise à jour du jeu : le build de la session est relu
+ns.buildLu = nil -- une mise à jour du jeu : le build de la session est relu
 UnitGUID = function(u) if u == "player" then return "Player-0-0000BE1E" end end
 assert(lib.Royaume() == "0", "valeur rendue inchangée : 0")
 local s = lib.Sondes().royaume
@@ -172,7 +189,7 @@ for _, nom in ipairs(IDENTITE) do assert(etat[nom].etat == "vert", "relancée ve
 assert(#dits == 4, "un avertissement par sonde rouge (royaume, maison, faction, nom) : " .. #dits)
 print = vraiPrint
 GetBuildInfo = buildAvant
-lib.buildLu = nil
+ns.buildLu = nil
 print("Azeroth Commune : sondes, royaume vide OK")
 
 -- Catalogue : les types que la base relève (leur accesseur privé : plus bas, avec la base).
@@ -185,7 +202,9 @@ for _, nom in ipairs(attendus) do assert(lib.types[nom], "au catalogue : " .. no
 -- Souscription : transmise à ns.souscrire, qui la retient dans la base pour le joueur ; rien de gardé à côté (#41).
 local transmis = {}
 ns.souscrire = function(t) transmis[#transmis + 1] = t end
+AzerothCommuneDB = {} -- la base chargée (ses SavedVariables lues)
 for _, nom in ipairs(attendus) do assert(lib:Souscrire(nom), "souscription : " .. nom) end
+AzerothCommuneDB = nil
 assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscription transmise à GameData")
 assert(lib.souscriptions == nil, "pas de copie des souscriptions pour la session")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
@@ -337,7 +356,7 @@ local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
   hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
 fausseBase({ ["cours de l'HV"] = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end })
-lib.sondes["maison de l'HV"].valeur = nil
+ns.sondes["maison de l'HV"].valeur = nil
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(lib.Sondes()["maison de l'HV"].valeur == "6942-Alliance", "la maison de l'HV des fournisseurs : celle de la lib, sondée")
 cuivre = hv.objet(2772)
@@ -389,16 +408,16 @@ geterrorhandler = function() return function(e) erreurs[#erreurs + 1] = e end en
 assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type inconnu")
 assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
 assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
-lib.sondes.build.etat = nil
+ns.sondes.build.etat = nil
 cadre.onEvent(cadre, "PLAYER_LOGIN")
 assert(lib.Sondes().build.etat == "vert", "sondes relancées à la connexion")
 lib:Signaler("cours de l'HV")
 assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "rappels appelés, erreur rendue au jeu")
-lib.rappels["cours de l'HV"] = nil
+ns.rappels["cours de l'HV"] = nil
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell ; la base le lance à la connexion) : un personnage jamais passé
--- par sa fenêtre. Candidates : les recettes déjà vues (3307, 3308) et la réserve Classic de Handshake.
+-- par sa fenêtre. Candidates : les recettes déjà vues (3307, 3308) et celles qu'un add-on a remises (#46).
 local metiers, vues = {}, { [3307] = { profession = "Minage" }, [3308] = { profession = "Minage" } }
 local images = {}
 C_Timer = { After = function(_, fn) images[#images + 1] = fn end } -- une image à la fois, pompée à la main
@@ -409,9 +428,16 @@ GetProfessions = function() return 1, nil, nil, 2 end -- des trous, comme en jeu
 GetProfessionInfo = function(i) if i == 1 then return "Minage", "icône", 150, 225 end return "Pêche", "icône", 1, 75 end
 local connues, demandees, parImage = { [3307] = true, [9001] = true, [10100] = true }, {}, 0
 IsPlayerSpell = function(id) demandees[id] = true; parImage = parImage + 1; return connues[id] or false end
-HandshakeClassicRecipes = { [9001] = { 2840, 1, 1, "Minage", "Barre de cuivre", { 2770, 1 } },
-  [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 } } }
-for id = 10000, 10149 do HandshakeClassicRecipes[id] = { 1, 1, 1, "Minage", "Recette " .. id, {} } end
+-- Sans recettes remises : les recettes déjà vues seules, relevées d'un coup (moins de 60).
+local seul = {}
+assert(lib:ReleverRecettesSansFenetre(seul, vues) and image() == 0, "sans recettes remises : une seule image")
+assert(seul.Minage.known[3307] and not demandees[9001] and not next(seul.Minage.known, next(seul.Minage.known)), "sans recettes remises : les vues seules")
+demandees, parImage = {}, 0
+-- Un add-on remet ses recettes livrées (provenance « autre add-on ») : la forme des recettes de la base.
+local remises = { [9001] = { profession = "Minage", name = "Barre de cuivre" }, [9002] = { profession = "Travail du cuir" } }
+for id = 10000, 10149 do remises[id] = { profession = "Minage" } end
+assert(lib:RemettreRecettes(remises), "recettes remises")
+assert(select(2, lib:RemettreRecettes("pas une table")) == "pas une table", "remise illisible refusée")
 local finis = 0
 assert(lib:ReleverRecettesSansFenetre(metiers, vues, function() finis = finis + 1 end))
 local nImages, maxParImage = 1, parImage
@@ -458,7 +484,7 @@ assert(apres.known[9001] and apres.known[10100] and n == 3, "rien de perdu, rien
 -- Fenêtre déjà relevée, relevé sans fenêtre ensuite (ex. ouverte pendant le relevé) : rien d'écrasé.
 lib:ReleverRecettesSansFenetre(metiers, vues)
 assert(metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")
-HandshakeClassicRecipes, C_TradeSkillUI = nil, nil
+C_TradeSkillUI = nil
 print("Azeroth Commune : fenêtre après le relevé sans fenêtre OK")
 
 ---------------------------------------------------------------------------------------------------
@@ -500,8 +526,7 @@ local garde = {}
 assert(lib.NomObjet(4, objets, garde) == "objet 4" and lib.NomObjet(4, objets, garde) == "objet 4")
 assert(#demandesServeur == 1 and demandesServeur[1] == 4, "demandé une seule fois au serveur")
 client[4] = { "Épice", "|lien4|" }
-local cadreObjets = cadres[#cadres]
-assert(cadreObjets == lib.cadreObjets, "écoute ITEM_DATA_LOAD_RESULT")
+local cadreObjets = cadres[#cadres] -- le cadre privé d'Interface.lua, créé à la première demande au serveur
 cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 4, true)
 assert(garde[4] and garde[4].link == "|lien4|" and lib.NomObjet(4, objets) == "|lien4|", "nom arrivé : retenu dans garde")
 assert(select(2, lib.RetenirObjet(3, garde)) == "|lien3|" and garde[3].name == "Cuivre", "connu du client : retenu tout de suite")
@@ -552,6 +577,7 @@ print("Azeroth Commune : pages et grilles d'export OK")
 -- sous-page par add-on ; seul, un add-on n'a qu'un bouton et une entrée. Cadres factices : toute méthode existe.
 local function regroupement()
   local etat = { boutons = {}, categories = {}, sous = {}, inscrites = 0, ouvertes = {}, menus = {} }
+  local cadresR = {}
   local function cadre(nom)
     local f = { scripts = {}, points = {} }
     setmetatable(f, { __index = function() return noop end })
@@ -565,6 +591,7 @@ local function regroupement()
   end
   CreateFrame = function(_, nom)
     local f = cadre(nom)
+    cadresR[#cadresR + 1] = f
     if nom == "AzerothCommuneMinimapButton" then etat.boutons[#etat.boutons + 1] = f end
     return f
   end
@@ -593,11 +620,12 @@ local function regroupement()
     gen(nil, menu)
     etat.menus[#etat.menus + 1] = m
   end }
-  lib.boutonCommun, lib.categorie = nil, nil
+  local n = #cadresR
   charger("Regroupement")
+  local cadreR = cadresR[n + 1] -- le cadre de Regroupement.lua, privé : le seul créé à son chargement
   local function connexion()
     connecte = true
-    lib.cadreRegroupement.scripts.OnEvent(lib.cadreRegroupement, "PLAYER_LOGIN")
+    cadreR.scripts.OnEvent(cadreR, "PLAYER_LOGIN")
   end
   return etat, connexion
 end
@@ -767,7 +795,7 @@ do
   local function etat(nom) return lib.Sondes()[nom].etat end
   -- Rouge après deux relevés, avec un seul avertissement qui la nomme ; réarmée pour le cas suivant.
   local function rougeUneFois(nom, relever)
-    lib.sondes[nom] = nil
+    ns.sondes[nom] = nil
     local avant = #dits
     relever(); relever()
     assert(etat(nom) == "rouge", nom .. " : rouge, " .. etat(nom))
@@ -780,7 +808,7 @@ do
   local sac = { [0] = { false, { itemID = 2772, stackCount = 5, hyperlink = LIEN } }, [1] = {} }
   local taille = function(b) return #sac[b] end
   C_Container = { GetContainerNumSlots = function(b) return taille(b) end, GetContainerItemInfo = function(b, s) return sac[b][s] or nil end }
-  lib.sondes["emplacements d'un conteneur"], lib.sondes["objet d'un conteneur"] = nil, nil
+  ns.sondes["emplacements d'un conteneur"], ns.sondes["objet d'un conteneur"] = nil, nil
   local relance = lib.RelancerSondes()
   assert(relance["emplacements d'un conteneur"].etat == "vert" and relance["objet d'un conteneur"].etat == "vert", "sacs relancés : verts")
   assert(relance["objet d'un conteneur"].valeur[1] == 2772 and relance["objet d'un conteneur"].valeur[2] == LIEN, "valeur : ID et lien")
@@ -808,7 +836,7 @@ do
     GetRecipeInfo = function(id) return { name = "Recette " .. id, learned = true, relativeDifficulty = 0, isEnchantingRecipe = id == 7 } end,
     GetRecipeSchematic = function(id) return fiches[id] end,
   }
-  lib.sondes.recettes = nil
+  ns.sondes.recettes = nil
   assert(lib.RelancerSondes().recettes.etat == "pas encore vue", "recettes sans fenêtre : pas relancées, pas encore vues")
   assert(lib:ReleverRecettes() and etat("recettes") == "vert", "recettes : verte")
   fiches[3308] = { reagentSlotSchematics = {} } -- 2e ligne cassée : pas vérifiée
@@ -825,7 +853,7 @@ do
   -- Noms d'objets (un objet en cache : pas relancés) : le client rend son nom ; un objet pas encore en cache n'est pas vérifié.
   local client = { [3] = { "Cuivre", "|lien3|" } }
   C_Item = { GetItemInfo = function(id) local i = client[id]; if i then return i[1], i[2] end end, RequestLoadItemDataByID = noop }
-  lib.sondes["nom d'objet"] = nil
+  ns.sondes["nom d'objet"] = nil
   assert(lib.NomObjet(99) == "objet 99" and etat("nom d'objet") == "pas encore vue", "pas en cache : pas vérifié")
   assert(lib.NomObjet(3) == "|lien3|" and etat("nom d'objet") == "vert", "en cache : verte")
   client[5] = { "", "|lien5|" }
@@ -833,16 +861,16 @@ do
   assert(lib.NomObjet(5) == "|lien5|" and select(2, lib.RetenirObjet(5)) == "|lien5|", "nom vide : lien rendu tel quel")
   -- Le serveur dit l'avoir envoyé (ITEM_DATA_LOAD_RESULT réussi) et le client ne rend rien : rouge aussi.
   lib.RetenirObjet(6)
-  rougeUneFois("nom d'objet", function() lib.cadreObjets.onEvent(lib.cadreObjets, "ITEM_DATA_LOAD_RESULT", 6, true) end)
-  lib.sondes["nom d'objet"] = nil
+  rougeUneFois("nom d'objet", function() cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 6, true) end)
+  ns.sondes["nom d'objet"] = nil
   lib.RetenirObjet(8)
-  lib.cadreObjets.onEvent(lib.cadreObjets, "ITEM_DATA_LOAD_RESULT", 8, false) -- objet inexistant : le serveur dit non
+  cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 8, false) -- objet inexistant : le serveur dit non
   assert(etat("nom d'objet") == "pas encore vue", "chargement refusé : pas vérifié")
 
   -- Fournisseurs de prix, quand ils sont présents : leur API rend un prix numérique ou rien ; la première ligne seulement.
   fausseBase()
   AuctionDBForeverSaved, TSM_API = nil, nil
-  for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do lib.sondes[nom] = nil end
+  for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do ns.sondes[nom] = nil end
   local avant = #dits
   Auctionator = fausseAPI()
   local hv = lib:Lire("cours de l'HV")
@@ -869,16 +897,57 @@ do
   assert(lib:Lire("cours de l'HV").objet(2840) == nil, "point illisible : rien rendu, comme avant")
   AuctionDBForeverSaved = nil
 
+  -- La première ligne non nulle d'une lecture est vérifiée (#45) : une lecture qui commence par un objet sans prix ne
+  -- passe pas au vert sans avoir vu le format ; deux lignes sans prix : « pas encore vue ».
+  local function lecture(premier, second) local hv = lib:Lire("cours de l'HV"); hv.objet(premier); hv.objet(second) end
+  local fournisseurs = {
+    { "prix Auctionator", function() Auctionator = fausseAPI() end, function() Auctionator = nil end },
+    { "prix TSM", function() TSM_API = { GetCustomPriceValue = function(_, i) return PRIX[tonumber(i:match("%d+"))] end } end,
+      function() TSM_API = nil end },
+    { "prix AuctionDB", function()
+        local items = {}
+        for id, p in pairs(PRIX) do items[id] = type(p) == "number" and ("%d,%d,1,1"):format(os.time(), p) or p end
+        AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { os.time() } }, items = items } } }
+      end, function() AuctionDBForeverSaved = nil end },
+  }
+  for _, f in ipairs(fournisseurs) do
+    local nom, poser, oter = f[1], f[2], f[3]
+    PRIX[2840] = "40" -- mal formé
+    poser()
+    ns.sondes[nom] = nil
+    lecture(1, 2)
+    assert(etat(nom) == "pas encore vue", nom .. " : deux lignes sans prix, pas encore vue")
+    lecture(1, 2840)
+    assert(etat(nom) == "rouge", nom .. " : 1re ligne sans prix, 2e mal formée : rouge, " .. etat(nom))
+    PRIX[2840] = 40
+    oter()
+  end
+
   print = vraiPrint
 end
 print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")
+
+-- Le global ne porte que l'API publique et les champs documentés (#45) : cadres et états de session sont privés (ns ou
+-- locaux), après un regroupement, des noms d'objets demandés au serveur, des sondes vérifiées et des rappels posés.
+do
+  local documentes = {}
+  for nom in ([[Argent ArgentCourt ArgentSigne BoutonCapture Build Capturer ChampsARelever Conteneurs DeclarerSonde
+    Destinataire EXPORT_N EXPORT_PAGE_BYTES EstBanque EstSac Exporter Exports Faction Fenetre Fusionner GrilleExport JsonSur
+    Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
+    Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
+    Souscrire RemettreRecettes Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
+    documentes[nom] = true
+  end
+  for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
+end
+print("Azeroth Commune : le global ne porte que l'API publique OK")
 
 ---------------------------------------------------------------------------------------------------
 -- La base (l'ex-GameData : Base.lua, Commerce.lua, Souscriptions.lua), chargée avec le reste du socle dans un espace de
 -- noms neuf. Simule juste ce qu'il faut de l'API WoW pour le filtre des conteneurs, le scan des objets, le commerce.
 do
 AzerothCommune = nil
-Auctionator, TSM_API, AuctionDBForeverSaved, HandshakeClassicRecipes, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil, nil
+Auctionator, TSM_API, AuctionDBForeverSaved, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil
 hooksecurefunc = function() error("crochet posé : le socle n'en pose aucun (#41)") end
 local ns = {}
 local noop = function() end

@@ -25,6 +25,7 @@ local lib = AzerothCommune
 
 lib.regroupes = {} -- dans l'ordre d'arrivée (l'ordre de chargement des add-ons)
 local NOM, ICONE, ANGLE = "Azeroth Commune", "Interface\\Icons\\INV_Misc_Map_01", 200
+local boutonCommun, categorie -- le bouton de minicarte et l'entrée des options, faits à l'entrée en jeu
 
 local function stores()
   local t = {}
@@ -40,7 +41,7 @@ local function lireAngle()
 end
 
 local function ouvrirReglages()
-  if lib.categorie then Settings.OpenToCategory(lib.categorie:GetID()) end
+  if categorie then Settings.OpenToCategory(categorie:GetID()) end
 end
 
 local function texte(icone, nom) return ("|T%s:16|t %s"):format(icone or ICONE, nom) end
@@ -213,17 +214,17 @@ end
 local function rassembler()
   local r = lib.regroupes
   if #r > 0 then
-    lib.boutonCommun = lib.boutonCommun or creerBouton()
-    lib.boutonCommun.icone:SetTexture(#r == 1 and r[1].icone or ICONE)
-    placer(lib.boutonCommun)
+    boutonCommun = boutonCommun or creerBouton()
+    boutonCommun.icone:SetTexture(#r == 1 and r[1].icone or ICONE)
+    placer(boutonCommun)
   end
   if not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
-  if not lib.categorie then
-    lib.categorie = Settings.RegisterCanvasLayoutCategory(accueil(), NOM)
-    Settings.RegisterAddOnCategory(lib.categorie)
+  if not categorie then
+    categorie = Settings.RegisterCanvasLayoutCategory(accueil(), NOM)
+    Settings.RegisterAddOnCategory(categorie)
   end
   for _, a in ipairs(r) do
-    if not a.categorie then a.categorie = Settings.RegisterCanvasLayoutSubcategory(lib.categorie, pageAddOn(a), a.nom) end
+    if not a.categorie then a.categorie = Settings.RegisterCanvasLayoutSubcategory(categorie, pageAddOn(a), a.nom) end
   end
 end
 
@@ -239,6 +240,6 @@ function lib.Regrouper(r)
   if IsLoggedIn and IsLoggedIn() then rassembler() end -- add-on chargé après l'entrée en jeu
 end
 
-lib.cadreRegroupement = CreateFrame("Frame")
-lib.cadreRegroupement:RegisterEvent("PLAYER_LOGIN")
-lib.cadreRegroupement:SetScript("OnEvent", rassembler)
+local cadre = CreateFrame("Frame")
+cadre:RegisterEvent("PLAYER_LOGIN")
+cadre:SetScript("OnEvent", rassembler)

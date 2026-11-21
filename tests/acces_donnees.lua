@@ -42,13 +42,11 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     assertType("function", GetProfessionInfo)
     local lib = AzerothCommune
     local metiers, fini = {}, false
-    -- sans recette candidate (réserve de Handshake mise de côté), le relevé finit tout de suite, sans attendre d'image
-    local reserve = HandshakeClassicRecipes
-    HandshakeClassicRecipes = nil
+    -- sans métier, aucune recette candidate (même remises par un add-on) : le relevé finit tout de suite
     local ok = lib:ReleverRecettesSansFenetre(metiers, {}, function() fini = true end)
-    HandshakeClassicRecipes = reserve
     assertTrue(ok)
-    assertTrue(fini)
+    if next({ GetProfessions() }) == nil then assertTrue(fini) end
+    assertNil(lib:RemettreRecettes(nil))
 end)
 
 test("catalogue : chaque type se lit dans la base, ou pas encore relevé", function()
@@ -101,13 +99,13 @@ test("signal « type relevé à nouveau » : les rappels appelés, sans crochet 
     local lib = AzerothCommune
     local _, raison = lib:QuandReleve("pas un type", print)
     assertEquals("type inconnu", raison)
-    local recus = {}
-    local function rappel(t) recus[#recus + 1] = t end
+    local recus, actif = {}, true
+    local function rappel(t) if actif then recus[#recus + 1] = t end end -- les rappels sont privés (#45) : il se tait
     assertTrue(lib:QuandReleve("cours de l'HV", rappel))
     assertNil(lib.AccrocherGameData)
+    assertNil(lib.rappels)
     lib:Signaler("cours de l'HV")
-    local l = lib.rappels["cours de l'HV"]
-    for i = #l, 1, -1 do if l[i] == rappel then table.remove(l, i) end end
+    actif = false
     assertEquals(1, #recus)
     assertEquals("cours de l'HV", recus[1])
 end)

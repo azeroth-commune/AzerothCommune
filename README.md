@@ -31,7 +31,9 @@ AC:Souscrire("recettes connues")                   -- relevé sur tous tes perso
 local d, raison = AC:Lire("recettes connues", "tous") -- nil = personnage connecté, ou son GUID
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
 --       persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
--- raison : « type inconnu », « pas encore relevé »
+-- raison : « type inconnu », « pas encore relevé » ; Souscrire avant le chargement du socle : nil, « socle pas chargé »
+AC:RemettreRecettes(mesRecettes)                   -- à ton chargement : tes recettes livrées ({ [ID du sort] = { profession, … } }),
+                                                   -- candidates du relevé des recettes connues sans fenêtre de métier
 AC.Conteneurs(AC.EstSac)                           -- sacs lus à l'instant : { [nom] = { size, items = { { id, count, link } } } }
 local d, lot = AC:Lire("marchands")
 -- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [GUID] = lot } }

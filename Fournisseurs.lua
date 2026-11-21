@@ -28,19 +28,20 @@ local AUCTIONDB_RECENT = 6 * 3600 -- un scan d'AuctionDB plus vieux : son histor
 
 local function maison() return lib.MaisonHV() end -- même clé que AzerothCommuneMarket, sondée ; nil si la faction est inconnue
 
--- Sondes des fournisseurs : un prix numérique, ou rien, pour un objet. Vérifiées sur la première ligne de chaque lecture
--- (relevé en masse) ; un fournisseur absent n'est jamais lu : sa sonde reste « pas encore vue », sans relevé sans contexte.
+-- Sondes des fournisseurs : un prix numérique, ou rien, pour un objet. Vérifiées sur la première ligne non nulle de chaque
+-- lecture (relevé en masse : un objet sans prix ne dit rien du format) ; un fournisseur absent n'est jamais lu : sa sonde
+-- reste « pas encore vue », sans relevé sans contexte.
 local function prixOuRien(p) return p == nil or type(p) == "number" end
 lib.DeclarerSonde("prix Auctionator", "Auctionator.API.v1 rend un prix et un âge numériques, ou rien",
   function(p, age) return prixOuRien(p) and prixOuRien(age) end)
 lib.DeclarerSonde("prix TSM", "TSM_API.GetCustomPriceValue rend un prix numérique, ou rien", prixOuRien)
 lib.DeclarerSonde("prix AuctionDB", "AuctionDBForeverSaved : la ligne d'un objet est « heure,min,médiane,qté … », ou rien",
   function(l) return l == nil or (type(l) == "string" and l:find("^%d+,%d+,%d+,%d+") ~= nil) end)
--- Une fonction qui sonde nom sur sa première ligne seulement (une par lecteur, donc par lecture).
+-- Une fonction qui sonde nom sur sa première ligne non nulle seulement (une par lecteur, donc par lecture).
 local function premiereLigne(nom)
   local faite = false
-  return function(...)
-    if not faite then faite = true; lib.Sonder(nom, ...) end
+  return function(premier, ...)
+    if not faite and premier ~= nil then faite = true; lib.Sonder(nom, premier, ...) end
   end
 end
 
@@ -76,7 +77,7 @@ lib.fournisseurs = {
         local sonder = premiereLigne("prix Auctionator")
         return function(id)
           local p = api.GetAuctionPriceByItemID(APPELANT, id)
-          if not p then sonder(p) return nil end
+          if not p then sonder(p) return nil end -- nil : pas vérifié (premiereLigne) ; false : vérifié
           local age = api.GetAuctionAgeByItemID(APPELANT, id) -- jours ; nil au-delà de 21
           sonder(p, age)
           return { min = age == 0 and p or nil, age = age } -- pas vu aujourd'hui : plus en vente
@@ -98,12 +99,10 @@ lib.fournisseurs = {
       lecteur = function()
         local h, quand = maisonAuctionDB()
         if not h then return nil end
-        local sondee = false
+        local sonder = premiereLigne("prix AuctionDB")
         return function(id)
           local s = h.items[id]
-          if not sondee then -- première ligne seulement ; son début : un historique peut être long
-            sondee = true; lib.Sonder("prix AuctionDB", type(s) == "string" and s:sub(1, 40) or s)
-          end
+          sonder(type(s) == "string" and s:sub(1, 40) or s) -- son début : un historique peut être long
           if type(s) ~= "string" then return nil end
           local hist = {}
           for t, min, med, qty in s:gmatch("(%d+),(%d+),(%d+),(%d+)") do

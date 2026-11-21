@@ -58,6 +58,7 @@ end
 -- Noms d'objets. objets = { [id] = { name, link } } : la base de l'add-on (HandshakeDB.items…).
 -- garde : la table où retenir le nom d'un objet quand le serveur l'envoie (nil : ne rien retenir, un autre s'en charge).
 local demandes = {} -- [id] = garde (ou false) : déjà demandé au serveur cette session
+local cadreObjets -- écoute ITEM_DATA_LOAD_RESULT, créé à la première demande
 
 -- Sonde : un objet en cache rend son nom. Vérifiée quand le client rend quelque chose de l'objet, ou quand le serveur
 -- vient de l'envoyer (charge) ; un objet pas encore en cache n'est pas vérifié. Sans relevé sans contexte : il faut un objet.
@@ -78,15 +79,15 @@ function lib.RetenirObjet(id, garde)
   end
   if demandes[id] == nil and C_Item.RequestLoadItemDataByID then
     demandes[id] = garde or false
-    if not lib.cadreObjets then
-      lib.cadreObjets = CreateFrame("Frame")
-      lib.cadreObjets:SetScript("OnEvent", function(_, _, iid, reussi)
+    if not cadreObjets then
+      cadreObjets = CreateFrame("Frame")
+      cadreObjets:SetScript("OnEvent", function(_, _, iid, reussi)
         if iid and demandes[iid] ~= nil then
           if reussi then infoObjet(iid, true) end
           lib.RetenirObjet(iid, demandes[iid] or nil)
         end
       end)
-      pcall(lib.cadreObjets.RegisterEvent, lib.cadreObjets, "ITEM_DATA_LOAD_RESULT")
+      pcall(cadreObjets.RegisterEvent, cadreObjets, "ITEM_DATA_LOAD_RESULT")
     end
     C_Item.RequestLoadItemDataByID(id)
   end

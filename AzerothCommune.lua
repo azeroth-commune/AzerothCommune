@@ -17,6 +17,11 @@
 -- Commerce.lua).
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
+--   AC:RemettreRecettes(recettes): un add-on remet au socle, à son chargement, des recettes livrées avec lui (provenance
+--                                  « autre add-on ») : { [ID du sort de la recette] = { profession = métier, … } }, la forme
+--                                  des recettes de la base. Elles servent de candidates au relevé des recettes connues sans
+--                                  fenêtre de métier ; seul ce que le jeu y répond est gardé (relevé direct). Rend true, ou
+--                                  nil, « pas une table ».
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
@@ -26,6 +31,11 @@
 -- Sondés aussi : sacs (AC.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
 -- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
 -- Pour les autres fichiers du socle : AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...).
+-- Le global ne porte rien d'autre que l'API publique et des champs documentés à côté de leur code : les relevés de
+-- recettes (AC:ReleverRecettes, AC:RangerRecettes, AC:ReleverRecettesSansFenetre, ci-dessous), AC:Signaler, les
+-- fournisseurs (AC.fournisseurs, AC:LireParFournisseurs, AC:ChampsARelever : Fournisseurs.lua), AC.regroupes
+-- (Regroupement.lua), AC.captureDansLesFenetres (posé par un add-on : Interface.lua). Cadres et états de session (état des
+-- sondes, rappels, bouton de minicarte, entrée des options) sont privés : ns ou locaux (#45).
 local _, ns = ...
 AzerothCommune = {}
 local lib = AzerothCommune
@@ -92,7 +102,7 @@ end
 -- attente en une phrase, une vérification qui compare seulement la valeur reçue, sans rappeler le jeu) ; elle est
 -- vérifiée à chaque relevé. Une sonde rouge prévient dans le chat une fois par session et ne change rien à la valeur
 -- rendue (pas de mode dégradé : on débugge). Rien n'est sauvegardé : le dernier résultat de chacune, le temps de la session.
-lib.sondes = {} -- [nom] = { etat, valeur, heure, build, prevenu }
+ns.sondes = {} -- [nom] = { etat, valeur, heure, build, prevenu } ; privé (lu par lib.Sondes)
 local SONDES = {} -- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même
 
 local function montrer(v)
@@ -103,20 +113,20 @@ local function montrer(v)
   return table.concat(t, ", ")
 end
 
--- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (lib.buildLu ;
+-- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (ns.buildLu ;
 -- check.lua le remet à nil pour simuler une mise à jour du jeu).
 -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
 local function buildDeSession()
-  if lib.buildLu == nil and GetBuildInfo then lib.buildLu = select(2, GetBuildInfo()) end
-  return lib.buildLu
+  if ns.buildLu == nil and GetBuildInfo then ns.buildLu = select(2, GetBuildInfo()) end
+  return ns.buildLu
 end
 
 -- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
 local function sonder(nom, ...)
   local s = SONDES[nom]
   if not s then return ... end -- pas déclarée : jamais d'erreur dans un relevé
-  local r = lib.sondes[nom] or {}
-  lib.sondes[nom] = r
+  local r = ns.sondes[nom] or {}
+  ns.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
   r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }
   r.heure, r.build = date("%H:%M:%S"), buildDeSession()
@@ -149,7 +159,7 @@ end
 function lib.Sondes()
   local out = {}
   for i, s in ipairs(SONDES) do
-    local r = lib.sondes[s.nom] or {}
+    local r = ns.sondes[s.nom] or {}
     out[i] = { nom = s.nom, attente = s.attente, etat = r.etat or "pas encore vue", valeur = r.valeur, heure = r.heure, build = r.build }
     out[s.nom] = out[i]
   end
@@ -298,8 +308,8 @@ end
 ---------------------------------------------------------------------------------------------------
 -- Relevé des recettes connues sans la fenêtre : sur Forever, IsPlayerSpell(ID du sort de la recette) dit vrai pour une
 -- recette connue (idée vue dans Mastercraft, dont le code n'est pas repris). Pour chaque métier du personnage, interroge
--- les recettes candidates : celles déjà relevées (recettes = { [ID] = { profession, … } }) et la réserve Classic de
--- Handshake si elle est chargée. PAR_IMAGE par image, jamais en combat (reprise à la fin du combat). Fusionne dans
+-- les recettes candidates : celles déjà relevées (recettes = { [ID] = { profession, … } }) et celles que des add-ons ont
+-- remises (AC:RemettreRecettes). PAR_IMAGE par image, jamais en combat (reprise à la fin du combat). Fusionne dans
 -- metiers = { [métier] = { rank, max, known } } : ajoute les connues qui manquent (true), ne retire rien, garde la
 -- difficulté lue en fenêtre. fini() une fois tout interrogé.
 local PAR_IMAGE = 60
@@ -314,6 +324,14 @@ cadre:SetScript("OnEvent", function(_, evenement)
   if r then r() end
 end)
 
+local remises = {} -- les tables remises par les add-ons, dans l'ordre d'arrivée
+
+function lib:RemettreRecettes(recettes)
+  if type(recettes) ~= "table" then return nil, "pas une table" end
+  remises[#remises + 1] = recettes
+  return true
+end
+
 function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
   if not (IsPlayerSpell and GetProfessions) then return nil, "API absente" end
   local miens = {}
@@ -325,9 +343,10 @@ function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
   local function candidate(id, metier)
     if type(id) == "number" and miens[metier] and not vu[id] then vu[id], file[#file + 1] = true, { id, metier } end
   end
-  for id, rec in pairs(recettes or {}) do candidate(id, rec.profession) end
-  -- ponytail: la réserve de Handshake nomme les métiers en français ; sur un client d'une autre langue elle ne sert pas.
-  for id, c in pairs(HandshakeClassicRecipes or {}) do candidate(id, c[4]) end -- { objet, min, max, métier, … }
+  -- ponytail: un métier se reconnaît à son nom ; des recettes remises sous un nom d'une autre langue que le client ne servent pas.
+  for _, t in ipairs({ recettes or {}, unpack(remises) }) do
+    for id, rec in pairs(t) do candidate(id, type(rec) == "table" and rec.profession) end
+  end
   local i = 0
   local function image()
     if InCombatLockdown() then
@@ -391,25 +410,37 @@ function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 -- Signal « type relevé à nouveau », appelé par le relevé lui-même (Commerce.lua, après chaque scan de l'HV). Un rappel
 -- qui plante ne prive pas les autres ni le relevé (erreur rendue au gestionnaire du jeu).
 -- ponytail: seul l'HV signale ; un autre type appellera lib:Signaler au bout de son relevé quand un add-on en aura besoin.
-lib.rappels = {}
+ns.rappels = {} -- [type] = { fn, … }
 
 function lib:QuandReleve(typeDeDonnees, fn)
   if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
-  self.rappels[typeDeDonnees] = self.rappels[typeDeDonnees] or {}
-  table.insert(self.rappels[typeDeDonnees], fn)
+  ns.rappels[typeDeDonnees] = ns.rappels[typeDeDonnees] or {}
+  table.insert(ns.rappels[typeDeDonnees], fn)
   return true
 end
 
 function lib:Signaler(typeDeDonnees)
-  for _, fn in ipairs(self.rappels[typeDeDonnees] or {}) do
+  for _, fn in ipairs(ns.rappels[typeDeDonnees] or {}) do
     local ok, err = pcall(fn, typeDeDonnees)
     if not ok and geterrorhandler then geterrorhandler()(err) end
   end
 end
 
--- La souscription est tenue par la base seule (Souscriptions.lua : AzerothCommuneDB.souscriptions, avec sa date).
+-- La souscription est tenue par la base seule (Souscriptions.lua : AzerothCommuneDB.souscriptions, avec sa date). Avant
+-- que la base soit chargée (un add-on sans « ## Dependencies: AzerothCommune ») : refusée, un avertissement par session.
+local prevenuTropTot = false
 function lib:Souscrire(typeDeDonnees)
   if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
+  if not AzerothCommuneDB then
+    if not prevenuTropTot then
+      prevenuTropTot = true
+      local pile = debugstack and debugstack(2, 1, 0) -- la ligne de l'appelant ; jamais d'erreur si elle manque
+      local addon = type(pile) == "string" and pile:match("[Aa]dd[Oo]ns[/\\]([^/\\]+)[/\\]")
+      print(("Azeroth Commune : %s a souscrit à « %s » avant le chargement du socle ; souscription perdue. Son TOC doit déclarer « ## Dependencies: AzerothCommune »."):format(
+        addon and ("l'add-on " .. addon) or "un add-on", typeDeDonnees))
+    end
+    return nil, "socle pas chargé"
+  end
   ns.souscrire(typeDeDonnees)
   return true
 end
