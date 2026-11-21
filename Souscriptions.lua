@@ -131,7 +131,8 @@ lire.objets = function()
   if fusion.releve then return fusion.d, AzerothCommuneDB.lots.objets end
   local lot = {}
   for k, v in pairs(ns.catalogueObjetsLot or {}) do lot[k] = v end
-  lot.provenance, lot.perime = "extrait du client", lot.build ~= lib.Build() or nil
+  -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
+  lot.provenance, lot.perime = "extrait du client", GetBuildInfo and lot.build ~= lib.Build() or nil
   return fusion.d, lot
 end
 -- Lu par AzerothCommune.Personnage(guid) : le nom d'un perso du joueur, gardé dans sa fiche à chaque connexion.
