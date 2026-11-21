@@ -40,7 +40,7 @@ local b, lot = AC:Lire("base des recettes")
 -- qu'aucune recette vue ne fabrique ; level = compétence requise (de la réserve). lot.provenance : « relevé direct » dès
 -- qu'une recette est vue. Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
 -- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet
--- rien au socle.
+-- rien au socle. Une recette vue n'a pas de champ provenance (relevé direct, comme une ligne de tête de lib.Fusionner).
 AC.Conteneurs(AC.EstSac)                           -- sacs lus à l'instant : { [nom] = { size, items = { { id, count, link } } } }
 local d, lot = AC:Lire("marchands")
 -- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [GUID] = lot } }

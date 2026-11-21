@@ -79,7 +79,6 @@ local function scanTradeSkill(c)
   return releveRecettes(c)
 end
 
-
 -- Lu par AzerothCommune:Lire (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
 ns.lire["recettes connues"] = function()
   local persos, lots = {}, {}
