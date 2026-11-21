@@ -31,13 +31,13 @@ local function appelsInterdits(dossier, textes)
   return trouves
 end
 -- Le socle : ni LibStub, ni GameDataAPI, ni MINOR ou VERSION par fichier, ni les emplacements que Handshake remplissait.
--- Ni aucun global d'un consommateur (#46 : les recettes Classic de Handshake lui sont remises) ; « Diagnostic » est aussi
+-- Ni aucun global d'un consommateur (#48 : le socle porte lui-même la réserve des recettes, plus rien ne lui est remis) ; « Diagnostic » est aussi
 -- le libellé d'un export du socle, pas cherché.
 local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", "MINOR", "local VERSION", "lib.versions",
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 9, "les fichiers des deux, dans une seule TOC")
+assert(#fichiersCharges("AzerothCommune") == 10, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
@@ -417,7 +417,7 @@ ns.rappels["cours de l'HV"] = nil
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell ; la base le lance à la connexion) : un personnage jamais passé
--- par sa fenêtre. Candidates : les recettes déjà vues (3307, 3308) et celles qu'un add-on a remises (#46).
+-- par sa fenêtre. Candidates : celles que la base lui passe (les recettes vues et la réserve Classic, #48).
 local metiers, vues = {}, { [3307] = { profession = "Minage" }, [3308] = { profession = "Minage" } }
 local images = {}
 C_Timer = { After = function(_, fn) images[#images + 1] = fn end } -- une image à la fois, pompée à la main
@@ -428,18 +428,18 @@ GetProfessions = function() return 1, nil, nil, 2 end -- des trous, comme en jeu
 GetProfessionInfo = function(i) if i == 1 then return "Minage", "icône", 150, 225 end return "Pêche", "icône", 1, 75 end
 local connues, demandees, parImage = { [3307] = true, [9001] = true, [10100] = true }, {}, 0
 IsPlayerSpell = function(id) demandees[id] = true; parImage = parImage + 1; return connues[id] or false end
--- Sans recettes remises : les recettes déjà vues seules, relevées d'un coup (moins de 60).
+-- Peu de candidates : relevées d'un coup (moins de 60), seulement elles.
 local seul = {}
-assert(lib:ReleverRecettesSansFenetre(seul, vues) and image() == 0, "sans recettes remises : une seule image")
-assert(seul.Minage.known[3307] and not demandees[9001] and not next(seul.Minage.known, next(seul.Minage.known)), "sans recettes remises : les vues seules")
+assert(lib:ReleverRecettesSansFenetre(seul, vues) and image() == 0, "peu de candidates : une seule image")
+assert(seul.Minage.known[3307] and not demandees[9001] and not next(seul.Minage.known, next(seul.Minage.known)), "seulement les candidates")
 demandees, parImage = {}, 0
--- Un add-on remet ses recettes livrées (provenance « autre add-on ») : la forme des recettes de la base.
-local remises = { [9001] = { profession = "Minage", name = "Barre de cuivre" }, [9002] = { profession = "Travail du cuir" } }
-for id = 10000, 10149 do remises[id] = { profession = "Minage" } end
-assert(lib:RemettreRecettes(remises), "recettes remises")
-assert(select(2, lib:RemettreRecettes("pas une table")) == "pas une table", "remise illisible refusée")
+-- Plus aucune remise par un add-on (#48 : le socle porte la réserve, il ne lit aucune donnée d'un consommateur).
+assert(lib.RemettreRecettes == nil, "plus de remise des recettes")
+local candidates = { [9001] = { profession = "Minage", name = "Barre de cuivre" }, [9002] = { profession = "Travail du cuir" } }
+for id = 10000, 10149 do candidates[id] = { profession = "Minage" } end
+for id, r in pairs(vues) do candidates[id] = r end
 local finis = 0
-assert(lib:ReleverRecettesSansFenetre(metiers, vues, function() finis = finis + 1 end))
+assert(lib:ReleverRecettesSansFenetre(metiers, candidates, function() finis = finis + 1 end))
 local nImages, maxParImage = 1, parImage
 repeat
   parImage = 0
@@ -935,7 +935,7 @@ do
     Destinataire EXPORT_N EXPORT_PAGE_BYTES EstBanque EstSac Exporter Exports Faction Fenetre Fusionner GrilleExport JsonSur
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
-    Souscrire RemettreRecettes Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
+    Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
@@ -1083,12 +1083,18 @@ AzerothCommuneDB.recipes = vuesAvant
 local neuf, char0, run0 = { errors = {}, lots = {} }, ns.char, ns.run
 ns.char, ns.run = function() return neuf end, function(_, fn) fn(neuf) end
 AzerothCommuneDB.recipes[3310] = { profession = "Minage", name = "Fondre le thorium" } -- vue chez un autre perso
+-- La réserve Classic du socle (#48) est interrogée aussi, même pour un objet qu'une recette vue fabrique déjà (9004 : la
+-- barre de fer, comme 3307) : le même relevé que quand Handshake la remettait.
+ns.recettesClassic = { [9001] = { 2840, 1, 1, "Minage", "Fondre le cuivre", { 2770, 1 }, 1 },
+  [9004] = { 3575, 1, 1, "Minage", "Fondre le fer (autre)", { 2772, 1 }, 125 } }
 GetProfessions = function() return 1 end
 GetProfessionInfo = function() return "Minage", "icône", 150, 225 end
-IsPlayerSpell = function(id) return id == 3307 or id == 3310 end
+IsPlayerSpell = function(id) return id == 3307 or id == 3310 or id == 9001 or id == 9004 end
 commerce.fn(commerce, "PLAYER_LOGIN")
+ns.recettesClassic = nil
 local mn = neuf.recipes and neuf.recipes.Minage
 assert(mn and mn.rank == 150 and mn.known[3307] == true and mn.known[3310] and not mn.known[3308], "relevé sans fenêtre sauvegardé")
+assert(mn.known[9001] and mn.known[9004], "relevé sans fenêtre : la réserve du socle interrogée")
 commerce.fn(commerce, "TRADE_SKILL_LIST_UPDATE")
 mn = neuf.recipes.Minage
 assert(mn.known[3307] == "optimal" and mn.rank == 140 and mn.scanned and not mn.known[3308], "la fenêtre prime")

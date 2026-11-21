@@ -42,11 +42,35 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     assertType("function", GetProfessionInfo)
     local lib = AzerothCommune
     local metiers, fini = {}, false
-    -- sans métier, aucune recette candidate (même remises par un add-on) : le relevé finit tout de suite
+    -- sans métier, aucune recette candidate : le relevé finit tout de suite
     local ok = lib:ReleverRecettesSansFenetre(metiers, {}, function() fini = true end)
     assertTrue(ok)
     if next({ GetProfessions() }) == nil then assertTrue(fini) end
-    assertNil(lib:RemettreRecettes(nil))
+    assertNil(lib.RemettreRecettes) -- plus de remise par un add-on (#48)
+end)
+
+-- #48 : la réserve Classic (RecettesClassic.lua, générée, hors du repo : à copier dans un worktree) est chargée par la TOC
+-- du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance.
+test("base des recettes : la réserve du socle chargée, chaque recette avec sa provenance", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("base des recettes"))
+    assertNil(HandshakeClassicRecipes)
+    local data, lot = lib:Lire("base des recettes")
+    assertNotNil(data, "base des recettes vide (RecettesClassic.lua présent ?)")
+    assertType("table", lot)
+    local reserve, vues = 0, 0
+    for _, r in pairs(data) do
+        if r.provenance == "source externe" then
+            reserve = reserve + 1
+            assertType("number", r.output)
+            assertType("string", r.profession)
+            assertType("table", r.reagents)
+        else
+            vues = vues + 1
+        end
+    end
+    assertTrue(reserve > 500, "réserve chargée : " .. reserve .. " recettes")
+    print("base des recettes : " .. vues .. " vue(s), " .. reserve .. " de la réserve")
 end)
 
 test("catalogue : chaque type se lit dans la base, ou pas encore relevé", function()

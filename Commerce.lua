@@ -79,14 +79,6 @@ local function scanTradeSkill(c)
   return releveRecettes(c)
 end
 
--- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par AzerothCommune.lua.
-local function scanKnownRecipes()
-  if not ns.souscrit("recettes connues") then return end
-  local c = ns.char()
-  c.recipes = c.recipes or {}
-  -- ajoute des connues sans rien retirer : relevé partiel, noté une fois fini (il court sur plusieurs images)
-  lib:ReleverRecettesSansFenetre(c.recipes, AzerothCommuneDB.recipes, function() ns.noterLot("recipes", false, c.lots) end)
-end
 
 -- Lu par AzerothCommune:Lire (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
 ns.lire["recettes connues"] = function()
@@ -110,6 +102,19 @@ local function reserveRecettes()
     end
   end
   return reserve
+end
+
+-- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos) et la réserve, toutes interrogées
+-- (même une recette de la réserve dont l'objet a une recette vue), relevées par AzerothCommune.lua.
+local function scanKnownRecipes()
+  if not ns.souscrit("recettes connues") then return end
+  local c = ns.char()
+  c.recipes = c.recipes or {}
+  local candidates = {}
+  for k, r in pairs(reserveRecettes()) do candidates[k] = r end
+  for k, r in pairs(AzerothCommuneDB.recipes) do candidates[k] = r end
+  -- ajoute des connues sans rien retirer : relevé partiel, noté une fois fini (il court sur plusieurs images)
+  lib:ReleverRecettesSansFenetre(c.recipes, candidates, function() ns.noterLot("recipes", false, c.lots) end)
 end
 
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
