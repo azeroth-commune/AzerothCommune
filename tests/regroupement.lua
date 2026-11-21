@@ -6,10 +6,13 @@ test("un seul bouton de minicarte, avec les add-ons présents", function()
     assertEquals(lib.boutonCommun, _G.AzerothCommuneMinimapButton)
     assertTrue(_G.GameDataMinimapButton == nil) -- l'ancien bouton de GameData a disparu
     local noms = {}
-    for _, r in ipairs(lib.regroupes) do noms[r.nom] = true end
-    -- nos quatre add-ons chargés ensemble par tools/sim.sh, chacun une fois
-    for _, nom in ipairs({ "Be a Good Pal", "GameData", "Handshake", "Négoce" }) do assertTrue(noms[nom] or false) end
-    assertEquals(4, #lib.regroupes)
+    for _, r in ipairs(lib.regroupes) do
+        assertNil(noms[r.nom], "regroupé deux fois : " .. r.nom)
+        noms[r.nom] = true
+    end
+    -- nos quatre add-ons chargés ensemble par tools/sim.sh, chacun une fois ; d'autres add-ons de l'atelier (Diagnostic)
+    -- peuvent s'y ajouter selon les racines du simulateur
+    for _, nom in ipairs({ "Be a Good Pal", "GameData", "Handshake", "Négoce" }) do assertTrue(noms[nom] or false, nom) end
 end)
 
 test("une seule entrée Azeroth Commune, une sous-page par add-on", function()

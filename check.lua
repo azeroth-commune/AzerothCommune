@@ -11,11 +11,12 @@ CreateFrame = function()
 end
 C_Timer = { After = function(_, fn) fn() end } -- le relevé différé part tout de suite dans le test
 UnitName = function() return "Belegard", "Marteaudefer" end
-GetRealmName = function() return "Kerys" end
+GetRealmName, GetNormalizedRealmName = nil, nil -- le build 71037 les rend vides : la lib ne s'en sert plus (#35)
 GetBuildInfo = function() return "1.16.1", "64000", "Nov 1 2026", 11601 end
 date = os.date
 -- Un personnage est identifié par son GUID (LibCommune#19) : persos est rangé par GUID.
-local MOI, ALT = "Player-1-0000BE1E", "Player-1-00000A17"
+-- Numéro de serveur 6942, celui de nos quatre personnages en jeu (21/11/2026).
+local MOI, ALT = "Player-6942-0000BE1E", "Player-6942-00000A17"
 UnitGUID = function(u) if u == "player" then return MOI end end
 
 assert(loadfile("LibCommune/LibStub.lua"))()
@@ -24,7 +25,7 @@ assert(loadfile("LibCommune/Fournisseurs.lua"))()
 local lib = LibStub("LibCommune-1.0")
 UnitFactionGroup = function() return "Alliance" end
 -- Sondes (#30), avant tout relevé : chacune « pas encore vue ».
-local IDENTITE = { "royaume", "royaume normalisé", "maison de l'HV", "GUID", "nom", "faction", "build" }
+local IDENTITE = { "royaume", "maison de l'HV", "GUID", "nom", "faction", "build" }
 for _, nom in ipairs({ "emplacements d'un conteneur", "objet d'un conteneur", "recettes", "prix Auctionator",
   "prix TSM", "prix AuctionDB", unpack(IDENTITE) }) do
   assert(lib.Sondes()[nom] and lib.Sondes()[nom].etat == "pas encore vue", "jamais vérifiée : " .. nom)
@@ -64,59 +65,52 @@ d, raison = lib:Souscrire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 print("LibCommune : type inconnu OK")
 
--- Personnage : GUID, adresse « Prénom-Royaume » (royaume normalisé, jamais le nom de famille), nom « Prénom Nom ».
-GetNormalizedRealmName = function() return "CAMWOWEU4Realm8PvP" end
-local R = "CAMWOWEU4Realm8PvP"
-assert(lib.Adresse("Solarin") == "Solarin-" .. R, "sans royaume : le nôtre")
-assert(lib.Adresse("Solarin Ydenah") == "Solarin-" .. R, "nom de famille (GetUnitName(true) sur Forever) : pas un royaume")
-assert(lib.Adresse("Belegard Marteaudefer-" .. R) == "Belegard-" .. R, "nom de famille et royaume")
-assert(lib.Adresse("Bob-AutreRoyaume") == "Bob-AutreRoyaume", "avec royaume")
-assert(lib.Adresse("Riwanon", "Kerys des Bois") == "Riwanon-KerysdesBois" and lib.Adresse("Bob", "CAMWOW EU4 Realm 8 PvP") == "Bob-" .. R,
-  "prénom et royaume brut : normalisé")
-assert(lib.Adresse("Bob|cff") == nil and lib.Adresse("") == nil and lib.Adresse(nil) == nil, "nom piégé ou vide : nil")
-assert(lib.Destinataire("Bob-" .. R) == "Bob" and lib.Destinataire("Bob") == "Bob", "chuchotement sur notre royaume : prénom seul")
-assert(lib.Destinataire("Bob-AutreRoyaume") == "Bob-AutreRoyaume" and lib.Destinataire("Bob|cff") == "Bob|cff", "autre royaume ; illisible tel quel")
+-- Personnage : GUID et nom « Prénom Nom », plus d'adresse (#35 : le jeu ne donne plus le royaume). Un chuchotement part
+-- vers « Prénom Nom », la forme que le serveur accepte (au prénom seul : « Aucun joueur nommé 'Belegard' », 21/11/2026).
+assert(lib.Destinataire("Belegard Marteaudefer") == "Belegard Marteaudefer", "chuchotement : le nom complet")
+assert(lib.Destinataire("Belegard Marteaudefer-CAMWOWEU4Realm8PvP") == "Belegard Marteaudefer",
+  "« -Royaume » retiré : Forever le lit comme un nom de famille")
+assert(lib.Destinataire("Bob|cff") == "Bob|cff" and lib.Destinataire(nil) == nil, "illisible : tel quel")
 local moiP = lib.Personnage()
-assert(moiP.guid == MOI and moiP.adresse == "Belegard-" .. R and moiP.nom == "Belegard Marteaudefer", "personnage connecté")
+assert(moiP.guid == MOI and moiP.nom == "Belegard Marteaudefer" and moiP.adresse == nil, "personnage connecté : GUID et nom")
 assert(lib.Personnage(MOI).nom == "Belegard Marteaudefer", "par son GUID")
 local gdAvant = GameDataAPI
 GameDataAPI = nil
 assert(lib.Personnage(ALT) == nil, "autre GUID sans GameData : inconnu")
-GameDataAPI = { personnage = function(g) if g == ALT then return { guid = ALT, adresse = "Alt-" .. R, nom = "Alt Dupont" } end end }
-assert(lib.Personnage(ALT).nom == "Alt Dupont" and lib.Personnage("Player-1-0000DEAD") == nil, "un personnage du joueur : la fiche de GameData")
+GameDataAPI = { personnage = function(g) if g == ALT then return { guid = ALT, nom = "Alt Dupont" } end end }
+assert(lib.Personnage(ALT).nom == "Alt Dupont" and lib.Personnage("Player-6942-0000DEAD") == nil, "un personnage du joueur : la fiche de GameData")
 GameDataAPI = gdAvant
 print("LibCommune : personnage OK")
 
--- Sondes (#30) : le build 71037 rend un royaume vide sans erreur. La sonde est rouge, avec la valeur reçue et le build ;
--- un seul avertissement par session ; la valeur rendue ne change pas (pas de refus, pas de secours).
+-- Royaume (#35) : le numéro de serveur du GUID du personnage, « 6942 » ; maison de l'HV « 6942-Alliance ». Rien n'est
+-- deviné : GetRealmName et GetNormalizedRealmName (vides depuis le build 71037) ne sont plus appelés.
+assert(lib.Royaume() == "6942" and lib.Sondes().royaume.etat == "vert", "royaume : le numéro de serveur du GUID")
+assert(lib.MaisonHV() == "6942-Alliance" and lib.Sondes()["maison de l'HV"].etat == "vert", "maison de l'HV")
+assert(lib.RoyaumeNormalise == nil and lib.Sondes()["royaume normalisé"] == nil, "plus de royaume normalisé")
+-- Sondes (#30) : un GUID au numéro 0 (ou pas de GUID) est une réponse inattendue. La sonde est rouge, avec la valeur
+-- reçue et le build ; un seul avertissement par session ; la valeur rendue ne change pas (pas de refus, pas de secours).
 local dits, vraiPrint = {}, print
 print = function(m) dits[#dits + 1] = m end
 local buildAvant = GetBuildInfo
 GetBuildInfo = function() return "1.16.1", "71037", "Nov 21 2026", 11601 end
 lib.buildLu = nil -- une mise à jour du jeu : le build de la session est relu
-GetNormalizedRealmName = function() return "" end
-local s = lib.Sondes()["royaume normalisé"]
-assert(s.etat == "vert" and s.valeur == R, "avant : verte, " .. tostring(s.valeur))
-assert(lib.RoyaumeNormalise() == "", "valeur rendue inchangée : vide")
-s = lib.Sondes()["royaume normalisé"]
-assert(s.etat == "rouge" and s.valeur == "" and s.build == "71037" and s.heure:match("^%d%d:%d%d:%d%d$"), "rouge, valeur et build")
-assert(lib.Adresse("Bob") == nil, "adresse sans royaume : rien d'inventé")
-assert(#dits == 1 and dits[1]:find("^Azeroth Commune : ") and dits[1]:find("royaume normalisé", 1, true) and dits[1]:find("71037"),
+UnitGUID = function(u) if u == "player" then return "Player-0-0000BE1E" end end
+assert(lib.Royaume() == "0", "valeur rendue inchangée : 0")
+local s = lib.Sondes().royaume
+assert(s.etat == "rouge" and s.valeur == "0" and s.build == "71037" and s.heure:match("^%d%d:%d%d:%d%d$"), "rouge, valeur et build")
+assert(#dits == 1 and dits[1]:find("^Azeroth Commune : ") and dits[1]:find("royaume", 1, true) and dits[1]:find("71037"),
   "un avertissement qui nomme la sonde et le build : " .. tostring(dits[1]))
-lib.RoyaumeNormalise()
+lib.Royaume()
 assert(#dits == 1, "deux relevés de suite : un seul avertissement")
-GetNormalizedRealmName = function() return R end
-assert(lib.RoyaumeNormalise() == R and lib.Sondes()["royaume normalisé"].etat == "vert", "le royaume revient : verte")
--- Royaume affiché, normalisé et maison de l'HV : rendus par la lib, sondés ; la clé de l'HV reste celle des scans.
-GetRealmName = function() return "CAMWOW EU4 Realm 8 PvP" end
-assert(lib.Royaume() == "CAMWOW EU4 Realm 8 PvP" and lib.Sondes().royaume.etat == "vert", "royaume affiché")
-assert(lib.MaisonHV() == "CAMWOW EU4 Realm 8 PvP-Alliance" and lib.Sondes()["maison de l'HV"].etat == "vert", "maison de l'HV")
+assert(lib.MaisonHV() == "0-Alliance" and lib.Sondes()["maison de l'HV"].etat == "rouge", "maison au numéro 0 : telle quelle, rouge")
+UnitGUID = function() return nil end
+assert(lib.Royaume() == nil and lib.Sondes().royaume.etat == "rouge", "sans GUID : pas de royaume, rouge")
+assert(lib.MaisonHV() == nil, "sans royaume : pas de maison")
+UnitGUID = function(u) if u == "player" then return MOI end end
+assert(lib.Royaume() == "6942" and lib.Sondes().royaume.etat == "vert", "le GUID revient : verte")
 assert(lib.Faction() == "Alliance" and lib.Build() == 71037 and lib.Personnage().guid == MOI, "faction, build, GUID")
 for _, nom in ipairs({ "faction", "build", "GUID", "nom" }) do assert(lib.Sondes()[nom].etat == "vert", "verte : " .. nom) end
 assert(lib.Sondes().nom.valeur[1] == "Belegard" and lib.Sondes().nom.valeur[2] == "Marteaudefer", "nom : les deux retours gardés")
-GetRealmName = function() return "" end
-assert(lib.MaisonHV() == "-Alliance", "royaume vide : la clé telle que le jeu la donne, pas de secours")
-assert(lib.Sondes().royaume.etat == "rouge" and lib.Sondes()["maison de l'HV"].etat == "rouge", "royaume et maison rouges")
 UnitFactionGroup = function() return nil end
 assert(lib.MaisonHV() == nil and lib.Sondes().faction.etat == "rouge", "faction inconnue : pas de maison, faction rouge")
 UnitFactionGroup = function() return "Alliance" end
@@ -124,10 +118,9 @@ UnitName = function() return "Belegard" end
 assert(lib.Personnage().nom == "Belegard" and lib.Sondes().nom.etat == "rouge", "sans nom de famille : rouge, nom inchangé")
 UnitName = function() return "Belegard", "Marteaudefer" end
 -- Relancer : les relevés sans contexte refaits, sans rien rendre de plus à l'appelant que l'état des sondes.
-GetRealmName = function() return "Kerys" end
 local etat = lib.RelancerSondes()
 for _, nom in ipairs(IDENTITE) do assert(etat[nom].etat == "vert", "relancée verte : " .. nom .. " " .. tostring(etat[nom].valeur)) end
-assert(#dits == 5, "un avertissement par sonde rouge (royaume normalisé, royaume, maison, faction, nom) : " .. #dits)
+assert(#dits == 4, "un avertissement par sonde rouge (royaume, maison, faction, nom) : " .. #dits)
 print = vraiPrint
 GetBuildInfo = buildAvant
 lib.buildLu = nil
@@ -352,10 +345,10 @@ assert(lotHV.fournisseur == "Auctionator" and lotHV.champs.qty == "AuctionDB" an
 local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19 10:00:00" }
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
   hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
-GameDataAPI = { coursHV = function() return { hv = { ["Kerys-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end }
+GameDataAPI = { coursHV = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end }
 lib.sondes["maison de l'HV"].valeur = nil
 hv, lotHV = lib:Lire("cours de l'HV")
-assert(lib.Sondes()["maison de l'HV"].valeur == "Kerys-Alliance", "la maison de l'HV des fournisseurs : celle de la lib, sondée")
+assert(lib.Sondes()["maison de l'HV"].valeur == "6942-Alliance", "la maison de l'HV des fournisseurs : celle de la lib, sondée")
 cuivre = hv.objet(2772)
 assert(cuivre.min == 100 and cuivre.qty == 5 and cuivre.auctions == 1 and cuivre.tiers[1].price == 100, "le scan de GameData fait foi")
 assert(cuivre.sources.min == "GameData" and cuivre.sources.qty == "GameData" and cuivre.hist[1][1] == T and cuivre.sources.hist == "AuctionDB", "historique d'AuctionDB frais")
@@ -363,7 +356,7 @@ retire = hv.objet(2841)
 assert(retire.min == nil and retire.qty == 0 and retire.sources.qty == "GameData" and #retire.hist == 1, "absent du scan de GameData : plus en vente")
 assert(lotHV.provenance == "relevé direct" and lotHV.build == 64000 and lotHV.fournisseur == nil and lotHV.releve == lotGD, "lot : relevé direct")
 assert(lotHV.champs.min == "GameData" and lotHV.champs.qty == "GameData" and lotHV.champs.hist == "AuctionDB" and lotHV.fragile, "d'où vient chaque champ")
-assert(hv.depot.rate24 == 0.3 and hv.hv["Kerys-Alliance"], "dépôt et relevé de GameData")
+assert(hv.depot.rate24 == 0.3 and hv.hv["6942-Alliance"], "dépôt et relevé de GameData")
 assert(lotHV.scan.time == T and lotHV.scan.scanned == "2026-11-19 10:00:00" and lotHV.scan.items == nil, "lot : le dernier scan de ton HV (#13)")
 -- AuctionDB plus frais (7 h) : son historique reste le bon (des jours de points ; GameData vient peut-être de recommencer
 -- le sien, un seul point) ; celui de GameData seulement pour un objet qu'AuctionDB n'a pas. (Relecture de Negoce#1 : avec
@@ -377,7 +370,7 @@ marche.hist[2772] = nil
 assert(lotHV.champs.hist == "AuctionDB", "lot : historique d'AuctionDB")
 -- GameData sans scan de cet HV : les fournisseurs seuls.
 marche = nil
-GameDataAPI.coursHV = function() return { hv = { ["Kerys-Horde"] = {} } }, lotGD end
+GameDataAPI.coursHV = function() return { hv = { ["6942-Horde"] = {} } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator" and lotHV.scan == nil, "pas de scan de cet HV : fournisseurs")
 -- HV neutre ou faction inconnue : rien ne plante.
@@ -387,7 +380,7 @@ assert(pcall(lib.Lire, lib, "cours de l'HV") and pcall(lib.ChampsARelever, lib, 
 UnitFactionGroup = faction
 -- Sans fournisseur, avec GameData : son relevé ; rien de relevé : « pas encore relevé ».
 Auctionator, AuctionDBForeverSaved = nil, nil
-GameDataAPI.coursHV = function() return { hv = { ["Kerys-Alliance"] = { items = { [2841] = { min = 500, qty = 4 } } } } }, lotGD end
+GameDataAPI.coursHV = function() return { hv = { ["6942-Alliance"] = { items = { [2841] = { min = 500, qty = 4 } } } } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2841).min == 500 and lotHV.provenance == "relevé direct" and lotHV.champs.min == "GameData", "GameData seul")
 reste = lib:ChampsARelever("cours de l'HV")
@@ -434,7 +427,7 @@ copie(mineure - 1, "ancienne") -- chargée après, mais plus vieille : ignorée
 local servie, m = LibStub("LibCommune-1.0")
 assert(servie == lib and m == mineure + 1 and servie.marque == "récente", "la plus récente sert : " .. tostring(servie.marque))
 assert(servie:Lire("recettes connues").persos[MOI].Minage.known[3307], "le relevé de repli survit à la mise à niveau")
-assert(servie.Sondes().royaume.etat == "vert" and servie.Sondes().royaume.valeur == "Kerys", "les sondes de la session survivent aussi")
+assert(servie.Sondes().royaume.etat == "vert" and servie.Sondes().royaume.valeur == "6942", "les sondes de la session survivent aussi")
 assert(servie.Sondes()["prix AuctionDB"] and servie.Sondes()[#servie.Sondes()].nom == "prix AuctionDB",
   "les sondes des autres fichiers (pas rechargés) restent déclarées, à leur place")
 local noms = {}
