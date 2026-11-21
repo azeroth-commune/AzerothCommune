@@ -19,7 +19,8 @@
 --   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
 -- Personnage : lib.Personnage(guid) = { guid, adresse, nom } ; lib.Adresse(nom, royaume), lib.Destinataire(nom).
-local MAJOR, MINOR = "LibCommune-1.0", 8
+-- Prix d'achat : lib:PrixAchat(id, qty, hv, marchands), lib:PrixMarchands() (en fin de fichier).
+local MAJOR, MINOR = "LibCommune-1.0", 9
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -404,4 +405,48 @@ function lib:Lire(typeDeDonnees, personnage)
   end
   if not next(d.persos) and not next(d.recettes or {}) then return nil, "pas encore relevé" end
   return d, lot
+end
+
+-- Prix d'achat (langage commun de l'atelier) : ce que coûtent qty objets, au moins cher entre les marchands et l'HV.
+--   lib:PrixMarchands()                 : { [itemID] = prix unitaire } du marchand le moins cher, en stock illimité et
+--                                         payé en or (lu une fois par calcul : la liste des marchands est refaite à chaque lecture).
+--   lib:PrixAchat(id, qty, hv, marchands) : coût, source (« marchand » ou « HV »), partiel (l'HV n'en a pas assez : le
+--                                         reste au dernier prix vu) ; nil si ni marchand ni HV. hv : table [itemID] -> ligne
+--                                         des cours de l'HV (lue ici s'il manque) ; marchands : lib:PrixMarchands().
+-- À l'HV : palier par palier au dernier scan, sinon le prix le plus bas d'un fournisseur sans paliers (Auctionator).
+function lib:PrixMarchands()
+  local best = {}
+  for _, v in pairs((self:Lire("marchands")) or {}) do
+    for _, it in ipairs(v.items or {}) do
+      if it.id and it.price and it.price > 0 and not it.limited and not it.cost_items then
+        local unit = it.price / math.max(1, it.stack or 1)
+        if not best[it.id] or unit < best[it.id] then best[it.id] = unit end
+      end
+    end
+  end
+  return best
+end
+
+function lib:PrixAchat(id, qty, hv, marchands)
+  local v = (marchands or self:PrixMarchands())[id]
+  local m
+  if hv then m = hv[id]
+  else local d = self:Lire("cours de l'HV"); m = d and d.objet(id) end
+  local ah, partiel
+  if m and not m.tiers and m.min then
+    ah, partiel = m.min * qty, m.qty ~= nil and m.qty < qty
+  elseif m and m.tiers and #m.tiers > 0 then
+    ah, partiel = 0, false
+    local reste = qty
+    for _, t in ipairs(m.tiers) do
+      local pris = math.min(reste, t.qty)
+      ah, reste = ah + pris * t.price, reste - pris
+      if reste <= 0 then break end
+    end
+    if reste > 0 then -- plus que les paliers gardés : le reste au prix du dernier palier
+      ah, partiel = ah + reste * m.tiers[#m.tiers].price, (m.qty or 0) < qty
+    end
+  end
+  if v and (not ah or v * qty <= ah) then return v * qty, "marchand" end
+  if ah then return ah, "HV", partiel end
 end

@@ -707,3 +707,35 @@ etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
 assert(ouverts[1] == "seul" and #etat.menus == 0, "seul avec des outils : le clic l'ouvre")
 NegoceLedgerFrame = nil
 print("LibCommune : outils et exports des add-ons regroupés OK")
+
+-- Prix d'achat (Negoce#14, LibCommune#27) : le moins cher entre marchand et HV, palier par palier ; règle reprise de Handshake.
+local hvTest = {
+  [3575] = { tiers = { { price = 300, qty = 10 }, { price = 310, qty = 30 } }, qty = 40 }, -- barres : deux paliers
+  [2772] = { tiers = { { price = 100, qty = 5 } }, qty = 5 },                             -- minerai : pas assez
+  [2880] = { min = 500, qty = 50 },                                                       -- fournisseur sans paliers
+  [2770] = { min = 20 },                                                                  -- sans quantité connue
+}
+local marchandsTest = { [2880] = 100 }
+local c, src, partiel = lib:PrixAchat(3575, 20, hvTest, marchandsTest)
+assert(c == 10 * 300 + 10 * 310 and src == "HV" and partiel == false, "palier par palier : " .. tostring(c))
+c, src, partiel = lib:PrixAchat(2772, 8, hvTest, marchandsTest)
+assert(c == 8 * 100 and src == "HV" and partiel == true, "pas assez à l'HV : reste au dernier palier, partiel")
+c, src = lib:PrixAchat(2880, 2, hvTest, marchandsTest)
+assert(c == 200 and src == "marchand", "marchand moins cher que l'HV")
+c, src, partiel = lib:PrixAchat(2770, 7, hvTest, marchandsTest)
+assert(c == 140 and src == "HV" and partiel == false, "fournisseur sans paliers ni quantité : son prix pour tout")
+assert(lib:PrixAchat(1, 3, hvTest, marchandsTest) == nil, "ni marchand ni HV : rien")
+assert(lib:PrixAchat(9, 1, { [9] = { tiers = {} } }, {}) == nil, "paliers vides : rien, sans erreur")
+-- Marchands lus par la lib : le moins cher à l'unité, hors stock limité et monnaies spéciales.
+GameDataAPI = { marchands = function() return {
+  [1] = { items = { { id = 2880, price = 600, stack = 5 }, { id = 159, price = 25 } } },
+  [2] = { items = { { id = 2880, price = 100, limited = true }, { id = 159, price = 30 }, { id = 17, price = 10, cost_items = { 1 } } } },
+} end }
+local pm = lib:PrixMarchands()
+assert(pm[2880] == 120 and pm[159] == 25 and pm[17] == nil, "prix marchands à l'unité")
+-- Sans hv ni marchands passés : la lib lit elle-même (ici sans GameData, par Auctionator).
+GameDataAPI = nil
+Auctionator = fausseAPI()
+c, src = lib:PrixAchat(2772, 3)
+assert(c == 3 * 95 and src == "HV", "lu par la lib : " .. tostring(c))
+print("LibCommune : prix d'achat OK")
