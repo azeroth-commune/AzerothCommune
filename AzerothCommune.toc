@@ -11,6 +11,7 @@ Capture.lua
 Regroupement.lua
 Fournisseurs.lua
 Base.lua
+RecettesClassic.lua
 Commerce.lua
 Souscriptions.lua
 VendorData.lua

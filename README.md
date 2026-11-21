@@ -22,6 +22,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (données cMaNGOS GPL-3.0) : hors du repo, ignoré par git |
+| `RecettesClassic.lua` | la réserve Classic de la base des recettes, privée au socle : générée par `tools/build_recipe_data.py` de l'atelier (données cMaNGOS GPL-3.0), hors du repo, ignorée par git ; sans elle, la base des recettes rend les seules recettes vues |
 
 ## Accès aux données relevées
 
@@ -32,8 +33,14 @@ local d, raison = AC:Lire("recettes connues", "tous") -- nil = personnage connec
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
 --       persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
 -- raison : « type inconnu », « pas encore relevé » ; Souscrire avant le chargement du socle : nil, « socle pas chargé »
-AC:RemettreRecettes(mesRecettes)                   -- à ton chargement : tes recettes livrées ({ [ID du sort] = { profession, … } }),
-                                                   -- candidates du relevé des recettes connues sans fenêtre de métier
+AC:Souscrire("base des recettes")                  -- tout ce que fabrique une recette, connue ou non
+local b, lot = AC:Lire("base des recettes")
+-- b = { [clé] = { profession, name, output, reagents, made_min, made_max, level, provenance } } : les recettes vues sur
+-- tous les persos (relevé direct), puis la réserve Classic du socle (provenance « source externe ») pour les objets
+-- qu'aucune recette vue ne fabrique ; level = compétence requise (de la réserve). lot.provenance : « relevé direct » dès
+-- qu'une recette est vue. Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
+-- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet
+-- rien au socle. Une recette vue n'a pas de champ provenance (relevé direct, comme une ligne de tête de lib.Fusionner).
 AC.Conteneurs(AC.EstSac)                           -- sacs lus à l'instant : { [nom] = { size, items = { { id, count, link } } } }
 local d, lot = AC:Lire("marchands")
 -- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [GUID] = lot } }
@@ -56,7 +63,7 @@ AC:PrixMarchands()                                  -- { [itemID] = prix unitair
 ```
 
 Types de données (`AC.types`) : inventaires, réputations, métiers et compétences, quêtes terminées, recettes connues
-(par personnage) ; maîtres de métier, marchands, prix des vols, add-ons installés, cours de l'HV, objets (pour le joueur).
+(par personnage) ; base des recettes, maîtres de métier, marchands, prix des vols, add-ons installés, cours de l'HV, objets (pour le joueur).
 
 ### Personnage
 

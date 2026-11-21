@@ -60,7 +60,8 @@ local function saveProfession(c, prof, rank, max, known)
   return releveRecettes(c)
 end
 
--- Rend false si rien n'a été relevé, sinon le 2e retour de ns.run.
+-- Rend false si rien n'a été relevé, sinon le 2e retour de ns.run. Sans fiche c (base des recettes souscrite seule) : les
+-- recettes vues seulement.
 local function scanTradeSkill(c)
   local r, why, prof = lib:ReleverRecettes()
   if why == "liste pas à jour" then ns.retryTrade() return false end
@@ -71,19 +72,11 @@ local function scanTradeSkill(c)
   if not r then return false end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
   for id, rec in pairs(r.recettes) do AzerothCommuneDB.recipes[id] = rec end
   AzerothCommuneDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
+  if not c then return false end
   c.recipes = c.recipes or {}
   local m = lib:RangerRecettes(c.recipes, r) -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
   m.scanned, m.build = ns.now(), ns.build()
   return releveRecettes(c)
-end
-
--- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par AzerothCommune.lua.
-local function scanKnownRecipes()
-  if not ns.souscrit("recettes connues") then return end
-  local c = ns.char()
-  c.recipes = c.recipes or {}
-  -- ajoute des connues sans rien retirer : relevé partiel, noté une fois fini (il court sur plusieurs images)
-  lib:ReleverRecettesSansFenetre(c.recipes, AzerothCommuneDB.recipes, function() ns.noterLot("recipes", false, c.lots) end)
 end
 
 -- Lu par AzerothCommune:Lire (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
@@ -91,6 +84,58 @@ ns.lire["recettes connues"] = function()
   local persos, lots = {}, {}
   for k, c in pairs(AzerothCommuneDB.chars) do persos[k], lots[k] = c.recipes, c.recipes and c.lots and c.lots.recipes end
   return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
+end
+
+-- La réserve Classic : RecettesClassic.lua, généré par tools/build_recipe_data.py de l'atelier (base cMaNGOS Classic
+-- 1.12, GPL-3.0), hors du repo tant que la licence n'est pas choisie : absent d'un repo cloné tel quel. Mise en forme une
+-- fois dans la forme des recettes vues, chaque ligne marquée « source externe ».
+local reserve, brute
+local function reserveRecettes()
+  if reserve == nil or brute ~= ns.recettesClassic then
+    brute, reserve = ns.recettesClassic, {}
+    for k, c in pairs(brute or {}) do -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence }
+      local reagents = {}
+      for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
+      reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
+        level = c[7], provenance = "source externe" }
+    end
+  end
+  return reserve
+end
+
+-- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos) et la réserve, toutes interrogées
+-- (même une recette de la réserve dont l'objet a une recette vue), relevées par AzerothCommune.lua.
+local function scanKnownRecipes()
+  if not ns.souscrit("recettes connues") then return end
+  local c = ns.char()
+  c.recipes = c.recipes or {}
+  local candidates = {}
+  for k, r in pairs(reserveRecettes()) do candidates[k] = r end
+  for k, r in pairs(AzerothCommuneDB.recipes) do candidates[k] = r end
+  -- ajoute des connues sans rien retirer : relevé partiel, noté une fois fini (il court sur plusieurs images)
+  lib:ReleverRecettesSansFenetre(c.recipes, candidates, function() ns.noterLot("recipes", false, c.lots) end)
+end
+
+-- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
+-- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence requise (la fenêtre de
+-- métier ne la donne pas), sur une copie. Lot : relevé direct dès qu'une recette est vue ; la réserve seule, comme
+-- VendorData : source externe, build inconnu donc peut-être périmé.
+ns.lire["base des recettes"] = function()
+  local vues, res, d, fait = AzerothCommuneDB.recipes or {}, reserveRecettes(), {}, {}
+  for k, r in pairs(vues) do
+    local c = res[k]
+    if c and r.level == nil then
+      local copie = { level = c.level }
+      for f, v in pairs(r) do copie[f] = v end
+      r = copie
+    end
+    d[k] = r
+    if r.output then fait[r.output] = true end
+  end
+  for k, r in pairs(res) do
+    if d[k] == nil and not fait[r.output] then d[k] = r end
+  end
+  return d, next(vues) and { provenance = "relevé direct" } or { provenance = "source externe", perime = true }
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore
@@ -310,7 +355,12 @@ local function queueTrade()
   tradeToken = tradeToken + 1
   local mine = tradeToken
   C_Timer.After(0.5, function()
-    if mine == tradeToken then ns.run("recipes", function(c) local releve = scanTradeSkill(c); return c.recipes, releve end) end
+    if mine ~= tradeToken then return end
+    if ns.souscrit("recettes connues") then
+      ns.run("recipes", function(c) local releve = scanTradeSkill(c); return c.recipes, releve end)
+    elseif ns.souscrit("base des recettes") then -- les recettes vues seules, pas les connues du perso
+      safe("recipes_base", scanTradeSkill)
+    end
   end)
 end
 function ns.retryTrade() -- liste pas encore à jour : jusqu'à 4 nouveaux essais
@@ -326,7 +376,8 @@ for _, e in ipairs({ "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDAT
 end
 
 -- Le type de données que relève chaque fenêtre : rien n'est lu sans souscription à ce type (Souscriptions.lua). Les recettes
--- passent par ns.run, qui vérifie lui-même.
+-- passent par queueTrade (recettes connues, ou base des recettes seule) et ns.run, qui vérifient eux-mêmes.
+-- ponytail: la fenêtre « Craft » de vanilla (scanCraft) ne relève que sous « recettes connues » ; Forever ne l'a plus.
 local TYPE_DE = { TRAINER_SHOW = "maîtres de métier", TRAINER_UPDATE = "maîtres de métier", MERCHANT_SHOW = "marchands",
   MERCHANT_UPDATE = "marchands", TAXIMAP_OPENED = "prix des vols", AUCTION_HOUSE_SHOW = "cours de l'HV",
   REPLICATE_ITEM_LIST_UPDATE = "cours de l'HV" }
