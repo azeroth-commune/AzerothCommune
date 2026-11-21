@@ -79,9 +79,9 @@ function ns.verifierFiche(c)
 end
 
 ---------------------------------------------------------------------------------------------------
--- Accesseurs privés lus par AzerothCommune:Lire (le nom de chacun est dans le catalogue, champ gamedata) : les données et leur lot. Par
--- perso : persos[perso] = le champ s'il est seul, sinon { champ = … }, et lots.persos[perso] = le lot le moins frais de
--- ses champs (un peut-être périmé d'abord, sinon le plus ancien) ; recettesConnues est dans Commerce.lua.
+-- Accesseurs privés lus par AzerothCommune:Lire, ns.lire[type] : les données et leur lot. Par perso : persos[perso] = le
+-- champ s'il est seul, sinon { champ = … }, et lots.persos[perso] = le lot le moins frais de ses champs (un peut-être
+-- périmé d'abord, sinon le plus ancien) ; « recettes connues » est dans Commerce.lua.
 local function moinsFrais(a, b)
   if not a or not b then return a or b end
   if not a.perime ~= not b.perime then return a.perime and a or b end
@@ -99,17 +99,17 @@ local function parPerso(nom)
   end
   return { persos = persos }, { persos = lots }
 end
-function ns.inventaires() return parPerso("inventaires") end
-function ns.reputations() return parPerso("réputations") end
-function ns.metiersEtCompetences() return parPerso("métiers et compétences") end
-function ns.quetesTerminees() return parPerso("quêtes terminées") end
-function ns.maitresDeMetier() return AzerothCommuneDB.trainers, AzerothCommuneDB.lots["maîtres de métier"] end
-function ns.prixDesVols() return AzerothCommuneDB.taxi, AzerothCommuneDB.lots["prix des vols"] end
-function ns.addonsInstalles() return AzerothCommuneDB.addons, AzerothCommuneDB.lots["add-ons installés"] end
-function ns.coursHV()
+local lire = ns.lire
+for _, nom in ipairs({ "inventaires", "réputations", "métiers et compétences", "quêtes terminées" }) do
+  lire[nom] = function() return parPerso(nom) end
+end
+lire["maîtres de métier"] = function() return AzerothCommuneDB.trainers, AzerothCommuneDB.lots["maîtres de métier"] end
+lire["prix des vols"] = function() return AzerothCommuneDB.taxi, AzerothCommuneDB.lots["prix des vols"] end
+lire["add-ons installés"] = function() return AzerothCommuneDB.addons, AzerothCommuneDB.lots["add-ons installés"] end
+lire["cours de l'HV"] = function()
   if next(AzerothCommuneMarket) then return { hv = AzerothCommuneMarket, depot = AzerothCommuneDB.deposit }, AzerothCommuneDB.lots["cours de l'HV"] end
 end
-function ns.objets() return AzerothCommuneItems.items, AzerothCommuneDB.lots.objets end
+lire.objets = function() return AzerothCommuneItems.items, AzerothCommuneDB.lots.objets end
 -- Lu par AzerothCommune.Personnage(guid) : le nom d'un perso du joueur, gardé dans sa fiche à chaque connexion.
 function ns.personnage(guid)
   local c = AzerothCommuneDB and AzerothCommuneDB.chars[guid]
@@ -139,7 +139,7 @@ local function vendorDataParPNJ()
   end
   return parPNJ
 end
-function ns.marchands()
+function lire.marchands()
   local d, provenance = lib.Fusionner({ { donnees = AzerothCommuneDB.vendors, provenance = "relevé direct" },
     { donnees = vendorDataParPNJ(), provenance = "source externe" } })
   if provenance == "relevé direct" then return d, AzerothCommuneDB.lots.marchands end

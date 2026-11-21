@@ -79,7 +79,7 @@ test("provenance : chaque type lu rend son lot, au build du client simulé", fun
     end
 end)
 
-test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé de repli des inventaires)", function()
+test("sacs lus à l'instant : l'API des conteneurs de Forever est là", function()
     local lib = AzerothCommune
     assertType("table", Enum.BagIndex)
     assertType("function", lib.Conteneurs)

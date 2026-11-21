@@ -61,14 +61,16 @@ local MOI, ALT = "Player-6942-0000BE1E", "Player-6942-00000A17"
 UnitGUID = function(u) if u == "player" then return MOI end end
 
 -- L'espace de noms privé de l'add-on (le 2e argument que le jeu passe à chaque fichier). Dans cette partie, la base n'est
--- pas chargée : gamedata(t) y pose de faux accesseurs (nil : aucun, le relevé de repli).
+-- pas chargée : fausseBase(lire, personnage) y pose ses accesseurs privés, ns.lire[type] (ceux de lire ; les autres ne
+-- rendent rien : rien de relevé) et ns.personnage.
 local ns = {}
 local function charger(f) assert(loadfile("AzerothCommune/" .. f .. ".lua"))("AzerothCommune", ns) end
-local function gamedata(t)
-  for k in pairs(ns) do ns[k] = nil end
-  for k, v in pairs(t or {}) do ns[k] = v end
+local function fausseBase(lire, personnage)
+  ns.lire = setmetatable(lire or {}, { __index = function() return noop end })
+  ns.personnage = personnage or noop
 end
 charger("AzerothCommune")
+local cadre = cadres[#cadres] -- celui d'AzerothCommune.lua : connexion, fin du combat
 charger("Fournisseurs")
 local lib = AzerothCommune
 UnitFactionGroup = function() return "Alliance" end
@@ -79,7 +81,7 @@ for _, nom in ipairs({ "emplacements d'un conteneur", "objet d'un conteneur", "r
   assert(lib.Sondes()[nom] and lib.Sondes()[nom].etat == "pas encore vue", "jamais vérifiée : " .. nom)
 end
 
--- Base présente : AC:Lire passe par son accesseur privé ns.recettesConnues, recettes connues de tous les personnages.
+-- AC:Lire passe par l'accesseur privé de la base (ns.lire["recettes connues"]), recettes connues de tous les personnages.
 local base = {
   recettes = { [3307] = { profession = "Minage", name = "Fondre le fer", output = 3575 },
     [2662] = { profession = "Forge", name = "Cuirasse en cuivre", output = 2852 } },
@@ -88,7 +90,7 @@ local base = {
     [ALT] = { Forge = { rank = 50, max = 75, known = { [2662] = "easy" } } },
   },
 }
-gamedata({ recettesConnues = function() return base end })
+fausseBase({ ["recettes connues"] = function() return base end })
 local tous = assert(lib:Lire("recettes connues", "tous"))
 assert(tous.persos[MOI].Minage.known[3307] and tous.persos[ALT].Forge.known[2662], "tous les personnages")
 assert(tous.recettes[2662].output == 2852, "et les recettes vues")
@@ -99,12 +101,12 @@ assert(alt.persos[ALT].Forge.rank == 50 and not alt.persos[MOI], "un personnage 
 local d, raison = lib:Lire("recettes connues", "Player-1-0000DEAD")
 assert(d == nil and raison == "pas encore relevé", "personnage jamais connecté : " .. tostring(raison))
 local seules = { recettes = base.recettes, persos = {} } -- recettes vues, aucun perso relevé (perso supprimé…)
-ns.recettesConnues = function() return seules end
+ns.lire["recettes connues"] = function() return seules end
 assert(lib:Lire("recettes connues", "tous").recettes[3307], "« tous » rend les recettes vues même sans perso")
-ns.recettesConnues = function() return { recettes = {}, persos = {} } end
+ns.lire["recettes connues"] = function() return { recettes = {}, persos = {} } end
 d, raison = lib:Lire("recettes connues", "tous")
 assert(d == nil and raison == "pas encore relevé", "base vide : " .. tostring(raison))
-print("Azeroth Commune : base présente OK")
+print("Azeroth Commune : lecture par l'accesseur de la base OK")
 
 -- Type absent du catalogue : indisponible, avec sa raison.
 d, raison = lib:Lire("cours de la bourse")
@@ -123,12 +125,10 @@ local moiP = lib.Personnage()
 assert(moiP.guid == MOI and moiP.nom == "Belegard Marteaudefer" and moiP.adresse == nil, "personnage connecté : GUID et nom")
 assert(lib.Adresse == nil, "plus d'adresse « Prénom-Royaume » (dernier appelant parti avec Handshake#29)")
 assert(lib.Personnage(MOI).nom == "Belegard Marteaudefer", "par son GUID")
-local gdAvant = ns.recettesConnues
-gamedata()
-assert(lib.Personnage(ALT) == nil, "autre GUID sans la base : inconnu")
-gamedata({ personnage = function(g) if g == ALT then return { guid = ALT, nom = "Alt Dupont" } end end })
+assert(lib.Personnage(ALT) == nil, "autre GUID sans fiche dans la base : inconnu")
+fausseBase(nil, function(g) if g == ALT then return { guid = ALT, nom = "Alt Dupont" } end end)
 assert(lib.Personnage(ALT).nom == "Alt Dupont" and lib.Personnage("Player-6942-0000DEAD") == nil, "un personnage du joueur : la fiche de la base")
-gamedata({ recettesConnues = gdAvant })
+fausseBase()
 print("Azeroth Commune : personnage OK")
 
 -- Royaume (#35) : le numéro de serveur du GUID du personnage, « 6942 » ; maison de l'HV « 6942-Alliance ». Rien n'est
@@ -175,14 +175,13 @@ GetBuildInfo = buildAvant
 lib.buildLu = nil
 print("Azeroth Commune : sondes, royaume vide OK")
 
--- Catalogue : les types que la base relève, chacun léger ou lourd, avec son accesseur privé (ns).
+-- Catalogue : les types que la base relève (leur accesseur privé : plus bas, avec la base).
 local attendus = { "inventaires", "réputations", "métiers et compétences", "quêtes terminées", "recettes connues",
   "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
 local nTypes = 0
 for _ in pairs(lib.types) do nTypes = nTypes + 1 end
 assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
-for _, nom in ipairs(attendus) do assert(lib.types[nom] and type(lib.types[nom].gamedata) == "string", "au catalogue : " .. nom) end
-assert(not lib.types.objets.leger and not lib.types["cours de l'HV"].leger and lib.types.inventaires.leger, "lourds : HV et objets")
+for _, nom in ipairs(attendus) do assert(lib.types[nom], "au catalogue : " .. nom) end
 -- Souscription avec la base : transmise à ns.souscrire (qui la retient pour le joueur), et gardée pour la session.
 local transmis = {}
 ns.souscrire = function(t) transmis[#transmis + 1] = t end
@@ -190,16 +189,16 @@ for _, nom in ipairs(attendus) do assert(lib:Souscrire(nom), "souscription : " .
 assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscription transmise à GameData")
 assert(lib.souscriptions.objets and lib.souscriptions["recettes connues"], "et retenue pour la session")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
-ns.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, [ALT] = { bank = {} } } } end
+ns.lire.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, [ALT] = { bank = {} } } } end
 local inv = assert(lib:Lire("inventaires"))
 assert(inv.persos[MOI].bags.Backpack.size == 16 and not inv.persos[ALT], "inventaires du personnage connecté")
 assert(lib:Lire("inventaires", "tous").persos[ALT], "inventaires de tous")
-ns.marchands = function() return { [1234] = { name = "Marchand", items = {} } } end
+ns.lire.marchands = function() return { [1234] = { name = "Marchand", items = {} } } end
 assert(assert(lib:Lire("marchands", ALT))[1234].name == "Marchand", "marchands : une table pour le joueur")
-ns.marchands = function() return {} end
+ns.lire.marchands = function() return {} end
 d, raison = lib:Lire("marchands")
 assert(d == nil and raison == "pas encore relevé", "aucun marchand : " .. tostring(raison))
-ns.objets = function() return nil end
+ns.lire.objets = function() return nil end
 d, raison = lib:Lire("objets")
 assert(d == nil and raison == "pas encore relevé", "objets absents : " .. tostring(raison))
 lib.souscriptions = {}
@@ -207,23 +206,23 @@ print("Azeroth Commune : catalogue et souscriptions avec la base OK")
 
 -- Provenance (GameData#5) : lire un type rend son lot, provenance, build et date ; par personnage pour un type par perso.
 local lotM = { provenance = "relevé direct", build = 64000, version = "1.16.1", date = "2026-11-19 10:00:00" }
-ns.marchands = function() return { [1234] = { items = {} } }, lotM end
+ns.lire.marchands = function() return { [1234] = { items = {} } }, lotM end
 local _, lot = lib:Lire("marchands")
 assert(lot == lotM and lot.provenance == "relevé direct" and lot.build == 64000 and lot.date, "lot d'un type pour le joueur")
 local lotA, lotB = { provenance = "relevé direct", build = 63000, perime = true }, { provenance = "relevé direct", build = 64000 }
-ns.inventaires = function()
+ns.lire.inventaires = function()
   return { persos = { [MOI] = { bags = {} }, [ALT] = { bags = {} } } }, { persos = { [MOI] = lotB, [ALT] = lotA } }
 end
 _, lot = lib:Lire("inventaires")
 assert(lot.persos[MOI] == lotB and lot.persos[ALT] == nil, "lot du personnage lu seulement")
 _, lot = lib:Lire("inventaires", "tous")
 assert(lot.persos[ALT].perime and lot.persos[ALT].build == 63000, "lots de tous, figé sous un autre build : peut-être périmé")
-ns.inventaires = function() return { persos = { [MOI] = {} } } end -- un GameData d'avant les lots
+ns.lire.inventaires = function() return { persos = { [MOI] = {} } } end -- des données sans lot
 d, lot = lib:Lire("inventaires")
 assert(d and lot.persos[MOI] == nil, "sans lot fourni : les données quand même")
 _, lot = lib:Lire("inventaires", "tous")
 assert(type(lot.persos) == "table", "sans lot fourni, « tous » : lot.persos lisible quand même")
-ns.marchands = function() return { [1234] = { items = {} } } end
+ns.lire.marchands = function() return { [1234] = { items = {} } } end
 _, lot = lib:Lire("marchands")
 assert(type(lot) == "table" and lot.provenance == nil, "sans lot fourni, type du joueur : un lot vide, pas nil")
 -- Lot mixte : pour chaque clé, la provenance la plus fiable gagne ; une ligne d'une autre provenance porte la sienne.
@@ -246,80 +245,25 @@ mixte, tete = lib.Fusionner({ { donnees = { [9] = { x = 1 } }, provenance = "rum
 assert(tete == "rumeur" and mixte[9].x == 1, "seule source, provenance inconnue")
 print("Azeroth Commune : provenance, build et date des lots OK")
 
--- GameData absent : relevé de repli du personnage connecté, en mémoire ; rien n'est écrit chez l'hôte.
-gamedata()
-HoteDB = { reglages = { x = 1 } } -- les SavedVariables de l'add-on hôte
-local avant = {}
-for k in pairs(_G) do avant[k] = true end
-d, raison = lib:Lire("recettes connues")
-assert(d == nil and raison == "pas encore relevé", "rien de relevé : " .. tostring(raison))
-assert(lib:Souscrire("recettes connues"))
--- Sans GameData, pas de relevé de repli pour les autres types (lourds, ou pas encore écrits) ; la souscription reste acceptée.
-assert(lib:Souscrire("objets") and lib:Souscrire("inventaires"), "souscription sans GameData")
-for _, nom in ipairs({ "objets", "marchands" }) do
-  d, raison = lib:Lire(nom)
-  assert(d == nil and raison == "pas de GameData", nom .. " sans GameData : " .. tostring(raison))
-end
--- Cours de l'HV sans GameData ni fournisseur : indisponible avec la raison, jamais un relevé de repli.
-d, raison = lib:Lire("cours de l'HV")
-assert(d == nil and raison == "pas de GameData ni de fournisseur", "HV sans GameData ni fournisseur : " .. tostring(raison))
-assert(lib.repli.hv == nil, "pas de relevé de repli de l'HV")
-local cadre = cadres[#cadres]
-Enum = {}
-C_TradeSkillUI = { -- fenêtre de métier ouverte : une recette apprise, une pas encore apprise
-  GetBaseProfessionInfo = function() return { professionName = "Minage", skillLevel = 140, maxSkillLevel = 225 } end,
-  GetAllRecipeIDs = function() return { 3307, 3308 } end,
-  GetRecipeInfo = function(id) return { name = id == 3307 and "Fondre le fer" or "Fondre l'or", learned = id == 3307, relativeDifficulty = 0 } end,
-  GetRecipeSchematic = function(id) return { outputItemID = id == 3307 and 3575 or 3577, quantityMin = 1, quantityMax = 1,
-    reagentSlotSchematics = { { reagents = { { itemID = id == 3307 and 2772 or 2776 } }, quantityRequired = 1, required = true } } } end,
-}
-cadre.onEvent(cadre, "TRADE_SKILL_LIST_UPDATE")
-local repli = assert(lib:Lire("recettes connues"))
-local minage = repli.persos[MOI].Minage
-assert(minage.rank == 140 and minage.known[3307] == "optimal" and not minage.known[3308], "recettes connues du personnage connecté")
-assert(repli.recettes[3307].output == 3575 and repli.recettes[3307].reagents[1].id == 2772, "recette lue")
-assert(repli.recettes[3308], "recette pas encore apprise : lue aussi")
-assert(lib:Lire("recettes connues", "tous").persos[MOI], "tous = le personnage connecté seulement")
-local _, lotRepli = lib:Lire("recettes connues")
-lotRepli = lotRepli.persos[MOI]
-assert(lotRepli.provenance == "relevé direct" and lotRepli.build == 64000 and lotRepli.version == "1.16.1" and lotRepli.date, "lot du relevé de repli")
-d, raison = lib:Lire("recettes connues", ALT)
-assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameData : " .. tostring(raison))
--- Inventaires sans GameData (Handshake#1) : le personnage connecté, ses sacs lus à l'instant et sa banque vue cette
--- session (relevée à l'ouverture, en mémoire ; fermée, elle n'est plus lue).
+-- Sacs lus à l'instant (lib.Conteneurs, seule lecture des sacs, la base comprise : LibCommune#20), avec le lien de chaque
+-- objet ; un sac vide est ignoré.
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bank = -1, BankBag_1 = 5 } }
 local CHARBON = "|cffffffff|Hitem:2772::::::::60:::::::|h[Minerai de fer]|h|r"
 local slots = { [0] = { { itemID = 2772, stackCount = 5, hyperlink = CHARBON } }, [1] = {}, [-1] = { { itemID = 2840, stackCount = 7, hyperlink = "|Hitem:2840|h" }, false } }
 C_Container = { GetContainerNumSlots = function(b) return slots[b] and #slots[b] or 0 end,
   GetContainerItemInfo = function(b, s) return slots[b][s] or nil end }
-local inv = assert(lib:Lire("inventaires"))
-assert(inv.persos[MOI].bags.Backpack.items[1].id == 2772 and inv.persos[MOI].bags.Backpack.items[1].count == 5, "sacs lus à l'instant")
-assert(not inv.persos[MOI].bags.Bag_1 and not inv.persos[MOI].bags.Bank and not inv.persos[MOI].bank, "sac vide ignoré ; banque pas encore vue")
-assert(lib.EstSac("Bag_1") and lib.EstSac("ReagentBag") and not lib.EstSac("Bank") and lib.EstBanque("BankBag_1"), "sacs et banque")
--- lib.Conteneurs rend aussi le lien de chaque objet (LibCommune#20 : seule lecture des sacs, GameData compris).
 local sacs = lib.Conteneurs(lib.EstSac)
 assert(sacs.Backpack.size == 1 and sacs.Backpack.items[1].link == CHARBON and sacs.Backpack.items[1].count == 5, "lien de l'objet")
-assert(inv.persos[MOI].bags.Backpack.items[1].link == CHARBON, "lien aussi dans le relevé de repli des inventaires")
-cadre.onEvent(cadre, "BANKFRAME_OPENED")
-slots[-1][1] = { itemID = 2840, stackCount = 9, hyperlink = "|Hitem:2840|h" }
-local banque = lib:Lire("inventaires", "tous").persos[MOI].bank
-assert(banque.Bank.size == 2 and #banque.Bank.items == 1 and banque.Bank.items[1].count == 7, "banque relevée à l'ouverture")
-cadre.onEvent(cadre, "PLAYERBANKSLOTS_CHANGED")
-assert(lib:Lire("inventaires").persos[MOI].bank.Bank.items[1].count == 9, "banque ouverte : suivie")
-cadre.onEvent(cadre, "BANKFRAME_CLOSED")
-slots[-1] = {}
-cadre.onEvent(cadre, "PLAYERBANKSLOTS_CHANGED")
-local _, lotInv = lib:Lire("inventaires")
-assert(lib:Lire("inventaires").persos[MOI].bank.Bank.items[1].count == 9, "banque fermée : la dernière vue reste")
-assert(lotInv.persos[MOI].provenance == "relevé direct" and lotInv.persos[MOI].date, "lot des inventaires de repli")
-d, raison = lib:Lire("inventaires", ALT)
-assert(d == nil and raison == "pas de GameData", "inventaires d'un autre personnage sans GameData : " .. tostring(raison))
-for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI" or k == "C_Container", "global écrit par la lib : " .. k) end
-assert(HoteDB.reglages.x == 1 and next(HoteDB, next(HoteDB)) == nil, "SavedVariables de l'hôte intactes")
-print("Azeroth Commune : base absente, relevé de repli OK")
+assert(not sacs.Bag_1 and not sacs.Bank, "sac vide ignoré ; la banque n'est pas un sac")
+assert(lib.Conteneurs(lib.EstBanque).Bank.items[1].count == 7, "banque")
+assert(lib.EstSac("Bag_1") and lib.EstSac("ReagentBag") and not lib.EstSac("Bank") and lib.EstBanque("BankBag_1"), "sacs et banque")
+print("Azeroth Commune : sacs lus à l'instant OK")
 
--- Fournisseurs des cours de l'HV (GameData#6, option B). Sans GameData, la lib passe directement par un fournisseur : une
--- fausse API d'Auctionator donne les prix, provenance « autre add-on ». Son âge 0 veut dire « vu aujourd'hui ».
+-- Fournisseurs des cours de l'HV (GameData#6, option B). Sans scan du socle, la lib passe directement par un fournisseur :
+-- une fausse API d'Auctionator donne les prix, provenance « autre add-on ». Son âge 0 veut dire « vu aujourd'hui ».
+fausseBase() -- la base n'a pas scanné l'HV
+d, raison = lib:Lire("cours de l'HV")
+assert(d == nil and raison == "pas encore relevé", "ni scan ni fournisseur : " .. tostring(raison))
 time = os.time
 local appels = {}
 local PRIX, AGE = { [2772] = 95, [2840] = 40, [2841] = 300 }, { [2772] = 0, [2840] = 0, [2841] = 3 }
@@ -334,7 +278,7 @@ assert(hv and hv.objet(2772).min == 95 and hv.objet(2772).age == 0 and hv.objet(
 assert(appels[1] == "AzerothCommune", "l'API d'Auctionator reçoit le nom de l'appelant")
 local vieux = hv.objet(2841)
 assert(vieux and vieux.min == nil and vieux.age == 3, "pas vu aujourd'hui (âge 3 j) : plus en vente, l'âge reste")
-assert(hv.objet(1) == nil and hv.hv == nil and hv.depot == nil, "objet inconnu d'Auctionator ; rien de GameData")
+assert(hv.objet(1) == nil and hv.hv == nil and hv.depot == nil, "objet inconnu d'Auctionator ; rien de la base")
 assert(lotHV.provenance == "autre add-on" and lotHV.fournisseur == "Auctionator" and lotHV.champs.min == "Auctionator", "lot autre add-on")
 assert(lotHV.build == nil and lotHV.releve == nil and not lotHV.fragile, "un autre add-on ne dit pas son build ; API publique : pas fragile")
 local reste = lib:ChampsARelever("cours de l'HV")
@@ -377,7 +321,7 @@ assert(lib:ChampsARelever("cours de l'HV").hist, "dernier scan d'AuctionDB il y 
 AuctionDBForeverSaved = { houses = "format changé" }
 assert(lib:Lire("cours de l'HV") == nil, "format d'AuctionDB changé : plus de fournisseur, rien ne plante")
 
--- Sans GameData, Auctionator puis AuctionDB : prix d'Auctionator, quantité et historique d'AuctionDB.
+-- Sans scan du socle, Auctionator puis AuctionDB : prix d'Auctionator, quantité et historique d'AuctionDB.
 Auctionator = fausseAPI()
 local SV_ADB = { houses = { ["na-forever-rp Alliance"] = { scans = { { T } }, items = {
   [2772] = ("%d,90,95,300"):format(T), [2841] = ("%d,280,290,12"):format(T) } } } }
@@ -386,14 +330,14 @@ hv, lotHV = lib:Lire("cours de l'HV")
 cuivre = hv.objet(2772)
 assert(cuivre.min == 95 and cuivre.qty == 300 and cuivre.sources.min == "Auctionator" and cuivre.sources.qty == "AuctionDB", "Auctionator > AuctionDB")
 assert(hv.objet(2841).min == 280 and hv.objet(2841).sources.min == "AuctionDB", "Auctionator pas du jour : le prix d'AuctionDB")
-assert(lotHV.fournisseur == "Auctionator" and lotHV.champs.qty == "AuctionDB" and lotHV.fragile, "lot sans GameData")
+assert(lotHV.fournisseur == "Auctionator" and lotHV.champs.qty == "AuctionDB" and lotHV.fragile, "lot sans scan du socle")
 
 -- Avec GameData : son dernier scan fait foi pour prix, quantité, annonces, paliers (relevé direct) ; un objet absent de ce
 -- scan est plus en vente, même si Auctionator l'a vu aujourd'hui. L'historique : AuctionDB s'il est frais (pas de copie).
 local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19 10:00:00" }
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
   hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
-gamedata({ coursHV = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end })
+fausseBase({ ["cours de l'HV"] = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end })
 lib.sondes["maison de l'HV"].valeur = nil
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(lib.Sondes()["maison de l'HV"].valeur == "6942-Alliance", "la maison de l'HV des fournisseurs : celle de la lib, sondée")
@@ -418,7 +362,7 @@ marche.hist[2772] = nil
 assert(lotHV.champs.hist == "AuctionDB", "lot : historique d'AuctionDB")
 -- GameData sans scan de cet HV : les fournisseurs seuls.
 marche = nil
-ns.coursHV = function() return { hv = { ["6942-Horde"] = {} } }, lotGD end
+ns.lire["cours de l'HV"] = function() return { hv = { ["6942-Horde"] = {} } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator" and lotHV.scan == nil, "pas de scan de cet HV : fournisseurs")
 -- HV neutre ou faction inconnue : rien ne plante.
@@ -428,15 +372,15 @@ assert(pcall(lib.Lire, lib, "cours de l'HV") and pcall(lib.ChampsARelever, lib, 
 UnitFactionGroup = faction
 -- Sans fournisseur, avec GameData : son relevé ; rien de relevé : « pas encore relevé ».
 Auctionator, AuctionDBForeverSaved = nil, nil
-ns.coursHV = function() return { hv = { ["6942-Alliance"] = { items = { [2841] = { min = 500, qty = 4 } } } } }, lotGD end
+ns.lire["cours de l'HV"] = function() return { hv = { ["6942-Alliance"] = { items = { [2841] = { min = 500, qty = 4 } } } } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2841).min == 500 and lotHV.provenance == "relevé direct" and lotHV.champs.min == "GameData", "GameData seul")
 reste = lib:ChampsARelever("cours de l'HV")
 assert(reste.min and reste.qty and reste.auctions and reste.tiers and reste.hist, "sans fournisseur : GameData relève tout")
-ns.coursHV = function() end
-local d, raison = lib:Lire("cours de l'HV")
+ns.lire["cours de l'HV"] = function() end
+d, raison = lib:Lire("cours de l'HV")
 assert(d == nil and raison == "pas encore relevé", "GameData sans relevé, sans fournisseur : " .. tostring(raison))
-gamedata()
+fausseBase()
 print("Azeroth Commune : fournisseurs des cours de l'HV OK")
 
 -- Signal « type relevé à nouveau » (#14) : rappels par type, appelés par le relevé lui-même (le scan de l'HV : plus bas,
@@ -447,16 +391,16 @@ assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type
 assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
 assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
 lib.sondes.build.etat = nil
-lib.cadre.onEvent(lib.cadre, "PLAYER_LOGIN")
+cadre.onEvent(cadre, "PLAYER_LOGIN")
 assert(lib.Sondes().build.etat == "vert", "sondes relancées à la connexion")
 lib:Signaler("cours de l'HV")
 assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "rappels appelés, erreur rendue au jeu")
 lib.rappels["cours de l'HV"] = nil
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
--- Recettes connues sans fenêtre de métier (IsPlayerSpell, interrogé à la connexion), sans GameData : un personnage
--- jamais passé par sa fenêtre. Candidates : les recettes déjà relevées (3307, 3308) et la réserve Classic de Handshake.
-lib.repli.metiers = {}
+-- Recettes connues sans fenêtre de métier (IsPlayerSpell ; la base le lance à la connexion) : un personnage jamais passé
+-- par sa fenêtre. Candidates : les recettes déjà vues (3307, 3308) et la réserve Classic de Handshake.
+local metiers, vues = {}, { [3307] = { profession = "Minage" }, [3308] = { profession = "Minage" } }
 local images = {}
 C_Timer = { After = function(_, fn) images[#images + 1] = fn end } -- une image à la fois, pompée à la main
 local function image() local fns = images; images = {}; for _, fn in ipairs(fns) do fn() end; return #fns end
@@ -469,16 +413,14 @@ IsPlayerSpell = function(id) demandees[id] = true; parImage = parImage + 1; retu
 HandshakeClassicRecipes = { [9001] = { 2840, 1, 1, "Minage", "Barre de cuivre", { 2770, 1 } },
   [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 } } }
 for id = 10000, 10149 do HandshakeClassicRecipes[id] = { 1, 1, 1, "Minage", "Recette " .. id, {} } end
-local signaux = 0
-lib:QuandReleve("recettes connues", function() signaux = signaux + 1 end)
-cadre.onEvent(cadre, "PLAYER_LOGIN")
-assert(#images == 1 and parImage == 0, "relevé différé après la connexion")
-local nImages, maxParImage = 0, 0
+local finis = 0
+assert(lib:ReleverRecettesSansFenetre(metiers, vues, function() finis = finis + 1 end))
+local nImages, maxParImage = 1, parImage
 repeat
   parImage = 0
   local n = image()
   if parImage > 0 then nImages, maxParImage = nImages + 1, math.max(maxParImage, parImage) end
-  if nImages == 1 and not enCombat then -- combat après la 1re image : plus rien n'est interrogé
+  if nImages == 2 and not enCombat then -- combat après la 2e image : plus rien n'est interrogé
     enCombat, parImage = true, 0
     assert(image() == 1 and parImage == 0, "en combat : rien d'interrogé")
     assert(image() == 0, "en combat : relevé en pause, pas d'image en attente")
@@ -490,27 +432,34 @@ repeat
 until n == 0
 assert(nImages >= 3 and maxParImage <= 60, ("étalé : %d images, %d au plus par image"):format(nImages, maxParImage))
 assert(not demandees[9002], "un métier que le personnage n'a pas n'est pas interrogé")
-local sans = assert(lib:Lire("recettes connues")).persos[MOI].Minage
+local sans = metiers.Minage
 assert(sans.rank == 150 and sans.max == 225, "rang et maximum du métier")
 local n = 0 for _ in pairs(sans.known) do n = n + 1 end
 assert(sans.known[3307] and sans.known[9001] and sans.known[10100] and n == 3, "recettes connues relevées sans fenêtre : " .. n)
-assert(not lib:Lire("recettes connues").persos[MOI]["Pêche"], "aucune recette connue trouvée : métier pas inventé")
-assert(signaux == 1, "relevé de repli sans fenêtre fini : signalé une fois")
+assert(not metiers["Pêche"], "aucune recette connue trouvée : métier pas inventé")
+assert(finis == 1, "fini une fois")
 print("Azeroth Commune : recettes connues sans fenêtre OK")
 
 -- Puis la fenêtre de métier s'ouvre (3307 apprise, 3308 non) : sa liste prime, sans doublon ni perte.
 C_Timer.After = function(_, fn) fn() end
-cadre.onEvent(cadre, "TRADE_SKILL_LIST_UPDATE")
-local apres = lib:Lire("recettes connues").persos[MOI].Minage
+Enum = {}
+C_TradeSkillUI = { -- fenêtre de métier ouverte : une recette apprise, une pas encore apprise
+  GetBaseProfessionInfo = function() return { professionName = "Minage", skillLevel = 140, maxSkillLevel = 225 } end,
+  GetAllRecipeIDs = function() return { 3307, 3308 } end,
+  GetRecipeInfo = function(id) return { name = id == 3307 and "Fondre le fer" or "Fondre l'or", learned = id == 3307, relativeDifficulty = 0 } end,
+  GetRecipeSchematic = function(id) return { outputItemID = id == 3307 and 3575 or 3577, quantityMin = 1, quantityMax = 1,
+    reagentSlotSchematics = { { reagents = { { itemID = id == 3307 and 2772 or 2776 } }, quantityRequired = 1, required = true } } } end,
+}
+local fen = assert(lib:ReleverRecettes())
+assert(fen.recettes[3307].output == 3575 and fen.recettes[3307].reagents[1].id == 2772 and fen.recettes[3308], "recettes lues, apprises ou non")
+local apres = lib:RangerRecettes(metiers, fen)
 n = 0 for _ in pairs(apres.known) do n = n + 1 end
 assert(apres.known[3307] == "optimal" and not apres.known[3308] and apres.rank == 140, "la fenêtre prime")
 assert(apres.known[9001] and apres.known[10100] and n == 3, "rien de perdu, rien en double : " .. n)
-assert(signaux == 2, "relevé de repli en fenêtre : signalé")
-lib.rappels["recettes connues"] = nil
 -- Fenêtre déjà relevée, relevé sans fenêtre ensuite (ex. ouverte pendant le relevé) : rien d'écrasé.
-lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes)
-assert(lib.repli.metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")
-HandshakeClassicRecipes = nil
+lib:ReleverRecettesSansFenetre(metiers, vues)
+assert(metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")
+HandshakeClassicRecipes, C_TradeSkillUI = nil, nil
 print("Azeroth Commune : fenêtre après le relevé sans fenêtre OK")
 
 ---------------------------------------------------------------------------------------------------
@@ -797,14 +746,14 @@ assert(c == 140 and src == "HV" and partiel == false, "fournisseur sans paliers 
 assert(lib:PrixAchat(1, 3, hvTest, marchandsTest) == nil, "ni marchand ni HV : rien")
 assert(lib:PrixAchat(9, 1, { [9] = { tiers = {} } }, {}) == nil, "paliers vides : rien, sans erreur")
 -- Marchands lus par la lib : le moins cher à l'unité, hors stock limité et monnaies spéciales.
-gamedata({ marchands = function() return {
+fausseBase({ marchands = function() return {
   [1] = { items = { { id = 2880, price = 600, stack = 5 }, { id = 159, price = 25 } } },
   [2] = { items = { { id = 2880, price = 100, limited = true }, { id = 159, price = 30 }, { id = 17, price = 10, cost_items = { 1 } } } },
 } end })
 local pm = lib:PrixMarchands()
 assert(pm[2880] == 120 and pm[159] == 25 and pm[17] == nil, "prix marchands à l'unité")
--- Sans hv ni marchands passés : la lib lit elle-même (ici sans GameData, par Auctionator).
-gamedata()
+-- Sans hv ni marchands passés : la lib lit elle-même (ici sans scan du socle, par Auctionator).
+fausseBase()
 Auctionator = fausseAPI()
 c, src = lib:PrixAchat(2772, 3)
 assert(c == 3 * 95 and src == "HV", "lu par la lib : " .. tostring(c))
@@ -892,7 +841,7 @@ do
   assert(etat("nom d'objet") == "pas encore vue", "chargement refusé : pas vérifié")
 
   -- Fournisseurs de prix, quand ils sont présents : leur API rend un prix numérique ou rien ; la première ligne seulement.
-  gamedata()
+  fausseBase()
   AuctionDBForeverSaved, TSM_API = nil, nil
   for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do lib.sondes[nom] = nil end
   local avant = #dits
@@ -1026,7 +975,7 @@ assert(AzerothCommuneDB.recipes[3308] and AzerothCommuneDB.recipes[3308].output 
 assert(c.recipes.Minage.rank == 140 and c.recipes.Minage.known[3307] == "optimal" and not c.recipes.Minage.known[3308])
 -- Ce que lit LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers.
 AzerothCommuneDB.chars["Belegard-Test"], AzerothCommuneDB.chars["Sans-Metier"] = c, { errors = {} }
-local rc = ns.recettesConnues()
+local rc = ns.lire["recettes connues"]()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(AzerothCommune:Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
@@ -1226,7 +1175,7 @@ assert(pareil(bank, avant(isBank)), "banque : le même relevé qu'avant")
 frames.Base.fn(frames.Base, "BANKFRAME_CLOSED")
 print("Azeroth Commune : sacs et banque par lib.Conteneurs, comme avant OK")
 assert(not objetsScannes(), "objets sans souscription : pas de scan des objets")
-for _, t in pairs(glib.types) do assert(type(gns[t.gamedata]) == "function", "accesseur de GameData : " .. t.gamedata) end
+for nom in pairs(glib.types) do assert(type(gns.lire[nom]) == "function", "accesseur de la base : " .. nom) end
 for nom in pairs(gns.rangement) do assert(glib.types[nom], "rangé mais pas au catalogue : " .. nom) end
 
 session("Bob") -- l'add-on qui a souscrit n'est pas activé sur B

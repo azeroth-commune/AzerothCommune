@@ -87,7 +87,7 @@ local function scanKnownRecipes()
 end
 
 -- Lu par AzerothCommune:Lire (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
-function ns.recettesConnues()
+ns.lire["recettes connues"] = function()
   local persos, lots = {}, {}
   for k, c in pairs(AzerothCommuneDB.chars) do persos[k], lots[k] = c.recipes, c.recipes and c.lots and c.lots.recipes end
   return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
