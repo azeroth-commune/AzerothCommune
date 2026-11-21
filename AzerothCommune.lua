@@ -1,40 +1,40 @@
--- LibCommune : la lib commune embarquée des add-ons Azeroth Commune (modèle LibStub : la mineure la plus récente sert).
--- Du code seulement, jamais de données sauvegardées à elle (ADR 0001 de l'atelier : les données relevées ne sont
--- sauvegardées que dans GameData).
+-- Azeroth Commune, le socle (ADR 0002 de l'atelier) : GameData et la lib commune fondus en un seul add-on, requis par
+-- tous les autres. Son API publique est le global AzerothCommune (ce fichier le crée, les autres fichiers du socle le
+-- complètent) ; l'intérieur de l'ex-GameData (scans, rangement en base) reste dans l'espace de noms privé, ns.
 --
 -- Accès aux données relevées, deux gestes :
---   lib:Souscrire(type)          : l'add-on souscrit à ce type de données (il en a besoin). Avec GameData, la souscription
---                                  vaut pour tous les personnages du joueur (GameData ne relève que les types souscrits, et
---                                  cesse après ~30 jours sans souscription) ; sans lui, elle vaut le temps de la session.
---   lib:Lire(type, personnage)   : les données et leur lot, ou nil et la raison (« type inconnu », « pas de GameData »,
---                                  « pas encore relevé », « pas de GameData ni de fournisseur »). personnage = son GUID, nil pour le
---                                  personnage connecté, « tous » pour tous les personnages relevés.
--- Lot : { provenance, build, version, date, perime } — d'où viennent les données (lib.provenances, du plus fiable au moins
+--   AC:Souscrire(type)           : l'add-on souscrit à ce type de données (il en a besoin). La souscription vaut pour tous
+--                                  les personnages du joueur (le socle ne relève que les types souscrits, et cesse après
+--                                  ~30 jours sans souscription).
+--   AC:Lire(type, personnage)    : les données et leur lot, ou nil et la raison (« type inconnu », « pas encore relevé »).
+--                                  personnage = son GUID, nil pour le personnage connecté, « tous » pour tous les
+--                                  personnages relevés.
+-- Lot : { provenance, build, version, date, perime } — d'où viennent les données (AC.provenances, du plus fiable au moins
 -- fiable), le build du client (GetBuildInfo) et la date du relevé ; perime = true : figé sous un autre build, peut-être
 -- périmé. Pour un type par personnage, le lot va aussi par personnage : { persos = { [GUID] = lot } }. Dans un lot
 -- mixte (marchands : vus en jeu et base VendorData), une ligne d'une autre provenance porte la sienne (champ provenance).
--- Avec GameData, la lib lit sa base ; sans lui, relevé de repli : le personnage connecté, en mémoire, le temps de la session
--- (recettes connues ; inventaires : sacs lus à l'instant, banque vue cette session).
+-- La lecture passe par les accesseurs privés de la base (Souscriptions.lua, Commerce.lua : ns[t.gamedata]).
+-- ponytail: le relevé de repli (sans base) et ses branches restent tels quels jusqu'au ménage interne (#41) ; dans le
+-- socle, la base est toujours là, ils ne servent plus qu'aux check.lua.
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
---   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
--- Le consommateur ne teste jamais lui-même la présence de GameData.
--- Personnage : lib.Personnage(guid) = { guid, nom } ; lib.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
--- Prix d'achat : lib:PrixAchat(id, qty, hv, marchands), lib:PrixMarchands() (en fin de fichier).
--- Identité, chaque relevé sondé : lib.Royaume() (le numéro de serveur du GUID, « 6942 »), lib.MaisonHV() (« 6942-Alliance »,
--- clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
--- Sondes : lib.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
--- lib.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
--- Sondés aussi : sacs (lib.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
+--   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
+-- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
+-- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
+-- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
+-- clé des scans de l'HV), AC.Faction(), AC.Build() (nombre).
+-- Sondes : AC.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
+-- AC.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
+-- Sondés aussi : sacs (AC.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
 -- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
--- Pour les autres fichiers de la lib : lib.DeclarerSonde(nom, attente, verifier, relever), lib.Sonder(nom, ...).
-local MAJOR, MINOR = "LibCommune-1.0", 12
-local lib = LibStub:NewLibrary(MAJOR, MINOR)
-if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
+-- Pour les autres fichiers du socle : AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...).
+local _, ns = ...
+AzerothCommune = {}
+local lib = AzerothCommune
 
--- Catalogue des types de données (ceux que GameData relève). léger : relevable sans GameData, par un relevé de repli ;
--- un type lourd (HV, catalogue des objets) attend GameData ou un fournisseur. parPerso : les données vont par personnage
--- ({ persos = { [GUID] = … } }, filtrées par lib:Lire), sinon une seule table pour le joueur. gamedata : la
--- fonction de GameDataAPI qui rend ce type. repli : le relevé de repli est écrit (recettes connues, inventaires).
+-- Catalogue des types de données (ceux que la base relève). léger : relevable sans la base, par un relevé de repli ;
+-- un type lourd (HV, catalogue des objets) attend la base ou un fournisseur. parPerso : les données vont par personnage
+-- ({ persos = { [GUID] = … } }, filtrées par lib:Lire), sinon une seule table pour le joueur. gamedata : l'accesseur
+-- privé de la base (ns) qui rend ce type. repli : le relevé de repli est écrit (recettes connues, inventaires).
 local TYPES = {
   -- persos[p] = { character (fiche, or), equipped, bags, bank, mail, currencies }
   -- Repli : le personnage connecté, { bags (lus à l'instant), bank (vue cette session) }.
@@ -50,12 +50,12 @@ local TYPES = {
   ["prix des vols"] = { leger = true, gamedata = "prixDesVols" }, -- { [départ] = { [arrivée] = prix } }
   ["add-ons installés"] = { leger = true, gamedata = "addonsInstalles" }, -- { [dossier] = { title, version, … } }
   -- { objet = fn(itemID) -> { min, qty, auctions, tiers, hist, sources }, depot = { rate24, min }, hv = le relevé de
-  --   GameData ({ [royaume-faction] = { items, hist, … } } ; hist absent quand AuctionDB le tient) } : le scan de
-  --   GameData fait foi, les fournisseurs pour l'historique et quand GameData n'a pas scanné l'HV (Fournisseurs.lua)
+  --   la base ({ [royaume-faction] = { items, hist, … } } ; hist absent quand AuctionDB le tient) } : le scan du
+  --   socle fait foi, les fournisseurs pour l'historique et quand le socle n'a pas scanné l'HV (Fournisseurs.lua)
   ["cours de l'HV"] = { gamedata = "coursHV" },
   objets = { gamedata = "objets" }, -- { [itemID] = { name, class, price, stack, … } }
 }
-lib.types = TYPES -- lecture seule : GameData y vérifie qu'il rend chaque type
+lib.types = TYPES -- lecture seule
 
 -- Provenance d'un lot, du plus fiable au moins fiable (CONTEXT-MAP de l'atelier) : notre add-on via l'API en jeu, les
 -- fichiers du client lus hors jeu, un autre add-on installé, une base tierce hors du jeu.
@@ -94,12 +94,8 @@ end
 -- attente en une phrase, une vérification qui compare seulement la valeur reçue, sans rappeler le jeu) ; elle est
 -- vérifiée à chaque relevé. Une sonde rouge prévient dans le chat une fois par session et ne change rien à la valeur
 -- rendue (pas de mode dégradé : on débugge). Rien n'est sauvegardé : le dernier résultat de chacune, le temps de la session.
-lib.sondes = lib.sondes or {} -- [nom] = { etat, valeur, heure, build, prevenu } ; gardé d'une mineure à l'autre
--- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même. Gardé d'une mineure à
--- l'autre : une copie plus récente de ce fichier redéclare ses sondes à leur place, celles des autres fichiers restent
--- (un fichier dont la version ne change pas n'est pas rechargé).
-local SONDES = lib.listeSondes or {}
-lib.listeSondes = SONDES
+lib.sondes = {} -- [nom] = { etat, valeur, heure, build, prevenu }
+local SONDES = {} -- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même
 
 local function montrer(v)
   if type(v) == "string" then return ("%q"):format(v) end
@@ -109,8 +105,8 @@ local function montrer(v)
   return table.concat(t, ", ")
 end
 
--- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (lib.buildLu, gardé
--- d'une mineure à l'autre ; check.lua le remet à nil pour simuler une mise à jour du jeu).
+-- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (lib.buildLu ;
+-- check.lua le remet à nil pour simuler une mise à jour du jeu).
 -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
 local function buildDeSession()
   if lib.buildLu == nil and GetBuildInfo then lib.buildLu = select(2, GetBuildInfo()) end
@@ -120,7 +116,7 @@ end
 -- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
 local function sonder(nom, ...)
   local s = SONDES[nom]
-  if not s then return ... end -- pas déclarée (Interface.lua chargé seul avant ce fichier…) : jamais d'erreur dans un relevé
+  if not s then return ... end -- pas déclarée : jamais d'erreur dans un relevé
   local r = lib.sondes[nom] or {}
   lib.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
@@ -187,7 +183,7 @@ lib.Faction = releve("faction", "UnitFactionGroup(\"player\") rend Alliance ou H
   function(f) return f == "Alliance" or f == "Horde" end, function() return (UnitFactionGroup("player")) end)
 
 -- La maison de l'HV du personnage connecté, « royaume-faction » (« 6942-Alliance ») : la clé des scans de l'HV de
--- GameData ; nil si la faction ou le royaume est inconnu. Les scans rangés sous l'ancienne clé (royaume affiché) ne sont
+-- la base ; nil si la faction ou le royaume est inconnu. Les scans rangés sous l'ancienne clé (royaume affiché) ne sont
 -- plus lus : ils se refont.
 lib.MaisonHV = releve("maison de l'HV", "la maison de l'HV est « n° de serveur-faction », n° différent de 0, faction Alliance ou Horde",
   function(m) return type(m) == "string" and (m:match("^[1-9]%d*%-Alliance$") or m:match("^[1-9]%d*%-Horde$")) ~= nil end,
@@ -199,7 +195,7 @@ local monGUID = releve("GUID", "UnitGUID(\"player\") est de la forme Player-…"
 local monNom = releve("nom", "UnitName(\"player\") rend un prénom puis un nom de famille (Forever)",
   function(prenom, nom) return nonVide(prenom) and nonVide(nom) end, function() return UnitName("player") end)
 
--- Le lot d'un relevé fait maintenant (même forme que les lots de GameData).
+-- Le lot d'un relevé fait maintenant (même forme que les lots de la base).
 local function lotDuJour()
   return { provenance = "relevé direct", build = lib.Build(), version = (GetBuildInfo()), date = date("%Y-%m-%d %H:%M:%S") }
 end
@@ -219,7 +215,7 @@ function lib.Destinataire(nom)
   return nom:match("^([^%-]+)%-[^%-]+$") or nom
 end
 
--- { guid, nom } du personnage connecté (guid nil ou le sien), ou d'un personnage du joueur dont GameData a la fiche
+-- { guid, nom } du personnage connecté (guid nil ou le sien), ou d'un personnage du joueur dont la base a la fiche
 -- (écrite à chaque connexion de ce personnage) ; nil sinon.
 -- ponytail: pas de GetPlayerInfoByGUID pour un autre joueur (forme de ses retours pas relevée sur Forever) ; à ajouter
 -- quand un add-on aura besoin du nom d'un autre joueur par son GUID.
@@ -229,13 +225,12 @@ function lib.Personnage(guid)
     local prenom, nomDeFamille = monNom()
     return { guid = moi, nom = (nomDeFamille and nomDeFamille ~= "") and (prenom .. " " .. nomDeFamille) or prenom }
   end
-  local fiche = GameDataAPI and GameDataAPI.personnage
-  return fiche and fiche(guid) or nil
+  return ns.personnage and ns.personnage(guid) or nil
 end
 
 ---------------------------------------------------------------------------------------------------
 -- Relevé des recettes connues, dans la fenêtre de métier ouverte (API moderne C_TradeSkillUI de Forever) : toutes
--- les recettes du métier, apprises ou non, avec produit et composants. Sert au relevé de repli et à GameData, qui
+-- les recettes du métier, apprises ou non, avec produit et composants. Sert au relevé de repli et à la base, qui
 -- sauvegarde ce qu'il rend. Rend { metier, rang, max, connues = { [clé] = difficulté }, recettes = { [clé] = … },
 -- total, illisibles, premiereErreur }, ou nil, raison (et le métier pour « liste vide »).
 local DIFFICULTE = { [0] = "optimal", [1] = "medium", [2] = "easy", [3] = "trivial" } -- Enum.TradeskillRelativeDifficulty
@@ -355,10 +350,9 @@ function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
 end
 
 ---------------------------------------------------------------------------------------------------
--- Relevé de repli (sans GameData) : en mémoire, dans la lib, jamais dans les SavedVariables de l'add-on hôte.
--- Gardé d'une mineure à l'autre : une copie plus récente reprend ce que la précédente a relevé.
-lib.repli = lib.repli or { recettes = {}, metiers = {} }
-lib.cadre = lib.cadre or CreateFrame("Frame")
+-- Relevé de repli (sans la base) : en mémoire, jamais dans des SavedVariables.
+lib.repli = { recettes = {}, metiers = {} }
+lib.cadre = CreateFrame("Frame")
 pcall(lib.cadre.RegisterEvent, lib.cadre, "PLAYER_LOGIN") -- les sondes sont relancées à la connexion
 -- Les événements de chaque type de repli (enregistrés à sa souscription).
 local EVENEMENTS = {
@@ -367,8 +361,8 @@ local EVENEMENTS = {
 }
 
 -- Conteneurs d'Enum.BagIndex dont le nom passe le filtre (sacs, banque, onglets : ce que ce client a), lus à l'instant :
--- { [nom] = { size, items = { { id, count, link }, … } } } (même forme que GameData). Seule lecture des sacs : GameData,
--- le Négoce et Handshake passent par elle. Sondes : le premier conteneur lu et le premier objet vu (relevé en masse).
+-- { [nom] = { size, items = { { id, count, link }, … } } }. Seule lecture des sacs : la base, le Négoce et Handshake
+-- passent par elle. Sondes : le premier conteneur lu et le premier objet vu (relevé en masse).
 lib.DeclarerSonde("emplacements d'un conteneur", "C_Container.GetContainerNumSlots(sac) rend un nombre d'emplacements",
   function(n) return type(n) == "number" end, function() lib.Conteneurs(lib.EstSac) end)
 lib.DeclarerSonde("objet d'un conteneur", "C_Container.GetContainerItemInfo rend, pour un objet présent, son itemID et son lien",
@@ -401,16 +395,15 @@ function lib.EstSac(n) return n == "Backpack" or n == "Keyring" or n == "Reagent
 function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 
 ---------------------------------------------------------------------------------------------------
--- Signal « type relevé à nouveau ». Les rappels sont gardés d'une mineure à l'autre (lib.rappels) ; un rappel qui plante
--- ne prive pas les autres ni le relevé (erreur rendue au gestionnaire du jeu).
-lib.rappels = lib.rappels or {}
+-- Signal « type relevé à nouveau ». Un rappel qui plante ne prive pas les autres ni le relevé (erreur rendue au
+-- gestionnaire du jeu).
+lib.rappels = {}
 
 function lib:QuandReleve(typeDeDonnees, fn)
   if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
   self.rappels[typeDeDonnees] = self.rappels[typeDeDonnees] or {}
   table.insert(self.rappels[typeDeDonnees], fn)
   self.AccrocherGameData()
-  pcall(self.cadre.RegisterEvent, self.cadre, "PLAYER_LOGIN") -- GameData chargé après l'add-on qui s'enregistre
   return true
 end
 
@@ -421,13 +414,13 @@ function lib:Signaler(typeDeDonnees)
   end
 end
 
--- Relevés de GameData : il appelle GameDataAPI.marketScanned après chaque scan de l'HV. Une seule fois par session, toutes
--- mineures confondues (le crochet appelle la lib, donc sa mineure la plus récente).
--- ponytail: seul l'HV a un signal côté GameData ; les autres types relevés par lui ne signalent pas encore.
+-- Relevés de la base : Commerce.lua appelle ns.marketScanned après chaque scan de l'HV. Accroché une seule fois.
+-- ponytail: le crochet reste jusqu'au ménage interne (#41), où le scan appellera Signaler lui-même ; seul l'HV a un
+-- signal côté base, les autres types qu'elle relève ne signalent pas encore.
 function lib.AccrocherGameData()
-  if lib.accrocheGameData or not (GameDataAPI and GameDataAPI.marketScanned) then return end
+  if lib.accrocheGameData or not ns.marketScanned then return end
   lib.accrocheGameData = true
-  hooksecurefunc(GameDataAPI, "marketScanned", function() lib:Signaler("cours de l'HV") end)
+  hooksecurefunc(ns, "marketScanned", function() lib:Signaler("cours de l'HV") end)
 end
 
 local function releveDeRepli()
@@ -441,12 +434,12 @@ end
 
 local jeton, banqueOuverte = 0, false
 lib.cadre:SetScript("OnEvent", function(_, evenement)
-  if evenement == "PLAYER_LOGIN" then -- tous les add-ons sont chargés : GameData aussi, s'il est là
+  if evenement == "PLAYER_LOGIN" then -- tous les add-ons sont chargés
     lib.RelancerSondes() -- une sonde rouge prévient dès la connexion, même si aucun add-on n'a encore rien relevé
     lib.AccrocherGameData()
     if not lib.souscriptions["recettes connues"] then return end
   end
-  if evenement == "PLAYER_REGEN_ENABLED" then -- fin du combat : le relevé sans fenêtre reprend (GameData compris)
+  if evenement == "PLAYER_REGEN_ENABLED" then -- fin du combat : le relevé sans fenêtre reprend (la base comprise)
     local reprise = lib.reprise
     lib.reprise = nil
     if reprise then reprise() end
@@ -455,13 +448,13 @@ lib.cadre:SetScript("OnEvent", function(_, evenement)
   if evenement == "BANKFRAME_CLOSED" then banqueOuverte = false return end
   if evenement == "BANKFRAME_OPENED" or evenement == "PLAYERBANKSLOTS_CHANGED" then
     banqueOuverte = banqueOuverte or evenement == "BANKFRAME_OPENED"
-    if banqueOuverte and not (GameDataAPI and GameDataAPI.inventaires) then -- GameData relève la banque pour tout le monde
+    if banqueOuverte and not ns.inventaires then -- la base relève la banque pour tout le monde
       lib.repli.banque, lib.repli.lotBanque = lib.Conteneurs(lib.EstBanque), lotDuJour()
       lib:Signaler("inventaires")
     end
     return
   end
-  if GameDataAPI and GameDataAPI.recettesConnues then return end -- GameData relève et sauvegarde pour tout le monde
+  if ns.recettesConnues then return end -- la base relève et sauvegarde pour tout le monde
   if evenement == "PLAYER_LOGIN" then
     C_Timer.After(5, function()
       lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes, function()
@@ -476,33 +469,32 @@ lib.cadre:SetScript("OnEvent", function(_, evenement)
   C_Timer.After(0.5, function() if mien == jeton then pcall(releveDeRepli) end end)
 end)
 
--- Les types souscrits pendant cette session : GameData les retient à la connexion (une souscription faite pendant le
--- chargement arrive avant que ses SavedVariables soient lues). Sans GameData, elle vaut le temps de la session.
-lib.souscriptions = lib.souscriptions or {}
+-- Les types souscrits pendant cette session : la base les retient à la connexion (une souscription faite pendant le
+-- chargement arrive avant que ses SavedVariables soient lues).
+-- ponytail: tenues en double (ici et dans la base) jusqu'au ménage interne (#41).
+lib.souscriptions = {}
 
 function lib:Souscrire(typeDeDonnees)
   local t = TYPES[typeDeDonnees]
   if not t then return nil, "type inconnu" end
   self.souscriptions[typeDeDonnees] = true
-  if GameDataAPI and GameDataAPI.souscrire then GameDataAPI.souscrire(typeDeDonnees) end
+  if ns.souscrire then ns.souscrire(typeDeDonnees) end
   for _, e in ipairs(EVENEMENTS[typeDeDonnees] or {}) do pcall(self.cadre.RegisterEvent, self.cadre, e) end
   return true
 end
--- ponytail: ancien nom, Handshake sur main appelle encore lib:Demander("recettes connues") ; à retirer après sa fusion.
-lib.Demander = lib.Souscrire
 
 function lib:Lire(typeDeDonnees, personnage)
   local t = TYPES[typeDeDonnees]
   if not t then return nil, "type inconnu" end
-  local fournir = GameDataAPI and GameDataAPI[t.gamedata]
+  local fournir = ns[t.gamedata]
   local d, lot
-  if fournir then d, lot = fournir() end -- lecture seule : ce sont les tables de GameData
+  if fournir then d, lot = fournir() end -- lecture seule : ce sont les tables de la base
   if self.LireParFournisseurs and self.fournisseurs[typeDeDonnees] then
     return self:LireParFournisseurs(typeDeDonnees, d, lot, fournir ~= nil)
   end
   if not fournir then
     local moi = monGUID()
-    if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
+    if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end -- ponytail: raison du repli, partie avec lui (#41)
     if typeDeDonnees == "inventaires" then
       d = { persos = { [moi] = { bags = lib.Conteneurs(lib.EstSac), bank = self.repli.banque } } }
       lot = { persos = { [moi] = self.repli.lotBanque or lotDuJour() } } -- ponytail: un lot pour les deux ; le moins frais (la banque)
@@ -513,7 +505,7 @@ function lib:Lire(typeDeDonnees, personnage)
   end
   if not t.parPerso then -- une seule table pour le joueur : personnage sans objet
     if type(d) ~= "table" or not next(d) then return nil, "pas encore relevé" end
-    return d, lot or {} -- un GameData d'avant les lots n'en rend pas : lot vide
+    return d, lot or {} -- une base sans lot pour ce type : lot vide
   end
   lot = { persos = lot and lot.persos or {} }
   if personnage ~= "tous" then

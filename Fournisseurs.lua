@@ -1,8 +1,10 @@
--- LibCommune : fournisseurs (GameData#6). Un fournisseur tient un type de données relevées pour le joueur : l'API
+-- Azeroth Commune : fournisseurs (GameData#6). Un fournisseur tient un type de données relevées pour le joueur : l'API
 -- publique d'un autre add-on d'abord, à défaut ses SavedVariables (fragile, si sa licence le permet), en dernier notre
--- propre relevé (GameData). On ne copie pas ce qui est lourd et qu'un fournisseur tient déjà (l'historique de l'HV) ;
--- ce que le scan de GameData vient de voir est gardé et fait foi : un « dernier vu » d'un autre add-on ne dit pas si
--- l'objet est encore en vente. Sans GameData ni fournisseur, le type est indisponible, jamais relevé en repli.
+-- propre relevé (la base du socle, nommée « GameData » dans les sources d'une ligne). On ne copie pas ce qui est lourd et
+-- qu'un fournisseur tient déjà (l'historique de l'HV) ; ce que le scan du socle vient de voir est gardé et fait foi : un
+-- « dernier vu » d'un autre add-on ne dit pas si l'objet est encore en vente. Sans scan ni fournisseur, le type est
+-- indisponible, jamais relevé en repli.
+-- ponytail: « GameData » reste le nom de notre scan dans sources et champs (lu par le Négoce) ; à renommer avec lui.
 --
 -- Cours de l'HV, ligne d'un objet de ton HV (royaume-faction du personnage connecté) :
 --   Avec un scan de GameData pour cet HV : min (prix unitaire le plus bas), qty (quantité en vente), auctions (annonces),
@@ -16,19 +18,15 @@
 -- Fournisseurs lus (rien de leur code n'est repris) : Auctionator (« All Rights Reserved ») et TSM par leur API publique
 -- seulement ; AuctionDB (GPL v3 dans son LICENSE, LGPLv3 dans son TOC) n'a pas d'API publique : ses SavedVariables, au
 -- format décrit dans son History.lua. Sa qty compte aussi les enchères sans achat immédiat.
--- Chargé après LibCommune.lua (le TOC, les check.lua) : la maison de l'HV et la faction viennent de ses relevés sondés.
-local lib = LibStub("LibCommune-1.0")
-local VERSION = 4 -- 4 : sondes des fournisseurs
-lib.versions = lib.versions or {}
-if (lib.versions.fournisseurs or 0) >= VERSION then return end
-lib.versions.fournisseurs = VERSION
+-- Chargé après AzerothCommune.lua : la maison de l'HV et la faction viennent de ses relevés sondés.
+local lib = AzerothCommune
 
 local HV = "cours de l'HV"
 local CHAMPS = { [HV] = { "min", "qty", "auctions", "tiers", "hist" } }
-local APPELANT = "LibCommune" -- l'API d'Auctionator demande le nom de l'add-on qui l'appelle
+local APPELANT = "AzerothCommune" -- l'API d'Auctionator demande le nom de l'add-on qui l'appelle
 local AUCTIONDB_RECENT = 6 * 3600 -- un scan d'AuctionDB plus vieux : son historique n'est plus frais pour ton HV
 
-local function maison() return lib.MaisonHV() end -- même clé que GameDataMarket, sondée ; nil si la faction est inconnue
+local function maison() return lib.MaisonHV() end -- même clé que AzerothCommuneMarket, sondée ; nil si la faction est inconnue
 
 -- Sondes des fournisseurs : un prix numérique, ou rien, pour un objet. Vérifiées sur la première ligne de chaque lecture
 -- (relevé en masse) ; un fournisseur absent n'est jamais lu : sa sonde reste « pas encore vue », sans relevé sans contexte.
@@ -121,7 +119,7 @@ lib.fournisseurs = {
   },
 }
 
--- Le dernier scan de GameData pour ton HV (GameDataAPI.coursHV : { hv = GameDataMarket, depot }), en lecteur du même
+-- Le dernier scan du socle pour ton HV (ns.coursHV : { hv = AzerothCommuneMarket, depot }), en lecteur du même
 -- genre : un objet absent de ce scan est plus en vente. 2e retour : ce scan.
 local function lecteurGameData(d)
   local h = maison()

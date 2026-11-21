@@ -1,0 +1,16 @@
+## Interface: 16001
+## Title: Azeroth Commune
+## Category: Data
+## Category-frFR: Données
+## Notes: Le socle des add-ons Azeroth Commune, requis par chacun : il relève les données du jeu pour eux (tous tes persos : sacs, banque, courrier, équipement, monnaies, réputations, métiers, recettes, quêtes ; les add-ons installés, les objets du jeu, les maîtres de métier, les marchands, les prix de l'hôtel des ventes, avec Auctionator, TSM ou AuctionDB s'ils sont là), seulement les types auxquels tes add-ons ont souscrit ; il sonde chaque relevé (une réponse inattendue du jeu prévient dans le chat) ; et il réunit tes add-ons sous un seul bouton de minicarte et une seule entrée des options. /ac
+## Version: 2.0.0
+## SavedVariables: AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket
+AzerothCommune.lua
+Interface.lua
+Capture.lua
+Regroupement.lua
+Fournisseurs.lua
+Base.lua
+Commerce.lua
+Souscriptions.lua
+VendorData.lua

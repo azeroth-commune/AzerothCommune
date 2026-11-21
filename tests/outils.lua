@@ -1,12 +1,12 @@
--- Outils communs dans wow-ui-sim (tools/sim.sh test LibCommune) : une fenêtre et un tableau créés par la lib, sans erreur Lua.
+-- Outils communs dans wow-ui-sim (tools/sim.sh test AzerothCommune) : une fenêtre et un tableau créés par la lib, sans erreur Lua.
 test("fenêtre de la lib : créée cachée, Échap la ferme", function()
-    local lib = LibStub("LibCommune-1.0")
-    local f = lib.Fenetre("LibCommuneTestFenetre", "Essai", 400, 300)
+    local lib = AzerothCommune
+    local f = lib.Fenetre("AzerothCommuneTestFenetre", "Essai", 400, 300)
     assertNotNil(f)
-    assertEquals(f, _G.LibCommuneTestFenetre)
+    assertEquals(f, _G.AzerothCommuneTestFenetre)
     assertTrue(not f:IsShown())
     local echap = false
-    for _, n in ipairs(UISpecialFrames) do if n == "LibCommuneTestFenetre" then echap = true end end
+    for _, n in ipairs(UISpecialFrames) do if n == "AzerothCommuneTestFenetre" then echap = true end end
     assertTrue(echap)
     f:Show()
     assertTrue(f:IsShown())
@@ -14,8 +14,8 @@ test("fenêtre de la lib : créée cachée, Échap la ferme", function()
 end)
 
 test("tableau de la lib : données triées, tri gardé dans le store de l'add-on", function()
-    local lib = LibStub("LibCommune-1.0")
-    local f = lib.Fenetre("LibCommuneTestTableau", "Tableau", 400, 300)
+    local lib = AzerothCommune
+    local f = lib.Fenetre("AzerothCommuneTestTableau", "Tableau", 400, 300)
     local store = {}
     local cols = {
         { key = "nom", title = "Nom", w = 120, asc = true, get = function(r) return r.nom end },
@@ -35,7 +35,7 @@ test("tableau de la lib : données triées, tri gardé dans le store de l'add-on
 end)
 
 test("montants et capture : les fonctions sont là", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     assertType("string", lib.Argent(12345))
     assertType("function", lib.Capturer)
     assertType("function", lib.Exporter)

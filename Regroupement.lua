@@ -1,6 +1,6 @@
--- LibCommune : en jeu, les add-ons Azeroth Commune présents se regroupent (LibCommune#3) : un seul bouton de minicarte
+-- Azeroth Commune : en jeu, les add-ons présents se regroupent (LibCommune#3) : un seul bouton de minicarte
 -- « Azeroth Commune » et une seule entrée dans les options du jeu (Options > Add-ons), une sous-page par add-on.
---   lib.Regrouper{ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\…", ouvrir = fn,
+--   AzerothCommune.Regrouper{ nom = "Handshake", dossier = "Handshake", icone = "Interface\\Icons\\…", ouvrir = fn,
 --                  reglages = fn(page, ancre), store = fn() -> les SavedVariables de l'add-on,
 --                  outils = { { libelle = "Journal", ouvrir = fn, fenetre = "NegoceLedgerFrame" }, … },
 --                  exports = { { cle = "journal", libelle = "Journal", description = "…", donnees = fn() -> table }, … } }
@@ -8,24 +8,22 @@
 --   ses réglages sur sa page, sous ancre (le bouton « Ouvrir ») ; store : facultatif, voir l'angle du bouton.
 --   outils : facultatif, une ligne par outil sous celle de l'add-on dans le menu du bouton ; fenetre (facultatif) : le
 --   nom de sa fenêtre, qui passe devant si elle est déjà ouverte au lieu d'être rouverte.
---   exports : facultatif, ce que l'add-on sait photographier en grilles (export de Capture.lua) ; lib.Exports() rend
---   ceux de tous les add-ons regroupés, que l'add-on d'atelier Diagnostic liste et lance (LibCommune#33).
+--   exports : facultatif, ce que l'add-on sait photographier en grilles (export de Capture.lua) ; AzerothCommune.Exports()
+--   rend ceux du socle puis ceux de tous les add-ons regroupés, que l'add-on d'atelier Diagnostic liste et lance (#33).
+-- Le socle ne se regroupe pas lui-même : pas de ligne à lui dans le menu ; sa page est l'entrée « Azeroth Commune »
+-- (les add-ons présents, les souscriptions et l'état des données relevées), ses exports viennent de Base.lua (ns).
 -- Bouton : clic = l'add-on s'il est seul, sinon la liste des add-ons et de leurs outils ; clic droit = les réglages ;
--- glisser = le déplacer.
--- Seul, un add-on garde son icône sur le bouton et sa page est l'entrée elle-même : un bouton, une entrée, rien de plus
--- (ses outils, s'il en a, restent dans sa propre fenêtre).
+-- glisser = le déplacer. Seul, un add-on garde son icône sur le bouton.
 -- Rien n'est sauvegardé ici : l'angle du bouton est écrit dans le store de chaque add-on regroupé (minimap_angle), et lu
--- dans le premier qui en a un (GameDataDB.minimap_angle d'avant le regroupement reste donc valable).
+-- dans le premier qui en a un.
 -- Tout se construit à l'entrée en jeu (SavedVariables chargées, add-ons présents connus), une seule fois. Les pages des
 -- réglages sont faites une fois pour toutes, sans OnShow, OnRefresh ni OnCommit : aucun code à nous ne tourne quand le
--- joueur ouvre ou ferme les options (fermer revient au menu Échap, où du code d'add-on bloque Déconnexion / Quitter).
-local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : tests
-local VERSION = 2 -- 2 : outils et exports
-lib.versions = lib.versions or {}
-if (lib.versions.regroupement or 0) >= VERSION then return end
-lib.versions.regroupement = VERSION
+-- joueur ouvre ou ferme les options (fermer revient au menu Échap, où du code d'add-on bloque Déconnexion / Quitter) ;
+-- les souscriptions de la page du socle se relisent par son bouton « Actualiser ».
+local _, ns = ...
+local lib = AzerothCommune
 
-lib.regroupes = lib.regroupes or {} -- dans l'ordre d'arrivée (l'ordre de chargement des add-ons)
+lib.regroupes = {} -- dans l'ordre d'arrivée (l'ordre de chargement des add-ons)
 local NOM, ICONE, ANGLE = "Azeroth Commune", "Interface\\Icons\\INV_Misc_Map_01", 200
 
 local function stores()
@@ -53,11 +51,11 @@ local function ouvrirOutil(o)
   if w and w:IsShown() then w:Raise() else o.ouvrir() end
 end
 
--- Les exports de tous les add-ons regroupés, dans l'ordre d'arrivée : { cle, libelle, description, donnees, addon }.
--- Lu à chaque appel : un add-on regroupé après l'entrée en jeu y est aussi.
+-- Les exports du socle (ns.exportsSocle), puis ceux de tous les add-ons regroupés dans l'ordre d'arrivée :
+-- { cle, libelle, description, donnees, addon }. Lu à chaque appel : un add-on regroupé après l'entrée en jeu y est aussi.
 function lib.Exports()
   local t = {}
-  for _, r in ipairs(lib.regroupes) do
+  for _, r in ipairs({ { nom = NOM, exports = ns.exportsSocle }, unpack(lib.regroupes) }) do
     for _, e in ipairs(r.exports or {}) do
       t[#t + 1] = { cle = e.cle, libelle = e.libelle, description = e.description, donnees = e.donnees, addon = r.nom }
     end
@@ -66,7 +64,7 @@ function lib.Exports()
 end
 
 ---------------------------------------------------------------------------------------------------
--- Bouton de la minicarte (l'allure de l'ancien bouton de GameData), posé sur le bord à l'angle gardé.
+-- Bouton de la minicarte, posé sur le bord à l'angle gardé.
 local function placer(b)
   local a, rayon = math.rad(lireAngle()), Minimap:GetWidth() / 2 + 6
   b:ClearAllPoints()
@@ -142,7 +140,8 @@ end
 
 ---------------------------------------------------------------------------------------------------
 -- Pages des réglages : celle d'un add-on (icône, nom, ses Notes du TOC, « Ouvrir », puis ses réglages s'il en a), et
--- l'accueil « Azeroth Commune » qui liste les add-ons présents.
+-- celle du socle, l'entrée « Azeroth Commune » : les add-ons présents, puis les souscriptions et l'état des données
+-- relevées (ce que dit /ac souscriptions, ns.lignesSouscriptions de Souscriptions.lua).
 local function enTete(p, icone, nom)
   local i = p:CreateTexture(nil, "ARTWORK")
   i:SetSize(40, 40)
@@ -185,30 +184,43 @@ local function accueil()
   d:SetPoint("TOPLEFT", 16, -72)
   d:SetText("Les add-ons d'Azeroth Commune présents ; la page de chacun est dans la liste, sous Azeroth Commune.")
   -- ponytail: la liste de l'entrée en jeu ; un add-on regroupé plus tard n'a que sa sous-page
-  for i, r in ipairs(lib.regroupes) do
+  local y = -100
+  for _, r in ipairs(lib.regroupes) do
     local b = bouton(p, "Ouvrir", function() r.ouvrir() end)
-    b:SetPoint("TOPLEFT", 16, -100 - (i - 1) * 30)
+    b:SetPoint("TOPLEFT", 16, y)
     local n = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     n:SetPoint("LEFT", b, "RIGHT", 12, 0)
     n:SetText(texte(r.icone, r.nom))
+    y = y - 30
   end
+  local titre = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  titre:SetPoint("TOPLEFT", 16, y - 10)
+  titre:SetText("Données relevées")
+  local liste = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  liste:SetPoint("TOPLEFT", titre, "BOTTOMLEFT", 0, -8)
+  liste:SetWidth(600)
+  liste:SetJustifyH("LEFT")
+  local function lire() liste:SetText(table.concat(ns.lignesSouscriptions and ns.lignesSouscriptions() or {}, "\n")) end
+  local actualiser = bouton(p, "Actualiser", lire)
+  actualiser:SetPoint("LEFT", titre, "RIGHT", 16, 0)
+  lire()
+  p.souscriptions = liste -- lu par les tests
   return p
 end
 
 ---------------------------------------------------------------------------------------------------
--- Le regroupement : un seul bouton, une seule entrée ; une sous-page par add-on (sauf s'il est seul).
+-- Le regroupement : un seul bouton (s'il y a au moins un add-on), une seule entrée, la page du socle ; une sous-page par add-on.
 local function rassembler()
   local r = lib.regroupes
-  if #r == 0 then return end
-  lib.boutonCommun = lib.boutonCommun or creerBouton()
-  lib.boutonCommun.icone:SetTexture(#r == 1 and r[1].icone or ICONE)
-  placer(lib.boutonCommun)
+  if #r > 0 then
+    lib.boutonCommun = lib.boutonCommun or creerBouton()
+    lib.boutonCommun.icone:SetTexture(#r == 1 and r[1].icone or ICONE)
+    placer(lib.boutonCommun)
+  end
   if not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
   if not lib.categorie then
-    local seul = #r == 1 and r[1]
-    lib.categorie = Settings.RegisterCanvasLayoutCategory(seul and pageAddOn(seul) or accueil(), NOM)
+    lib.categorie = Settings.RegisterCanvasLayoutCategory(accueil(), NOM)
     Settings.RegisterAddOnCategory(lib.categorie)
-    if seul then seul.categorie = lib.categorie end
   end
   for _, a in ipairs(r) do
     if not a.categorie then a.categorie = Settings.RegisterCanvasLayoutSubcategory(lib.categorie, pageAddOn(a), a.nom) end
@@ -227,7 +239,6 @@ function lib.Regrouper(r)
   if IsLoggedIn and IsLoggedIn() then rassembler() end -- add-on chargé après l'entrée en jeu
 end
 
--- Un seul cadre d'événements, repris par la copie la plus récente (son rassembler remplace celui de la précédente).
-lib.cadreRegroupement = lib.cadreRegroupement or CreateFrame("Frame")
+lib.cadreRegroupement = CreateFrame("Frame")
 lib.cadreRegroupement:RegisterEvent("PLAYER_LOGIN")
 lib.cadreRegroupement:SetScript("OnEvent", rassembler)

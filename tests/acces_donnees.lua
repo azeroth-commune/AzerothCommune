@@ -1,38 +1,46 @@
--- Tests d'intégration dans wow-ui-sim (tools/sim.sh test LibCommune) : la lib chargée avec GameData et Handshake dans l'interface Forever simulée.
-test("LibCommune-1.0 est enregistrée", function()
-    assertNotNil(LibStub and LibStub("LibCommune-1.0", true))
+-- Tests d'intégration dans wow-ui-sim (tools/sim.sh test AzerothCommune) : le socle chargé dans l'interface Forever
+-- simulée, son API publique par le global AzerothCommune.
+-- L'API publique, sous les noms de l'ancienne lib ; ni LibStub("LibCommune-1.0") ni GameDataAPI (ADR 0002).
+local API = { "Lire", "Souscrire", "QuandReleve", "Signaler", "Personnage", "Destinataire", "Royaume", "MaisonHV", "Faction",
+    "Build", "Sondes", "RelancerSondes", "DeclarerSonde", "Sonder", "Conteneurs", "EstSac", "EstBanque", "Fusionner",
+    "PrixAchat", "PrixMarchands", "Fenetre", "Tableau", "TrierLignes", "Argent", "ArgentCourt", "ArgentSigne", "NomObjet",
+    "RetenirObjet", "TrouverObjet", "Capturer", "BoutonCapture", "Exporter", "JsonSur", "Regrouper", "Exports" }
+
+test("le global AzerothCommune porte l'API publique ; plus de LibCommune ni de GameDataAPI", function()
+    assertType("table", AzerothCommune)
+    for _, nom in ipairs(API) do assertType("function", AzerothCommune[nom]) end
+    assertNil(GameDataAPI)
+    assertNil(LibStub and LibStub("LibCommune-1.0", true))
+    assertNil(AzerothCommune.versions)
+    assertNil(AzerothCommune.listeSondes)
 end)
 
 test("type inconnu : indisponible avec raison", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local data, raison = lib:Lire("pas un type")
     assertNil(data)
     assertEquals("type inconnu", raison)
 end)
 
 test("recettes connues : données ou raison connue", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     assertTrue(lib:Souscrire("recettes connues"))
     local data, raison = lib:Lire("recettes connues", "tous")
     if data then
         assertType("table", data.recettes)
         local n = 0 for _ in pairs(data.persos) do n = n + 1 end
-        print("recettes connues : " .. n .. " personnage(s) lus via GameData")
+        print("recettes connues : " .. n .. " personnage(s) lus dans la base")
     else
-        assertContains({ "pas encore relevé", "pas de GameData" }, raison)
+        assertEquals("pas encore relevé", raison)
         print("recettes connues indisponibles : " .. raison)
     end
-end)
-
-test("GameData expose recettesConnues à la lib", function()
-    assertType("function", GameDataAPI and GameDataAPI.recettesConnues)
 end)
 
 test("recettes connues sans fenêtre : l'API de Forever est là et le relevé tourne", function()
     assertType("function", IsPlayerSpell)
     assertType("function", GetProfessions)
     assertType("function", GetProfessionInfo)
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local metiers, fini = {}, false
     -- sans recette candidate (réserve de Handshake mise de côté), le relevé finit tout de suite, sans attendre d'image
     local reserve = HandshakeClassicRecipes
@@ -43,35 +51,27 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     assertTrue(fini)
 end)
 
-test("catalogue : chaque type a son accesseur dans GameData", function()
-    local lib = LibStub("LibCommune-1.0")
+test("catalogue : chaque type se lit dans la base, ou pas encore relevé", function()
+    local lib = AzerothCommune
     for nom, t in pairs(lib.types) do
-        assertType("function", GameDataAPI[t.gamedata])
         local data, raison = lib:Lire(nom, "tous")
         if not data then assertEquals("pas encore relevé", raison) end
     end
 end)
 
-test("souscription retenue par GameData avec sa date, pour tout le joueur", function()
-    local lib = LibStub("LibCommune-1.0")
-    -- Handshake a souscrit aux recettes connues pendant le chargement : retenu à la connexion
-    assertType("number", GameDataDB.souscriptions and GameDataDB.souscriptions["recettes connues"])
+test("souscription retenue par la base avec sa date, pour tout le joueur", function()
+    local lib = AzerothCommune
     assertTrue(lib:Souscrire("marchands"))
-    assertType("number", GameDataDB.souscriptions.marchands)
-    assertTrue(GameDataAPI.souscrit("marchands"))
+    assertType("number", AzerothCommuneDB.souscriptions.marchands)
 end)
 
-test("provenance : un lot porte le build du client simulé, et chaque type lu rend son lot", function()
+test("provenance : chaque type lu rend son lot, au build du client simulé", function()
     assertType("function", GetBuildInfo)
     local version, build = GetBuildInfo()
     assertType("string", version)
     assertNotNil(tonumber(build))
-    assertType("table", GameDataDB.lots) -- lots vérifiés au chargement de GameData
-    local lot = GameDataAPI.lot()
-    assertEquals("relevé direct", lot.provenance)
-    assertEquals(tonumber(build), lot.build)
-    assertType("string", lot.date)
-    local lib = LibStub("LibCommune-1.0")
+    assertType("table", AzerothCommuneDB.lots) -- lots vérifiés au chargement de la base
+    local lib = AzerothCommune
     for nom, t in pairs(lib.types) do
         local data, l = lib:Lire(nom, "tous")
         if data and not t.parPerso then assertType("table", l) end
@@ -80,7 +80,7 @@ test("provenance : un lot porte le build du client simulé, et chaque type lu re
 end)
 
 test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé de repli des inventaires)", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     assertType("table", Enum.BagIndex)
     assertType("function", lib.Conteneurs)
     local sacs = lib.Conteneurs(lib.EstSac)
@@ -97,15 +97,15 @@ test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé d
     end
 end)
 
-test("signal « type relevé à nouveau » : le scan de l'HV de GameData appelle les rappels", function()
-    local lib = LibStub("LibCommune-1.0")
+test("signal « type relevé à nouveau » : accroché au scan de l'HV de la base, les rappels appelés", function()
+    local lib = AzerothCommune
     local _, raison = lib:QuandReleve("pas un type", print)
     assertEquals("type inconnu", raison)
     local recus = {}
     local function rappel(t) recus[#recus + 1] = t end
     assertTrue(lib:QuandReleve("cours de l'HV", rappel))
-    assertTrue(lib.accrocheGameData)
-    GameDataAPI.marketScanned() -- ce que GameData appelle à la fin d'une lecture de l'HV
+    assertTrue(lib.accrocheGameData) -- le crochet du scan de l'HV est posé (le scan lui-même : check.lua)
+    lib:Signaler("cours de l'HV")
     local l = lib.rappels["cours de l'HV"]
     for i = #l, 1, -1 do if l[i] == rappel then table.remove(l, i) end end
     assertEquals(1, #recus)
@@ -113,7 +113,7 @@ test("signal « type relevé à nouveau » : le scan de l'HV de GameData appelle
 end)
 
 test("personnage connecté : GUID et nom, plus d'adresse ; chuchoté par son nom complet", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local p = lib.Personnage()
     assertType("string", p.guid)
     assertEquals(UnitGUID("player"), p.guid)
@@ -124,10 +124,10 @@ test("personnage connecté : GUID et nom, plus d'adresse ; chuchoté par son nom
 end)
 
 test("lire par GUID : persos rangé par GUID", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local data = lib:Lire("inventaires", "tous")
-    if not data then SlashCmdList.GAMEDATA("") data = lib:Lire("inventaires", "tous") end -- /gdata : relevé tout de suite
-    assertNotNil(data, "inventaires relevés par GameData")
+    if not data then lib:Souscrire("inventaires"); SlashCmdList.AZEROTHCOMMUNE("") data = lib:Lire("inventaires", "tous") end -- /ac : relevé tout de suite
+    assertNotNil(data, "inventaires relevés par la base")
     local n = 0
     for cle in pairs(data.persos) do n = n + 1; assertTrue(cle:find("^Player%-") ~= nil, "clé " .. cle) end
     assertTrue(n > 0, "au moins le personnage connecté")
@@ -137,7 +137,7 @@ test("lire par GUID : persos rangé par GUID", function()
 end)
 
 test("prix d'achat exposé par la lib : un coût ou rien, sans erreur", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     assertType("function", lib.PrixAchat)
     assertType("table", lib:PrixMarchands())
     local c, src = lib:PrixAchat(2772, 5)
