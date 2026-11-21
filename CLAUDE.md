@@ -1,13 +1,13 @@
 # LibCommune
 
-Lib embarquée (LibStub) des add-ons Azeroth Commune. Repo `azeroth-commune/LibCommune` (privé pour l'instant). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
+Lib embarquée (LibStub) des add-ons Azeroth Commune. Repo `azeroth-commune/AzerothCommune` (privé pour l'instant). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
 Déploiement : lien symbolique depuis le dossier AddOns du jeu, `/reload` suffit.
 
 ## Agent skills
 
 ### Issue tracker
 
-GitHub Issues de `azeroth-commune/LibCommune`, toujours avec `-R azeroth-commune/LibCommune` ; PR externes : non. See `docs/agents/issue-tracker.md`.
+GitHub Issues de `azeroth-commune/AzerothCommune`, toujours avec `-R azeroth-commune/AzerothCommune` ; PR externes : non. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
