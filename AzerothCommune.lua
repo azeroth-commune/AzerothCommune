@@ -223,8 +223,9 @@ end
 
 ---------------------------------------------------------------------------------------------------
 -- Relevé des recettes connues, dans la fenêtre de métier ouverte (API moderne C_TradeSkillUI de Forever) : toutes
--- les recettes du métier, apprises ou non, avec produit et composants. La base sauvegarde ce qu'il rend. Rend { metier, rang, max, connues = { [clé] = difficulté }, recettes = { [clé] = … },
--- total, illisibles, premiereErreur }, ou nil, raison (et le métier pour « liste vide »).
+-- les recettes du métier, apprises ou non, avec produit et composants. La base sauvegarde ce qu'il rend. Rend { metier,
+-- rang, max, connues = { [clé] = difficulté }, recettes = { [clé] = … }, total, illisibles, premiereErreur }, ou nil,
+-- raison (et le métier pour « liste vide »).
 local DIFFICULTE = { [0] = "optimal", [1] = "medium", [2] = "easy", [3] = "trivial" } -- Enum.TradeskillRelativeDifficulty
 
 -- Sonde : la fiche de la première recette lisible (relevé en masse) a un nom, un produit (sauf un enchantement) et des
