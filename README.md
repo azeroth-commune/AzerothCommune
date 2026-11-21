@@ -175,7 +175,7 @@ AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles 
 ```
 
 Le bouton loupe (capture) des fenêtres n'apparaît que si un add-on le demande (`AC.captureDansLesFenetres`, posé par
-Be a Good Pal). `Capture.lua` se charge aussi seul hors du jeu (`AzerothCommune = {}` puis le fichier :
+Diagnostic, l'add-on de debug). `Capture.lua` se charge aussi seul hors du jeu (`AzerothCommune = {}` puis le fichier :
 `AC.PagesExport`, `AC.GrilleExport`).
 
 ## Regroupement en jeu

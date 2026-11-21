@@ -1032,6 +1032,27 @@ assert(items[5].unknown, "inconnu du serveur : marqué pour ne pas redemander")
 ns.itemTick() -- rien de neuf à demander
 assert(#requested == 2)
 
+-- Borne du balayage (#56) : posée à la connexion (itemsReady), quand le catalogue des objets est chargé ; son plus grand
+-- ID et une marge de 5 000, sinon (repo cloné tel quel) 300 000, qui couvre Forever.
+do
+local avant = AzerothCommuneItems
+local function balayerDepuis(id)
+  AzerothCommuneItems = {}
+  ns.itemsReady()
+  AzerothCommuneItems.next_id = id
+  ns.itemTick(); ns.itemTick()
+  return AzerothCommuneItems.next_id
+end
+assert(balayerDepuis(299001) == 300001, "sans catalogue : jusqu'à 300 000, pas plus loin")
+ns.catalogueObjets = { [7] = {}, [291005] = {} }
+assert(balayerDepuis(295001) == 296006, "avec le catalogue : son plus grand ID (291 005) et 5 000 de marge")
+ns.catalogueObjets = {}
+assert(balayerDepuis(299001) == 300001, "catalogue vide : comme sans catalogue")
+ns.catalogueObjets = nil
+balayerDepuis(1)
+AzerothCommuneItems = avant
+end
+
 -- Commerce : clés de recettes, et agrégation des enchères en prix unitaires et paliers.
 charger("Commerce")
 assert(ns.itemIDOf("|cff|Hitem:3575::::|h[Barre de fer]|h|r") == 3575)

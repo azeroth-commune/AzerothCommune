@@ -6,7 +6,7 @@ local lib = AzerothCommune
 
 ---------------------------------------------------------------------------------------------------
 -- Une fenêtre sombre, bord lavande, déplaçable, fermée par Échap, avec titre, croix et bouton capture.
--- Bouton capture : seulement si un add-on l'a demandé (lib.captureDansLesFenetres, posé par Be a Good Pal).
+-- Bouton capture : seulement si un add-on l'a demandé (lib.captureDansLesFenetres, posé par Diagnostic, l'add-on de debug, Diagnostic#7).
 function lib.Fenetre(name, title, w, h)
   local f = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
   f:SetSize(w, h)
