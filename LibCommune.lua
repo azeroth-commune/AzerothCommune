@@ -20,7 +20,11 @@
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
 -- Personnage : lib.Personnage(guid) = { guid, adresse, nom } ; lib.Adresse(nom, royaume), lib.Destinataire(nom).
 -- Prix d'achat : lib:PrixAchat(id, qty, hv, marchands), lib:PrixMarchands() (en fin de fichier).
-local MAJOR, MINOR = "LibCommune-1.0", 9
+-- Identité, chaque relevé sondé : lib.Royaume() (affiché), lib.RoyaumeNormalise() (sans espace ni tiret, celui des
+-- adresses), lib.MaisonHV() (« royaume-faction », clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
+-- Sondes : lib.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
+-- lib.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
+local MAJOR, MINOR = "LibCommune-1.0", 10
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -82,10 +86,105 @@ function lib.Fusionner(sources)
   return out, tete
 end
 
+---------------------------------------------------------------------------------------------------
+-- Sondes (CONTEXT-MAP de l'atelier, LibCommune#30) : chaque relevé déclare la sienne à côté de son appel (un nom, une
+-- attente en une phrase, une vérification qui compare seulement la valeur reçue, sans rappeler le jeu) ; elle est
+-- vérifiée à chaque relevé. Une sonde rouge prévient dans le chat une fois par session et ne change rien à la valeur
+-- rendue (pas de mode dégradé : on débugge). Rien n'est sauvegardé : le dernier résultat de chacune, le temps de la session.
+lib.sondes = lib.sondes or {} -- [nom] = { etat, valeur, heure, build, prevenu } ; gardé d'une mineure à l'autre
+local SONDES = {} -- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même
+
+local function montrer(v)
+  if type(v) == "string" then return ("%q"):format(v) end
+  if type(v) ~= "table" then return tostring(v) end
+  local t = {}
+  for i = 1, v.n do t[i] = montrer(v[i]) end
+  return table.concat(t, ", ")
+end
+
+-- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (lib.buildLu, gardé
+-- d'une mineure à l'autre ; check.lua le remet à nil pour simuler une mise à jour du jeu).
+-- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
+local function buildDeSession()
+  if lib.buildLu == nil and GetBuildInfo then lib.buildLu = select(2, GetBuildInfo()) end
+  return lib.buildLu
+end
+
+-- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
+local function sonder(nom, ...)
+  local s, r = SONDES[nom], lib.sondes[nom] or {}
+  lib.sondes[nom] = r
+  r.etat = s.verifier(...) and "vert" or "rouge"
+  r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }
+  r.heure, r.build = date("%H:%M:%S"), buildDeSession()
+  if r.etat == "rouge" and not r.prevenu then
+    r.prevenu = true
+    print(("Azeroth Commune : le jeu ne rend pas ce que nous attendons (%s : %s ; reçu %s), build %s. À signaler."):format(
+      nom, s.attente, montrer(r.valeur), tostring(r.build)))
+  end
+  return ...
+end
+
+-- Déclare un relevé sondé sans contexte : appel() lit le jeu ; rend la fonction qui relève et sonde.
+-- ponytail: toutes les sondes sont sans contexte pour l'instant ; une sonde qui en demande un (fenêtre ouverte…) se
+-- déclarera sans relever, et RelancerSondes la sautera.
+local function releve(nom, attente, verifier, appel)
+  local relever = function() return sonder(nom, appel()) end
+  SONDES[#SONDES + 1] = { nom = nom, attente = attente, verifier = verifier, relever = relever }
+  SONDES[nom] = SONDES[#SONDES]
+  return relever
+end
+
+-- { { nom, attente, etat = "vert" | "rouge" | "pas encore vue", valeur, heure, build }, … } dans l'ordre de déclaration,
+-- aussi rangées par nom. valeur : ce que le jeu a rendu ({ n, … } pour plusieurs retours) ; heure « HH:MM:SS ».
+function lib.Sondes()
+  local out = {}
+  for i, s in ipairs(SONDES) do
+    local r = lib.sondes[s.nom] or {}
+    out[i] = { nom = s.nom, attente = s.attente, etat = r.etat or "pas encore vue", valeur = r.valeur, heure = r.heure, build = r.build }
+    out[s.nom] = out[i]
+  end
+  return out
+end
+
+-- Refait le relevé de chaque sonde sans contexte (une qui plante reste à son dernier résultat) ; rend lib.Sondes().
+function lib.RelancerSondes()
+  for _, s in ipairs(SONDES) do if s.relever then pcall(s.relever) end end
+  return lib.Sondes()
+end
+
+local function nonVide(v) return type(v) == "string" and v ~= "" end
+
+-- Le build du client, un nombre (2e retour de GetBuildInfo, « 64000 »).
+local build = releve("build", "le 2e retour de GetBuildInfo() est un numéro de build",
+  function(b) return tonumber(b) ~= nil end, function() return (select(2, GetBuildInfo())) end)
+function lib.Build() return tonumber(build()) end
+
+-- Le royaume tel que le jeu l'affiche (« CAMWOW EU4 Realm 8 PvP »), et normalisé, sans espace ni tiret, celui des adresses.
+lib.Royaume = releve("royaume", "GetRealmName() rend le nom du royaume, non vide", nonVide, function() return (GetRealmName()) end)
+local normalise = releve("royaume normalisé", "GetNormalizedRealmName() rend le royaume normalisé, non vide", nonVide,
+  function() return GetNormalizedRealmName and GetNormalizedRealmName() or "" end)
+function lib.RoyaumeNormalise() return (normalise():gsub("[%s%-]", "")) end
+
+-- La faction du personnage connecté, « Alliance » ou « Horde ».
+lib.Faction = releve("faction", "UnitFactionGroup(\"player\") rend Alliance ou Horde",
+  function(f) return f == "Alliance" or f == "Horde" end, function() return (UnitFactionGroup("player")) end)
+
+-- La maison de l'HV du personnage connecté, « royaume-faction » au royaume affiché (« CAMWOW EU4 Realm 8 PvP-Alliance ») :
+-- la clé des scans de l'HV de GameData ; nil si la faction est inconnue.
+lib.MaisonHV = releve("maison de l'HV", "la maison de l'HV est « royaume-faction », royaume non vide, faction Alliance ou Horde",
+  function(m) return type(m) == "string" and (m:match("^.+%-Alliance$") or m:match("^.+%-Horde$")) ~= nil end,
+  function() local f = lib.Faction() return f and (lib.Royaume() .. "-" .. f) end)
+
+-- Le GUID du personnage connecté, et son prénom et nom de famille (Forever : le 2e retour de UnitName est le nom de famille).
+local monGUID = releve("GUID", "UnitGUID(\"player\") est de la forme Player-…",
+  function(g) return type(g) == "string" and g:find("^Player%-") ~= nil end, function() return UnitGUID("player") end)
+local monNom = releve("nom", "UnitName(\"player\") rend un prénom puis un nom de famille (Forever)",
+  function(prenom, nom) return nonVide(prenom) and nonVide(nom) end, function() return UnitName("player") end)
+
 -- Le lot d'un relevé fait maintenant (même forme que les lots de GameData).
 local function lotDuJour()
-  local version, build = GetBuildInfo()
-  return { provenance = "relevé direct", build = tonumber(build), version = version, date = date("%Y-%m-%d %H:%M:%S") }
+  return { provenance = "relevé direct", build = lib.Build(), version = (GetBuildInfo()), date = date("%Y-%m-%d %H:%M:%S") }
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -96,7 +195,6 @@ end
 -- (/handshake noms en jeu, 20/11/2026) : le royaume vient de GetNormalizedRealmName. Un nom de famille n'a ni tiret ni
 -- espace (refusé par le jeu) : dans une adresse, le dernier tiret sépare le prénom du royaume.
 local ADRESSE = "^[^%-|,:%s%c]+%-[^%-|,:%s%c]+$"
-local function monRoyaume() return ((GetNormalizedRealmName and GetNormalizedRealmName() or ""):gsub("[%s%-]", "")) end
 
 -- L'adresse d'un nom reçu (« Prénom », « Prénom-Royaume », « Prénom Nom », « Prénom Nom-Royaume ») ou d'un prénom et de
 -- son royaume (brut ou normalisé) : « Prénom-Royaume », notre royaume s'il n'y en a pas ; nil pour un nom piégé.
@@ -108,7 +206,7 @@ function lib.Adresse(nom, royaume)
   end
   local prenom = nom:match("^[^%s%-]+")
   if not prenom then return nil end
-  royaume = (royaume and royaume ~= "") and royaume:gsub("[%s%-]", "") or monRoyaume()
+  royaume = (royaume and royaume ~= "") and royaume:gsub("[%s%-]", "") or lib.RoyaumeNormalise()
   local adresse = prenom .. "-" .. royaume
   return adresse:match(ADRESSE) and adresse or nil
 end
@@ -121,7 +219,7 @@ function lib.Destinataire(nom)
   local adresse = lib.Adresse(nom)
   if not adresse then return nom end
   local prenom, royaume = adresse:match("^([^%-]+)%-(.+)$")
-  return royaume == monRoyaume() and prenom or adresse
+  return royaume == lib.RoyaumeNormalise() and prenom or adresse
 end
 
 -- { guid, adresse, nom } du personnage connecté (guid nil ou le sien), ou d'un personnage du joueur dont GameData a la
@@ -129,9 +227,9 @@ end
 -- ponytail: pas de GetPlayerInfoByGUID pour un autre joueur (ni nom de famille, ni royaume vérifié sur Forever) ; à
 -- ajouter quand un add-on aura besoin du nom d'un autre joueur par son GUID.
 function lib.Personnage(guid)
-  local moi = UnitGUID("player")
+  local moi = monGUID()
   if guid == nil or guid == moi then
-    local prenom, nomDeFamille = UnitName("player")
+    local prenom, nomDeFamille = monNom()
     return { guid = moi, adresse = lib.Adresse(prenom),
       nom = (nomDeFamille and nomDeFamille ~= "") and (prenom .. " " .. nomDeFamille) or prenom }
   end
@@ -251,6 +349,7 @@ end
 -- Gardé d'une mineure à l'autre : une copie plus récente reprend ce que la précédente a relevé.
 lib.repli = lib.repli or { recettes = {}, metiers = {} }
 lib.cadre = lib.cadre or CreateFrame("Frame")
+pcall(lib.cadre.RegisterEvent, lib.cadre, "PLAYER_LOGIN") -- les sondes sont relancées à la connexion
 -- Les événements de chaque type de repli (enregistrés à sa souscription).
 local EVENEMENTS = {
   ["recettes connues"] = { "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" },
@@ -323,6 +422,7 @@ end
 local jeton, banqueOuverte = 0, false
 lib.cadre:SetScript("OnEvent", function(_, evenement)
   if evenement == "PLAYER_LOGIN" then -- tous les add-ons sont chargés : GameData aussi, s'il est là
+    lib.RelancerSondes() -- une sonde rouge prévient dès la connexion, même si aucun add-on n'a encore rien relevé
     lib.AccrocherGameData()
     if not lib.souscriptions["recettes connues"] then return end
   end
@@ -381,7 +481,7 @@ function lib:Lire(typeDeDonnees, personnage)
     return self:LireParFournisseurs(typeDeDonnees, d, lot, fournir ~= nil)
   end
   if not fournir then
-    local moi = UnitGUID("player")
+    local moi = monGUID()
     if not t.repli or (personnage and personnage ~= "tous" and personnage ~= moi) then return nil, "pas de GameData" end
     if typeDeDonnees == "inventaires" then
       d = { persos = { [moi] = { bags = lib.Conteneurs(lib.EstSac), bank = self.repli.banque } } }
@@ -397,7 +497,7 @@ function lib:Lire(typeDeDonnees, personnage)
   end
   lot = { persos = lot and lot.persos or {} }
   if personnage ~= "tous" then
-    local p = personnage or UnitGUID("player")
+    local p = personnage or monGUID()
     if not d.persos[p] then return nil, "pas encore relevé" end
     local un = { persos = { [p] = d.persos[p] } }
     for k, v in pairs(d) do if k ~= "persos" then un[k] = v end end
