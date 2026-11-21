@@ -395,15 +395,15 @@ function lib.EstSac(n) return n == "Backpack" or n == "Keyring" or n == "Reagent
 function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 
 ---------------------------------------------------------------------------------------------------
--- Signal « type relevé à nouveau ». Un rappel qui plante ne prive pas les autres ni le relevé (erreur rendue au
--- gestionnaire du jeu).
+-- Signal « type relevé à nouveau », appelé par le relevé lui-même (Commerce.lua, après chaque scan de l'HV). Un rappel
+-- qui plante ne prive pas les autres ni le relevé (erreur rendue au gestionnaire du jeu).
+-- ponytail: seul l'HV signale ; un autre type appellera lib:Signaler au bout de son relevé quand un add-on en aura besoin.
 lib.rappels = {}
 
 function lib:QuandReleve(typeDeDonnees, fn)
   if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
   self.rappels[typeDeDonnees] = self.rappels[typeDeDonnees] or {}
   table.insert(self.rappels[typeDeDonnees], fn)
-  self.AccrocherGameData()
   return true
 end
 
@@ -412,15 +412,6 @@ function lib:Signaler(typeDeDonnees)
     local ok, err = pcall(fn, typeDeDonnees)
     if not ok and geterrorhandler then geterrorhandler()(err) end
   end
-end
-
--- Relevés de la base : Commerce.lua appelle ns.marketScanned après chaque scan de l'HV. Accroché une seule fois.
--- ponytail: le crochet reste jusqu'au ménage interne (#41), où le scan appellera Signaler lui-même ; seul l'HV a un
--- signal côté base, les autres types qu'elle relève ne signalent pas encore.
-function lib.AccrocherGameData()
-  if lib.accrocheGameData or not ns.marketScanned then return end
-  lib.accrocheGameData = true
-  hooksecurefunc(ns, "marketScanned", function() lib:Signaler("cours de l'HV") end)
 end
 
 local function releveDeRepli()
@@ -436,7 +427,6 @@ local jeton, banqueOuverte = 0, false
 lib.cadre:SetScript("OnEvent", function(_, evenement)
   if evenement == "PLAYER_LOGIN" then -- tous les add-ons sont chargés
     lib.RelancerSondes() -- une sonde rouge prévient dès la connexion, même si aucun add-on n'a encore rien relevé
-    lib.AccrocherGameData()
     if not lib.souscriptions["recettes connues"] then return end
   end
   if evenement == "PLAYER_REGEN_ENABLED" then -- fin du combat : le relevé sans fenêtre reprend (la base comprise)

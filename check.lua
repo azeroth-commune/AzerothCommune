@@ -439,26 +439,19 @@ assert(d == nil and raison == "pas encore relevé", "GameData sans relevé, sans
 gamedata()
 print("Azeroth Commune : fournisseurs des cours de l'HV OK")
 
--- Signal « type relevé à nouveau » (#14) : rappels par type ; avec GameData, son scan de l'HV (marketScanned), accroché
--- une seule fois, à l'enregistrement ou à la connexion s'il est chargé après ; un rappel qui plante ne prive pas les autres.
-hooksecurefunc = function(t, nom, fn) local avant = t[nom]; t[nom] = function(...) avant(...); fn(...) end end
+-- Signal « type relevé à nouveau » (#14) : rappels par type, appelés par le relevé lui-même (le scan de l'HV : plus bas,
+-- avec la base) ; un rappel qui plante ne prive pas les autres.
 local erreurs, recus = {}, {}
 geterrorhandler = function() return function(e) erreurs[#erreurs + 1] = e end end
 assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type inconnu")
 assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
 assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
-assert(not lib.accrocheGameData, "sans GameData : rien à accrocher")
-gamedata({ marketScanned = noop, recettesConnues = function() return base end })
 lib.sondes.build.etat = nil
 lib.cadre.onEvent(lib.cadre, "PLAYER_LOGIN")
 assert(lib.Sondes().build.etat == "vert", "sondes relancées à la connexion")
-ns.marketScanned()
-assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "scan de l'HV : rappels appelés, erreur rendue au jeu")
-lib:QuandReleve("cours de l'HV", noop) -- accroché une seule fois
-ns.marketScanned()
-assert(#recus == 2, "un seul crochet : " .. #recus)
+lib:Signaler("cours de l'HV")
+assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "rappels appelés, erreur rendue au jeu")
 lib.rappels["cours de l'HV"] = nil
-gamedata()
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell, interrogé à la connexion), sans GameData : un personnage
@@ -938,7 +931,7 @@ print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseur
 do
 AzerothCommune = nil
 Auctionator, TSM_API, AuctionDBForeverSaved, HandshakeClassicRecipes, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil, nil
-hooksecurefunc = function(t, nom, fn) local avant = t[nom]; t[nom] = function(...) avant(...); fn(...) end end
+hooksecurefunc = function() error("crochet posé : le socle n'en pose aucun (#41)") end
 local ns = {}
 local noop = function() end
 CreateFrame = function() return { RegisterEvent = noop, SetScript = noop } end
@@ -1053,7 +1046,7 @@ mn = neuf.recipes.Minage
 assert(mn.known[3307] == "optimal" and mn.rank == 140 and mn.scanned and not mn.known[3308], "la fenêtre prime")
 assert(mn.known[3310], "connue mais absente de la liste de la fenêtre : gardée")
 ns.char, ns.run = char0, run0
--- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
+-- Lecture de l'HV : le scan appelle lui-même le signal « type relevé à nouveau » (#41 : plus de crochet).
 C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
   GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
 -- La maison de l'HV vient de la lib (lib.MaisonHV, GameData#24) : « n° de serveur-faction », le numéro tiré du GUID
@@ -1062,12 +1055,12 @@ local MAISON = "6942-Alliance"
 UnitGUID = function(u) if u == "player" then return "Player-6942-014B6DDC" end end
 UnitFactionGroup, time, AzerothCommuneMarket = function() return "Alliance" end, os.time, {}
 local scanned, realPrint = 0, print
-ns.marketScanned = function() scanned = scanned + 1 end
+assert(AzerothCommune:QuandReleve("cours de l'HV", function() scanned = scanned + 1 end))
 print = noop
 commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
 commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
 print = realPrint
-assert(AzerothCommuneMarket[MAISON].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
+assert(AzerothCommuneMarket[MAISON].items[2772].min == 100 and scanned == 1, "HV lu, puis l'abonné prévenu une fois, sans crochet")
 -- Sans fournisseur, le scan de l'HV marche comme avant : GameData relève tout (prix, quantité, paliers, historique).
 local hvR = AzerothCommuneMarket[MAISON]
 assert(hvR.items[2772].qty == 5 and hvR.items[2772].auctions == 1 and hvR.items[2772].tiers[1].price == 100, "tout relevé")

@@ -97,14 +97,14 @@ test("sacs lus à l'instant : l'API des conteneurs de Forever est là (relevé d
     end
 end)
 
-test("signal « type relevé à nouveau » : accroché au scan de l'HV de la base, les rappels appelés", function()
+test("signal « type relevé à nouveau » : les rappels appelés, sans crochet (le scan de l'HV lui-même : check.lua)", function()
     local lib = AzerothCommune
     local _, raison = lib:QuandReleve("pas un type", print)
     assertEquals("type inconnu", raison)
     local recus = {}
     local function rappel(t) recus[#recus + 1] = t end
     assertTrue(lib:QuandReleve("cours de l'HV", rappel))
-    assertTrue(lib.accrocheGameData) -- le crochet du scan de l'HV est posé (le scan lui-même : check.lua)
+    assertNil(lib.AccrocherGameData)
     lib:Signaler("cours de l'HV")
     local l = lib.rappels["cours de l'HV"]
     for i = #l, 1, -1 do if l[i] == rappel then table.remove(l, i) end end
