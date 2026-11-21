@@ -106,7 +106,7 @@ bouton et sa page est l'entrée elle-même.
 
 ```lua
 lib.Regrouper{ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
-  ouvrir = ns.toggleExportWindow,             -- clic sur le bouton (seul) ou sur sa ligne du menu
+  ouvrir = ns.ouvrir,             -- clic sur le bouton (seul) ou sur sa ligne du menu
   reglages = function(page, ancre) end,       -- facultatif : ses réglages, posés sur sa page sous le bouton « Ouvrir »
   store = function() return GameDataDB end,   -- facultatif : où garder l'angle du bouton (minimap_angle)
   outils = {                                  -- facultatif : une ligne par outil, sous celle de l'add-on dans le menu
@@ -116,8 +116,7 @@ lib.Regrouper{ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons
 ```
 
 `lib.Exports()` rend les exports de tous les add-ons regroupés, dans l'ordre d'arrivée (`cle`, `libelle`,
-`description`, `donnees`, `addon`) ; la fenêtre de GameData les liste et `/gdata export <clé>` les photographie, en
-attendant un module de debug de la lib.
+`description`, `donnees`, `addon`) ; l'add-on d'atelier Diagnostic les liste et les lance, et `/gdata export <clé>` les photographie.
 
 Bouton : clic = l'add-on seul, sinon la liste des add-ons et de leurs outils ; clic droit = les réglages ; glisser = le déplacer. L'angle est écrit
 dans le store de chaque add-on regroupé et lu dans le premier qui en a un ; la lib ne garde rien. Tout se construit à
