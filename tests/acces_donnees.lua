@@ -66,7 +66,7 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
             assertType("number", r.output)
             assertType("string", r.profession)
             assertType("table", r.reagents)
-            assertType("number", r.level) -- 0 : inconnue (2 recettes du client sans seuils, ex. Bottes d'hiver 44953)
+            assertType("number", r.level) -- 0 : inconnue (Bottes d'hiver 44953 : absente de Classic, sans seuils dans le client)
             assertTrue(r.grey >= r.yellow, "seuils : " .. tostring(r.name))
         else
             vues = vues + 1

@@ -417,7 +417,7 @@ ns.rappels["cours de l'HV"] = nil
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell ; la base le lance à la connexion) : un personnage jamais passé
--- par sa fenêtre. Candidates : celles que la base lui passe (les recettes vues et la réserve Classic, #48).
+-- par sa fenêtre. Candidates : celles que la base lui passe (les recettes vues et la réserve, #48).
 local metiers, vues = {}, { [3307] = { profession = "Minage" }, [3308] = { profession = "Minage" } }
 local images = {}
 C_Timer = { After = function(_, fn) images[#images + 1] = fn end } -- une image à la fois, pompée à la main
@@ -1160,7 +1160,7 @@ end
 local neuf, char0, run0 = { errors = {}, lots = {} }, ns.char, ns.run
 ns.char, ns.run = function() return neuf end, function(_, fn) fn(neuf) end
 AzerothCommuneDB.recipes[3310] = { profession = "Minage", name = "Fondre le thorium" } -- vue chez un autre perso
--- La réserve Classic du socle (#48) est interrogée aussi, même pour un objet qu'une recette vue fabrique déjà (9004 : la
+-- La réserve du socle (#48) est interrogée aussi, même pour un objet qu'une recette vue fabrique déjà (9004 : la
 -- barre de fer, comme 3307) : le même relevé que quand Handshake la remettait.
 ns.recettesClassic = { [9001] = { 2840, 1, 1, "Minage", "Fondre le cuivre", { 2770, 1 }, 1 },
   [9004] = { 3575, 1, 1, "Minage", "Fondre le fer (autre)", { 2772, 1 }, 125 } }
