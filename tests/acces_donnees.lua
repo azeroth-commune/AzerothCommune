@@ -136,3 +136,12 @@ test("lire par GUID : persos rangé par GUID", function()
     assertNotNil(moi and moi.persos[UnitGUID("player")], "lu par son GUID")
     assertEquals(lib.Personnage().nom, moi.persos[UnitGUID("player")].character.name)
 end)
+
+test("prix d'achat exposé par la lib : un coût ou rien, sans erreur", function()
+    local lib = LibStub("LibCommune-1.0")
+    assertType("function", lib.PrixAchat)
+    assertType("table", lib:PrixMarchands())
+    local c, src = lib:PrixAchat(2772, 5)
+    if c then assertType("number", c); assertTrue(src == "marchand" or src == "HV") end
+    assertEquals(300, (lib:PrixAchat(1, 3, { [1] = { min = 100 } }, {})))
+end)
