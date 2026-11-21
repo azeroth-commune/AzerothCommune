@@ -114,6 +114,56 @@ function lib.TrouverObjet(text, objets, recettes)
   end
 end
 
+-- Recherche d'objets (#49) : la seule de la suite. Parmi les objets vus (type « objets ») et les objets fabriqués de la
+-- base des recettes, même jamais vus (trouvés alors par le nom de leur recette) ; le jeu ne donne aucune liste de tous
+-- ses objets : un objet jamais vu et non fabricable ne se trouve que par son lien (TrouverObjet). Lit les deux types
+-- elle-même : l'add-on qui cherche y souscrit.
+-- Index en mémoire, refait au plus toutes les 5 s (le catalogue grossit pendant le scan des objets).
+-- ponytail: un objet relevé dans les 5 s attend l'index suivant ; un rappel QuandReleve si ça se voit
+local index, indexFait
+local function indexObjets()
+  local maintenant = GetTime()
+  if index and maintenant - indexFait < 5 then return index end
+  local craft, objets = {}, lib:Lire("objets") or {}
+  index, indexFait = {}, maintenant
+  for _, r in pairs(lib:Lire("base des recettes") or {}) do
+    if r.output then craft[r.output] = r.name or craft[r.output] or true end
+  end
+  for id, it in pairs(objets) do
+    if it.name then index[#index + 1] = { id = id, name = it.name, low = it.name:lower(), fabricable = craft[id] ~= nil } end
+  end
+  for id, nom in pairs(craft) do
+    if type(nom) == "string" and not (objets[id] and objets[id].name) then
+      index[#index + 1] = { id = id, name = nom, low = nom:lower(), fabricable = true }
+    end
+  end
+  return index
+end
+
+-- Les objets dont le nom contient texte (sans casse, au moins 2 caractères), au plus max (8 par défaut) :
+-- { { id, name, fabricable }, … }, fabricables d'abord, puis ceux qui commencent par le texte, puis les noms courts, puis l'ID.
+-- ponytail: :lower() ne connaît pas les accents (« É » reste « É ») ; taper en minuscules marche
+function lib.ChercherObjets(texte, max)
+  local q = (texte or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  if #q < 2 then return {} end
+  local hits = {}
+  for _, e in ipairs(indexObjets()) do
+    local at = e.low:find(q, 1, true)
+    if at then hits[#hits + 1] = { e = e, s = (e.fabricable and 0 or 2) + (at == 1 and 0 or 1) } end
+  end
+  table.sort(hits, function(a, b)
+    if a.s ~= b.s then return a.s < b.s end
+    if #a.e.name ~= #b.e.name then return #a.e.name < #b.e.name end
+    return a.e.id < b.e.id
+  end)
+  local out = {}
+  for i = 1, math.min(max or 8, #hits) do
+    local e = hits[i].e
+    out[i] = { id = e.id, name = e.name, fabricable = e.fabricable }
+  end
+  return out
+end
+
 ---------------------------------------------------------------------------------------------------
 -- Tri d'un tableau : colonne sort.key, sens sort.desc ; les cases vides vont toujours en bas, l'ordre d'arrivée
 -- départage les égalités (table.sort n'est pas stable).

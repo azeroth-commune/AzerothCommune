@@ -4,7 +4,7 @@
 local API = { "Lire", "Souscrire", "QuandReleve", "Signaler", "Personnage", "Destinataire", "Royaume", "MaisonHV", "Faction",
     "Build", "Sondes", "RelancerSondes", "DeclarerSonde", "Sonder", "Conteneurs", "EstSac", "EstBanque", "Fusionner",
     "PrixAchat", "PrixMarchands", "Fenetre", "Tableau", "TrierLignes", "Argent", "ArgentCourt", "ArgentSigne", "NomObjet",
-    "RetenirObjet", "TrouverObjet", "Capturer", "BoutonCapture", "Exporter", "JsonSur", "Regrouper", "Exports" }
+    "RetenirObjet", "TrouverObjet", "ChercherObjets", "Capturer", "BoutonCapture", "Exporter", "JsonSur", "Regrouper", "Exports" }
 
 test("le global AzerothCommune porte l'API publique ; plus de LibCommune ni de GameDataAPI", function()
     assertType("table", AzerothCommune)
@@ -71,6 +71,27 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
     end
     assertTrue(reserve > 500, "réserve chargée : " .. reserve .. " recettes")
     print("base des recettes : " .. vues .. " vue(s), " .. reserve .. " de la réserve")
+end)
+
+-- #49 : la recherche d'objets de la suite, parmi les objets vus et les objets fabriqués de la base des recettes.
+test("recherche d'objets : objets fabriqués de la base des recettes, sans doublon, en nombre limité", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("objets"))
+    assertTrue(lib:Souscrire("base des recettes"))
+    local trouves = lib.ChercherObjets("bronze")
+    assertEquals(8, #trouves)
+    local vus = {}
+    for _, e in ipairs(trouves) do
+        assertType("number", e.id)
+        assertType("string", e.name)
+        assertNil(vus[e.id], "doublon : " .. e.id)
+        vus[e.id] = true
+    end
+    assertTrue(trouves[1].fabricable, "fabricables d'abord")
+    local pantalon = false
+    for _, e in ipairs(lib.ChercherObjets("cuir cousu main", 30)) do pantalon = pantalon or e.id == 2303 end
+    assertTrue(pantalon, "objet de la réserve trouvé par le nom de sa recette")
+    assertEquals(0, #lib.ChercherObjets("b"))
 end)
 
 test("catalogue : chaque type se lit dans la base, ou pas encore relevé", function()

@@ -19,6 +19,8 @@
 --   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
+-- Recherche d'objets : AC.ChercherObjets(texte, max) parmi les objets vus et les objets fabriqués de la base des recettes
+-- (Interface.lua) ; l'add-on qui cherche souscrit à « objets » et à « base des recettes ».
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
 -- clé des scans de l'HV), AC.Faction(), AC.Build() (nombre).
 -- Sondes : AC.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
