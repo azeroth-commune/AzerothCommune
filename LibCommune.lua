@@ -119,7 +119,9 @@ end
 
 -- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
 local function sonder(nom, ...)
-  local s, r = SONDES[nom], lib.sondes[nom] or {}
+  local s = SONDES[nom]
+  if not s then return ... end -- pas déclarée (Interface.lua chargé seul avant ce fichier…) : jamais d'erreur dans un relevé
+  local r = lib.sondes[nom] or {}
   lib.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
   r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }

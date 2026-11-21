@@ -100,10 +100,12 @@ lib.fournisseurs = {
       lecteur = function()
         local h, quand = maisonAuctionDB()
         if not h then return nil end
-        local sonder = premiereLigne("prix AuctionDB")
+        local sondee = false
         return function(id)
           local s = h.items[id]
-          sonder(type(s) == "string" and s:sub(1, 40) or s) -- le début : un historique peut être long
+          if not sondee then -- première ligne seulement ; son début : un historique peut être long
+            sondee = true; lib.Sonder("prix AuctionDB", type(s) == "string" and s:sub(1, 40) or s)
+          end
           if type(s) ~= "string" then return nil end
           local hist = {}
           for t, min, med, qty in s:gmatch("(%d+),(%d+),(%d+),(%d+)") do
