@@ -885,6 +885,32 @@ do
   assert(lib:Lire("cours de l'HV").objet(2840) == nil, "point illisible : rien rendu, comme avant")
   AuctionDBForeverSaved = nil
 
+  -- La première ligne non nulle d'une lecture est vérifiée (#45) : une lecture qui commence par un objet sans prix ne
+  -- passe pas au vert sans avoir vu le format ; deux lignes sans prix : « pas encore vue ».
+  local function lecture(premier, second) local hv = lib:Lire("cours de l'HV"); hv.objet(premier); hv.objet(second) end
+  local fournisseurs = {
+    { "prix Auctionator", function() Auctionator = fausseAPI() end, function() Auctionator = nil end },
+    { "prix TSM", function() TSM_API = { GetCustomPriceValue = function(_, i) return PRIX[tonumber(i:match("%d+"))] end } end,
+      function() TSM_API = nil end },
+    { "prix AuctionDB", function()
+        local items = {}
+        for id, p in pairs(PRIX) do items[id] = type(p) == "number" and ("%d,%d,1,1"):format(os.time(), p) or p end
+        AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { os.time() } }, items = items } } }
+      end, function() AuctionDBForeverSaved = nil end },
+  }
+  for _, f in ipairs(fournisseurs) do
+    local nom, poser, oter = f[1], f[2], f[3]
+    PRIX[2840] = "40" -- mal formé
+    poser()
+    lib.sondes[nom] = nil
+    lecture(1, 2)
+    assert(etat(nom) == "pas encore vue", nom .. " : deux lignes sans prix, pas encore vue")
+    lecture(1, 2840)
+    assert(etat(nom) == "rouge", nom .. " : 1re ligne sans prix, 2e mal formée : rouge, " .. etat(nom))
+    PRIX[2840] = 40
+    oter()
+  end
+
   print = vraiPrint
 end
 print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")
