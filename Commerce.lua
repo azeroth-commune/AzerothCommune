@@ -86,18 +86,20 @@ ns.lire["recettes connues"] = function()
   return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
 end
 
--- La réserve Classic : RecettesClassic.lua, généré par tools/build_recipe_data.py de l'atelier (base cMaNGOS Classic
--- 1.12, GPL-3.0), hors du repo tant que la licence n'est pas choisie : absent d'un repo cloné tel quel. Mise en forme une
--- fois dans la forme des recettes vues, chaque ligne marquée « source externe ».
+-- La réserve : RecettesClassic.lua (nom historique), généré par tools/build_recipe_data_client.py de l'atelier depuis les
+-- tables du client Forever et ses correctifs en cache (#54), hors du repo tant que la licence n'est pas choisie : absent
+-- d'un repo cloné tel quel. Compétence requise : celle de Classic 1.12 quand la recette y est identique, sinon le seuil
+-- jaune du client (choix du générateur). Mise en forme une fois dans la forme des recettes vues, chaque ligne marquée
+-- « extrait du client », avec les seuils jaune et gris du client (vert = (jaune + gris) / 2).
 local reserve, brute
 local function reserveRecettes()
   if reserve == nil or brute ~= ns.recettesClassic then
     brute, reserve = ns.recettesClassic, {}
-    for k, c in pairs(brute or {}) do -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence }
+    for k, c in pairs(brute or {}) do -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris }
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
-        level = c[7], provenance = "source externe" }
+        level = c[7], yellow = c[8], grey = c[9], provenance = "extrait du client" }
     end
   end
   return reserve
@@ -118,8 +120,8 @@ end
 
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
 -- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence requise (la fenêtre de
--- métier ne la donne pas), sur une copie. Lot : relevé direct dès qu'une recette est vue ; la réserve seule, comme
--- VendorData : source externe, build inconnu donc peut-être périmé.
+-- métier ne la donne pas), sur une copie. Lot : relevé direct dès qu'une recette est vue ; la réserve seule, comme le
+-- catalogue des objets : le lot de la réserve (extrait du client), peut-être périmé sous un autre build ou sans lot.
 ns.lire["base des recettes"] = function()
   local vues, res, d, fait = AzerothCommuneDB.recipes or {}, reserveRecettes(), {}, {}
   for k, r in pairs(vues) do
@@ -135,7 +137,12 @@ ns.lire["base des recettes"] = function()
   for k, r in pairs(res) do
     if d[k] == nil and not fait[r.output] then d[k] = r end
   end
-  return d, next(vues) and { provenance = "relevé direct" } or { provenance = "source externe", perime = true }
+  if next(vues) then return d, { provenance = "relevé direct" } end
+  local lot = {}
+  for f, v in pairs(ns.recettesClassicLot or {}) do lot[f] = v end
+  -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
+  lot.provenance, lot.perime = "extrait du client", not (GetBuildInfo and lot.build == lib.Build()) or nil
+  return d, lot
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore

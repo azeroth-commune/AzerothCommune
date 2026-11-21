@@ -1079,34 +1079,44 @@ local rc = ns.lire["recettes connues"]()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(AzerothCommune:Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
--- Base des recettes (#48) : les recettes vues d'abord (3307 et 3308, relevé direct), la réserve Classic (RecettesClassic.lua,
--- générée, privée au socle : ns.recettesClassic) pour les objets qu'aucune recette vue ne fabrique, chaque ligne de la
--- réserve marquée « source externe ». La compétence requise, que la fenêtre ne donne pas, vient de la réserve.
+-- Base des recettes (#48, #54) : les recettes vues d'abord (3307 et 3308, relevé direct), la réserve extraite du client
+-- (RecettesClassic.lua, générée, privée au socle : ns.recettesClassic, nom historique) pour les objets qu'aucune recette vue
+-- ne fabrique, chaque ligne de la réserve marquée « extrait du client », avec les seuils jaune et gris du client. La
+-- compétence requise, que la fenêtre ne donne pas, vient de la réserve.
 ns.recettesClassic = {
-  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125 },          -- vue aussi : la vue gagne
-  [9003] = { 3577, 1, 1, "Minage", "Barre d'or (réserve)", { 2776, 1 }, 155 },   -- même objet que la vue 3308 : écartée
-  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9, 2321, 2 }, 175 },
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140 },        -- vue aussi : la vue gagne
+  [9003] = { 3577, 1, 1, "Minage", "Barre d'or (réserve)", { 2776, 1 }, 155, 160, 170 }, -- même objet que la vue 3308 : écartée
+  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9, 2321, 2 }, 175, 180, 200 },
 }
+ns.recettesClassicLot = { provenance = "extrait du client", build = 64000, version = "1.16.1.64000", date = "2026-11-21" }
 local br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[3307].name == "Fondre le fer" and br[3307].provenance == nil and br[3307].level == 125, "recette vue, sa compétence requise de la réserve")
 assert(AzerothCommuneDB.recipes[3307].level == nil, "la base des recettes vues n'est pas touchée")
 assert(br[3308] and br[9003] == nil, "même objet qu'une recette vue : la réserve ne la double pas")
 local cuir = br[9002]
-assert(cuir and cuir.provenance == "source externe" and cuir.profession == "Travail du cuir" and cuir.output == 4255
+assert(cuir and cuir.provenance == "extrait du client" and cuir.profession == "Travail du cuir" and cuir.output == 4255
   and cuir.made_min == 1 and cuir.made_max == 2 and cuir.level == 175 and cuir.reagents[2].id == 2321
   and cuir.reagents[2].qty == 2 and cuir.reagents[1].qty == 9, "recette de la réserve, dans la forme des recettes vues")
+assert(cuir.yellow == 180 and cuir.grey == 200 and br[3307].yellow == nil, "seuils jaune et gris de la réserve")
 assert(lotBr.provenance == "relevé direct", "lot mixte : la provenance la plus fiable")
 -- Sans fichier de réserve (repo cloné tel quel) : les seules recettes vues, sans erreur.
 ns.recettesClassic = nil
 br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[3307] and br[3307].level == nil and br[9002] == nil and lotBr.provenance == "relevé direct", "sans réserve : les recettes vues")
--- La réserve seule (aucune recette vue) : lot « source externe », build inconnu donc peut-être périmé ; ni l'une ni l'autre :
--- pas encore relevé.
+-- La réserve seule (aucune recette vue) : son lot, extrait du client, au build du client (64000 ici) ; périmé sous un
+-- autre build, ou sans lot (une réserve d'avant #54) ; ni l'une ni l'autre : pas encore relevé.
 local vuesAvant = AzerothCommuneDB.recipes
 AzerothCommuneDB.recipes = {}
-ns.recettesClassic = { [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175 } }
+ns.recettesClassic = { [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200 } }
 br, lotBr = AzerothCommune:Lire("base des recettes")
-assert(br[9002] and lotBr.provenance == "source externe" and lotBr.perime, "la réserve seule")
+assert(br[9002] and lotBr.provenance == "extrait du client" and lotBr.build == 64000 and lotBr.version == "1.16.1.64000"
+  and lotBr.date == "2026-11-21" and not lotBr.perime, "la réserve seule, au build du client")
+assert(ns.recettesClassicLot.perime == nil, "le lot de la réserve n'est pas touché")
+ns.recettesClassicLot = { provenance = "extrait du client", build = 63000 }
+assert(select(2, AzerothCommune:Lire("base des recettes")).perime, "réserve extraite sous un autre build : peut-être périmée")
+ns.recettesClassicLot = nil
+lotBr = select(2, AzerothCommune:Lire("base des recettes"))
+assert(lotBr.provenance == "extrait du client" and lotBr.perime, "réserve sans lot : peut-être périmée")
 ns.recettesClassic = nil
 assert(select(2, AzerothCommune:Lire("base des recettes")) == "pas encore relevé", "ni recette vue ni réserve")
 AzerothCommuneDB.recipes = vuesAvant
