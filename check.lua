@@ -24,7 +24,9 @@ assert(loadfile("LibCommune/Fournisseurs.lua"))()
 local lib = LibStub("LibCommune-1.0")
 UnitFactionGroup = function() return "Alliance" end
 -- Sondes (#30), avant tout relevé : chacune « pas encore vue ».
-for _, nom in ipairs({ "royaume", "royaume normalisé", "maison de l'HV", "GUID", "nom", "faction", "build" }) do
+local IDENTITE = { "royaume", "royaume normalisé", "maison de l'HV", "GUID", "nom", "faction", "build" }
+for _, nom in ipairs({ "emplacements d'un conteneur", "objet d'un conteneur", "recettes", "prix Auctionator",
+  "prix TSM", "prix AuctionDB", unpack(IDENTITE) }) do
   assert(lib.Sondes()[nom] and lib.Sondes()[nom].etat == "pas encore vue", "jamais vérifiée : " .. nom)
 end
 
@@ -124,7 +126,7 @@ UnitName = function() return "Belegard", "Marteaudefer" end
 -- Relancer : les relevés sans contexte refaits, sans rien rendre de plus à l'appelant que l'état des sondes.
 GetRealmName = function() return "Kerys" end
 local etat = lib.RelancerSondes()
-for _, x in ipairs(etat) do assert(x.etat == "vert", "relancée verte : " .. x.nom .. " " .. tostring(x.valeur)) end
+for _, nom in ipairs(IDENTITE) do assert(etat[nom].etat == "vert", "relancée verte : " .. nom .. " " .. tostring(etat[nom].valeur)) end
 assert(#dits == 5, "un avertissement par sonde rouge (royaume normalisé, royaume, maison, faction, nom) : " .. #dits)
 print = vraiPrint
 GetBuildInfo = buildAvant
@@ -246,7 +248,7 @@ assert(d == nil and raison == "pas de GameData", "un autre personnage sans GameD
 -- session (relevée à l'ouverture, en mémoire ; fermée, elle n'est plus lue).
 Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bank = -1, BankBag_1 = 5 } }
 local CHARBON = "|cffffffff|Hitem:2772::::::::60:::::::|h[Minerai de fer]|h|r"
-local slots = { [0] = { { itemID = 2772, stackCount = 5, hyperlink = CHARBON } }, [1] = {}, [-1] = { { itemID = 2840, stackCount = 7 }, false } }
+local slots = { [0] = { { itemID = 2772, stackCount = 5, hyperlink = CHARBON } }, [1] = {}, [-1] = { { itemID = 2840, stackCount = 7, hyperlink = "|Hitem:2840|h" }, false } }
 C_Container = { GetContainerNumSlots = function(b) return slots[b] and #slots[b] or 0 end,
   GetContainerItemInfo = function(b, s) return slots[b][s] or nil end }
 local inv = assert(lib:Lire("inventaires"))
@@ -258,7 +260,7 @@ local sacs = lib.Conteneurs(lib.EstSac)
 assert(sacs.Backpack.size == 1 and sacs.Backpack.items[1].link == CHARBON and sacs.Backpack.items[1].count == 5, "lien de l'objet")
 assert(inv.persos[MOI].bags.Backpack.items[1].link == CHARBON, "lien aussi dans le relevé de repli des inventaires")
 cadre.onEvent(cadre, "BANKFRAME_OPENED")
-slots[-1][1] = { itemID = 2840, stackCount = 9 }
+slots[-1][1] = { itemID = 2840, stackCount = 9, hyperlink = "|Hitem:2840|h" }
 local banque = lib:Lire("inventaires", "tous").persos[MOI].bank
 assert(banque.Bank.size == 2 and #banque.Bank.items == 1 and banque.Bank.items[1].count == 7, "banque relevée à l'ouverture")
 cadre.onEvent(cadre, "PLAYERBANKSLOTS_CHANGED")
@@ -433,6 +435,10 @@ local servie, m = LibStub("LibCommune-1.0")
 assert(servie == lib and m == mineure + 1 and servie.marque == "récente", "la plus récente sert : " .. tostring(servie.marque))
 assert(servie:Lire("recettes connues").persos[MOI].Minage.known[3307], "le relevé de repli survit à la mise à niveau")
 assert(servie.Sondes().royaume.etat == "vert" and servie.Sondes().royaume.valeur == "Kerys", "les sondes de la session survivent aussi")
+assert(servie.Sondes()["prix AuctionDB"] and servie.Sondes()[#servie.Sondes()].nom == "prix AuctionDB",
+  "les sondes des autres fichiers (pas rechargés) restent déclarées, à leur place")
+local noms = {}
+for _, x in ipairs(servie.Sondes()) do assert(not noms[x.nom], "sonde en double : " .. x.nom); noms[x.nom] = true end
 local nouveau = cadres[#cadres]
 assert(nouveau == cadre and recent ~= premier and cadre.onEvent == recent, "un seul cadre d'événements, mené par la copie récente")
 print("LibCommune : deux copies, la plus récente sert OK")
@@ -794,3 +800,117 @@ Auctionator = fausseAPI()
 c, src = lib:PrixAchat(2772, 3)
 assert(c == 3 * 95 and src == "HV", "lu par la lib : " .. tostring(c))
 print("LibCommune : prix d'achat OK")
+
+-- Sondes des autres relevés (LibCommune#31) : sacs, recettes, noms d'objets, fournisseurs de prix. Une réponse de forme
+-- inattendue met la sonde au rouge avec un seul avertissement, sans changer la valeur rendue ; un relevé en masse ne vérifie
+-- que sa première ligne. Une sonde qui demande un contexte (fenêtre, fournisseur) reste « pas encore vue » sans lui.
+do
+  local dits, vraiPrint = {}, print
+  print = function(m) dits[#dits + 1] = m end
+  local function etat(nom) return lib.Sondes()[nom].etat end
+  -- Rouge après deux relevés, avec un seul avertissement qui la nomme ; réarmée pour le cas suivant.
+  local function rougeUneFois(nom, relever)
+    lib.sondes[nom] = nil
+    local avant = #dits
+    relever(); relever()
+    assert(etat(nom) == "rouge", nom .. " : rouge, " .. etat(nom))
+    assert(#dits == avant + 1 and dits[#dits]:find(nom, 1, true), nom .. " : un seul avertissement, " .. (#dits - avant))
+  end
+
+  -- Sacs (sans contexte : relancés par RelancerSondes) : un nombre d'emplacements ; un objet a son ID et son lien.
+  local LIEN = "|cffffffff|Hitem:2772::::::::60:::::::|h[Minerai de fer]|h|r"
+  Enum = { BagIndex = { Backpack = 0, Bag_1 = 1 } }
+  local sac = { [0] = { false, { itemID = 2772, stackCount = 5, hyperlink = LIEN } }, [1] = {} }
+  local taille = function(b) return #sac[b] end
+  C_Container = { GetContainerNumSlots = function(b) return taille(b) end, GetContainerItemInfo = function(b, s) return sac[b][s] or nil end }
+  lib.sondes["emplacements d'un conteneur"], lib.sondes["objet d'un conteneur"] = nil, nil
+  local relance = lib.RelancerSondes()
+  assert(relance["emplacements d'un conteneur"].etat == "vert" and relance["objet d'un conteneur"].etat == "vert", "sacs relancés : verts")
+  assert(relance["objet d'un conteneur"].valeur[1] == 2772 and relance["objet d'un conteneur"].valeur[2] == LIEN, "valeur : ID et lien")
+  sac[0][2] = { itemID = 2772, stackCount = 5 } -- sans lien
+  rougeUneFois("objet d'un conteneur", function() lib.Conteneurs(lib.EstSac) end)
+  local lu = lib.Conteneurs(lib.EstSac).Backpack.items[1]
+  assert(lu.id == 2772 and lu.count == 5 and lu.link == nil, "objet sans lien : rendu tel quel")
+  sac[0][2] = { itemID = 2772, stackCount = 5, hyperlink = LIEN }
+  taille = function() return nil end
+  rougeUneFois("emplacements d'un conteneur", function() lib.Conteneurs(lib.EstSac) end)
+  assert(next(lib.Conteneurs(lib.EstSac)) == nil, "pas de nombre d'emplacements : rien de lu, comme avant")
+  taille = function(b) return #sac[b] end
+  assert(lib.RelancerSondes()["emplacements d'un conteneur"].etat == "vert", "le nombre revient : verte")
+
+  -- Recettes (fenêtre ouverte : pas relancées) : la fiche de la première recette lisible a un nom, un produit (sauf un
+  -- enchantement) et des composants ; les lignes suivantes ne sont pas vérifiées.
+  Enum = {}
+  local fiches = {
+    [3307] = { outputItemID = 3575, reagentSlotSchematics = { { reagents = { { itemID = 2772 } }, quantityRequired = 1 } } },
+    [3308] = { outputItemID = 3577, reagentSlotSchematics = { { reagents = { { itemID = 2776 } }, quantityRequired = 1 } } },
+  }
+  C_TradeSkillUI = {
+    GetBaseProfessionInfo = function() return { professionName = "Minage", skillLevel = 140, maxSkillLevel = 225 } end,
+    GetAllRecipeIDs = function() return { 3307, 3308 } end,
+    GetRecipeInfo = function(id) return { name = "Recette " .. id, learned = true, relativeDifficulty = 0, isEnchantingRecipe = id == 7 } end,
+    GetRecipeSchematic = function(id) return fiches[id] end,
+  }
+  lib.sondes.recettes = nil
+  assert(lib.RelancerSondes().recettes.etat == "pas encore vue", "recettes sans fenêtre : pas relancées, pas encore vues")
+  assert(lib:ReleverRecettes() and etat("recettes") == "vert", "recettes : verte")
+  fiches[3308] = { reagentSlotSchematics = {} } -- 2e ligne cassée : pas vérifiée
+  assert(lib:ReleverRecettes() and etat("recettes") == "vert", "seule la première ligne est vérifiée")
+  fiches[3307] = { reagentSlotSchematics = {} } -- ni produit ni composants
+  rougeUneFois("recettes", function() lib:ReleverRecettes() end)
+  local r = lib:ReleverRecettes()
+  assert(r.recettes[3307] and r.recettes[3307].output == nil and #r.recettes[3307].reagents == 0 and r.total == 2, "recette rendue telle quelle")
+  C_TradeSkillUI.GetAllRecipeIDs = function() return { 7 } end -- un enchantement : pas de produit, c'est attendu
+  fiches[7] = { reagentSlotSchematics = { { reagents = { { itemID = 10940 } }, quantityRequired = 1 } } }
+  assert(lib:ReleverRecettes() and etat("recettes") == "vert", "enchantement sans produit : verte")
+  C_TradeSkillUI = nil
+
+  -- Noms d'objets (un objet en cache : pas relancés) : le client rend son nom ; un objet pas encore en cache n'est pas vérifié.
+  local client = { [3] = { "Cuivre", "|lien3|" } }
+  C_Item = { GetItemInfo = function(id) local i = client[id]; if i then return i[1], i[2] end end, RequestLoadItemDataByID = noop }
+  lib.sondes["nom d'objet"] = nil
+  assert(lib.NomObjet(99) == "objet 99" and etat("nom d'objet") == "pas encore vue", "pas en cache : pas vérifié")
+  assert(lib.NomObjet(3) == "|lien3|" and etat("nom d'objet") == "vert", "en cache : verte")
+  client[5] = { "", "|lien5|" }
+  rougeUneFois("nom d'objet", function() lib.NomObjet(5) end)
+  assert(lib.NomObjet(5) == "|lien5|" and select(2, lib.RetenirObjet(5)) == "|lien5|", "nom vide : lien rendu tel quel")
+  -- Le serveur dit l'avoir envoyé (ITEM_DATA_LOAD_RESULT réussi) et le client ne rend rien : rouge aussi.
+  lib.RetenirObjet(6)
+  rougeUneFois("nom d'objet", function() lib.cadreObjets.onEvent(lib.cadreObjets, "ITEM_DATA_LOAD_RESULT", 6, true) end)
+  lib.sondes["nom d'objet"] = nil
+  lib.RetenirObjet(8)
+  lib.cadreObjets.onEvent(lib.cadreObjets, "ITEM_DATA_LOAD_RESULT", 8, false) -- objet inexistant : le serveur dit non
+  assert(etat("nom d'objet") == "pas encore vue", "chargement refusé : pas vérifié")
+
+  -- Fournisseurs de prix, quand ils sont présents : leur API rend un prix numérique ou rien ; la première ligne seulement.
+  GameDataAPI, AuctionDBForeverSaved, TSM_API = nil, nil, nil
+  for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do lib.sondes[nom] = nil end
+  local avant = #dits
+  Auctionator = fausseAPI()
+  local hv = lib:Lire("cours de l'HV")
+  assert(hv.objet(2772).min == 95 and etat("prix Auctionator") == "vert", "Auctionator : verte")
+  for _, nom in ipairs({ "prix TSM", "prix AuctionDB" }) do
+    assert(lib.RelancerSondes()[nom].etat == "pas encore vue", "fournisseur absent : pas encore vue, " .. nom)
+  end
+  assert(#dits == avant, "fournisseur absent : aucun avertissement")
+  PRIX[2840] = "40" -- 2e ligne d'une lecture : pas vérifiée
+  assert(hv.objet(2840).min == "40" and etat("prix Auctionator") == "vert", "seule la première ligne est vérifiée")
+  rougeUneFois("prix Auctionator", function() lib:Lire("cours de l'HV").objet(2840) end)
+  assert(lib:Lire("cours de l'HV").objet(2840).min == "40", "prix pas numérique : rendu tel quel")
+  PRIX[2840], Auctionator = 40, nil
+  TSM_API = { GetCustomPriceValue = function() return 88 end }
+  assert(lib:Lire("cours de l'HV").objet(2772).min == 88 and etat("prix TSM") == "vert", "TSM : verte")
+  TSM_API.GetCustomPriceValue = function() return { 88 } end
+  rougeUneFois("prix TSM", function() lib:Lire("cours de l'HV").objet(2772) end)
+  TSM_API = nil
+  local maison = { scans = { { os.time() } }, items = { [2772] = ("%d,90,95,300"):format(os.time()), [2840] = 42 } }
+  AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = maison } }
+  assert(lib:Lire("cours de l'HV").objet(2772).min == 90 and etat("prix AuctionDB") == "vert", "AuctionDB : verte")
+  assert(lib:Lire("cours de l'HV").objet(1) == nil and etat("prix AuctionDB") == "vert", "objet absent d'AuctionDB : rien, verte")
+  rougeUneFois("prix AuctionDB", function() lib:Lire("cours de l'HV").objet(2840) end)
+  assert(lib:Lire("cours de l'HV").objet(2840) == nil, "point illisible : rien rendu, comme avant")
+  AuctionDBForeverSaved = nil
+
+  print = vraiPrint
+end
+print("LibCommune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")

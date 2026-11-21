@@ -2,8 +2,8 @@
 ## Title: LibCommune
 ## Category: Libraries
 ## Category-frFR: Bibliothèques
-## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (catalogue des types de données, souscriptions, fournisseurs comme Auctionator pour les cours de l'HV), avec ou sans GameData ; identité sondée (royaume, maison de l'HV, faction, build : une sonde rouge prévient dans le chat) ; fenêtres, tableaux, montants, noms d'objets, capture et export ; en jeu, un seul bouton de minicarte et une seule entrée des options pour les add-ons présents. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
-## Version: 1.8.0
+## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (catalogue des types de données, souscriptions, fournisseurs comme Auctionator pour les cours de l'HV), avec ou sans GameData ; relevés sondés (identité, sacs, recettes, noms d'objets, fournisseurs de prix : une sonde rouge prévient dans le chat) ; fenêtres, tableaux, montants, noms d'objets, capture et export ; en jeu, un seul bouton de minicarte et une seule entrée des options pour les add-ons présents. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
+## Version: 1.9.0
 LibStub.lua
 LibCommune.lua
 Interface.lua

@@ -4,7 +4,7 @@
 -- en paramètre (opts.store, objets, garde).
 local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
 -- Ce fichier a sa propre version : de deux copies de la lib (deux add-ons qui l'embarquent), la plus récente sert.
-local VERSION = 1
+local VERSION = 2 -- 2 : sonde des noms d'objets
 lib.versions = lib.versions or {}
 if (lib.versions.interface or 0) >= VERSION then return end
 lib.versions.interface = VERSION
@@ -66,9 +66,22 @@ end
 local demandes = lib.demandesObjets or {} -- [id] = garde (ou false) : déjà demandé au serveur cette session
 lib.demandesObjets = demandes
 
+-- Sonde : un objet en cache rend son nom. Vérifiée quand le client rend quelque chose de l'objet, ou quand le serveur
+-- vient de l'envoyer (charge) ; un objet pas encore en cache n'est pas vérifié. Sans relevé sans contexte : il faut un objet.
+-- Chargé seul (outils, tests), sans LibCommune.lua : pas de sonde.
+if lib.DeclarerSonde then
+  lib.DeclarerSonde("nom d'objet", "C_Item.GetItemInfo(id) rend le nom d'un objet en cache, non vide",
+    function(nom) return type(nom) == "string" and nom ~= "" end)
+end
+local function infoObjet(id, charge)
+  local name, link = C_Item.GetItemInfo(id)
+  if lib.Sonder and (name ~= nil or link ~= nil or charge) then lib.Sonder("nom d'objet", name) end
+  return name, link
+end
+
 -- Nom et lien d'un objet ; pas encore connu du client : demandé au serveur, retenu dans garde quand il arrive.
 function lib.RetenirObjet(id, garde)
-  local name, link = C_Item.GetItemInfo(id)
+  local name, link = infoObjet(id)
   if name then
     if garde then garde[id] = { name = name, link = link } end
     return name, link
@@ -77,8 +90,11 @@ function lib.RetenirObjet(id, garde)
     demandes[id] = garde or false
     if not lib.cadreObjets then
       lib.cadreObjets = CreateFrame("Frame")
-      lib.cadreObjets:SetScript("OnEvent", function(_, _, iid)
-        if iid and demandes[iid] ~= nil then lib.RetenirObjet(iid, demandes[iid] or nil) end
+      lib.cadreObjets:SetScript("OnEvent", function(_, _, iid, reussi)
+        if iid and demandes[iid] ~= nil then
+          if reussi then infoObjet(iid, true) end
+          lib.RetenirObjet(iid, demandes[iid] or nil)
+        end
       end)
       pcall(lib.cadreObjets.RegisterEvent, lib.cadreObjets, "ITEM_DATA_LOAD_RESULT")
     end
@@ -88,7 +104,7 @@ end
 
 function lib.NomObjet(id, objets, garde)
   local it = objets and objets[id]
-  local _, link = C_Item.GetItemInfo(id)
+  local _, link = infoObjet(id)
   if not link and not it then lib.RetenirObjet(id, garde) end
   return (it and it.link) or link or (it and it.name) or ("objet " .. id)
 end
