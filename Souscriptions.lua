@@ -29,9 +29,9 @@ local typeDuChamp = {}
 for nom, r in pairs(RANGEMENT) do for _, c in ipairs(r.persos or {}) do typeDuChamp[c] = nom end end
 
 -- Le seul endroit où une souscription est tenue (AzerothCommune:Souscrire, /ac souscrire). Un add-on souscrit à son
--- chargement : le socle, chargé avant lui (## Dependencies), a déjà lu ses SavedVariables.
+-- chargement : le socle, chargé avant lui (## Dependencies), a déjà lu ses SavedVariables (base absente : hors du jeu).
 function ns.souscrire(nom)
-  AzerothCommuneDB = AzerothCommuneDB or {} -- ponytail: filet si un jour une souscription précède ADDON_LOADED du socle
+  if not AzerothCommuneDB then return end
   AzerothCommuneDB.souscriptions = AzerothCommuneDB.souscriptions or {}
   AzerothCommuneDB.souscriptions[nom] = time()
 end
