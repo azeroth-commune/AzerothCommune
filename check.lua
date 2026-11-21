@@ -553,7 +553,7 @@ local change = lib.ChercherObjets("chang")
 assert(#change == 1 and change[1].id == 210794 and change[1].name == "Cuirasse changeante" and change[1].fabricable,
   "objet fabriqué jamais vu : trouvé par le nom de sa recette")
 assert(#lib.ChercherObjets("b") == 0 and #lib.ChercherObjets(nil) == 0, "au moins 2 lettres")
-assert(#lib.ChercherObjets("e", 1) == 0 and #lib.ChercherObjets("er", 1) == 1, "en nombre limité")
+assert(#lib.ChercherObjets("bron", 1) == 1 and lib.ChercherObjets("bron", 1)[1].id == 3, "en nombre limité")
 local beaucoup = {}
 for i = 1, 20 do beaucoup[100 + i] = { name = "Objet " .. i } end
 ns.lire.objets = function() return beaucoup end

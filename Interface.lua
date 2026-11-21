@@ -114,12 +114,13 @@ function lib.TrouverObjet(text, objets, recettes)
   end
 end
 
--- Recherche d'objets (#49) : la seule de la suite. Parmi les objets vus (type « objets ») et les objets fabriqués de la
+-- Recherche d'objets (#49) : la seule des add-ons. Parmi les objets vus (type « objets ») et les objets fabriqués de la
 -- base des recettes, même jamais vus (trouvés alors par le nom de leur recette) ; le jeu ne donne aucune liste de tous
 -- ses objets : un objet jamais vu et non fabricable ne se trouve que par son lien (TrouverObjet). Lit les deux types
 -- elle-même : l'add-on qui cherche y souscrit.
 -- Index en mémoire, refait au plus toutes les 5 s (le catalogue grossit pendant le scan des objets).
--- ponytail: un objet relevé dans les 5 s attend l'index suivant ; un rappel QuandReleve si ça se voit
+-- ponytail: un objet relevé ou effacé (/ac effacer) dans ces 5 s attend l'index suivant ; si ça se voit, refaire
+-- l'index sur un rappel QuandReleve (« objets » et « base des recettes » ne signalent pas encore : lib:Signaler)
 local index, indexFait
 local function indexObjets()
   local maintenant = GetTime()
