@@ -36,19 +36,22 @@ lib:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque n
 
 ### Personnage
 
-Un personnage est identifié par son GUID (`UnitGUID`), qui survit à un renommage ; son adresse sert à lui envoyer un
-message, son nom à l'afficher.
+Un personnage est identifié par son GUID (`UnitGUID`) : unique, fourni par le serveur, il survit à un renommage. Son nom,
+« Prénom Nom » sur Forever, sert à l'afficher et à lui chuchoter (la forme que le serveur accepte, et qu'il donne comme
+expéditeur d'un message d'add-on). Le jeu ne donne plus le royaume depuis le build 71037 : `lib.Royaume()` est le numéro
+de serveur du GUID.
 
 ```lua
-local p = lib.Personnage()        -- le personnage connecté : { guid, adresse = "Belegard-CAMWOWEU4Realm8PvP", nom = "Belegard Marteaudefer" }
+local p = lib.Personnage()        -- le personnage connecté : { guid = "Player-6942-014B6DDC", nom = "Belegard Marteaudefer" }
 lib.Personnage(guid)              -- un personnage du joueur dont GameData a la fiche, sinon nil
-lib.Adresse("Solarin Ydenah")     -- « Solarin-<notre royaume> » ; lib.Adresse("Bob", "Autre Royaume") = « Bob-AutreRoyaume » ; nom piégé : nil
-lib.Destinataire(adresse)         -- pour un chuchotement : le prénom seul sur notre royaume, sinon l'adresse
+lib.Destinataire("Belegard Marteaudefer") -- pour un chuchotement : « Prénom Nom » (un « -Royaume » est retiré)
+lib.Royaume()                     -- « 6942 » : le numéro de serveur du GUID, sondé (rouge pour 0 ou sans GUID)
+lib.MaisonHV()                    -- « 6942-Alliance » : la clé des scans de l'HV, sondée
 ```
 
 Sur Forever, le 2e retour de `UnitName`, `UnitFullName` et `GetUnitName(unité, true)` est le nom de famille, pas le
-royaume : le royaume vient de `GetNormalizedRealmName`. Un nom de famille n'a ni tiret ni espace : dans une adresse, le
-dernier tiret sépare le prénom du royaume.
+royaume. Au prénom seul, un chuchotement échoue (« Aucun joueur nommé 'Belegard' ») ; « Prénom-Royaume » est lu comme
+un nom de famille.
 
 ### Fournisseurs (cours de l'HV)
 

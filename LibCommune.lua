@@ -18,16 +18,16 @@
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
--- Personnage : lib.Personnage(guid) = { guid, adresse, nom } ; lib.Adresse(nom, royaume), lib.Destinataire(nom).
+-- Personnage : lib.Personnage(guid) = { guid, nom } ; lib.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : lib:PrixAchat(id, qty, hv, marchands), lib:PrixMarchands() (en fin de fichier).
--- Identité, chaque relevé sondé : lib.Royaume() (affiché), lib.RoyaumeNormalise() (sans espace ni tiret, celui des
--- adresses), lib.MaisonHV() (« royaume-faction », clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
+-- Identité, chaque relevé sondé : lib.Royaume() (le numéro de serveur du GUID, « 6942 »), lib.MaisonHV() (« 6942-Alliance »,
+-- clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
 -- Sondes : lib.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
 -- lib.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
 -- Sondés aussi : sacs (lib.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
 -- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
 -- Pour les autres fichiers de la lib : lib.DeclarerSonde(nom, attente, verifier, relever), lib.Sonder(nom, ...).
-local MAJOR, MINOR = "LibCommune-1.0", 11
+local MAJOR, MINOR = "LibCommune-1.0", 12
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -175,21 +175,23 @@ local build = releve("build", "le 2e retour de GetBuildInfo() est un numéro de 
   function(b) return tonumber(b) ~= nil end, function() return (select(2, GetBuildInfo())) end)
 function lib.Build() return tonumber(build()) end
 
--- Le royaume tel que le jeu l'affiche (« CAMWOW EU4 Realm 8 PvP »), et normalisé, sans espace ni tiret, celui des adresses.
-lib.Royaume = releve("royaume", "GetRealmName() rend le nom du royaume, non vide", nonVide, function() return (GetRealmName()) end)
-local normalise = releve("royaume normalisé", "GetNormalizedRealmName() rend le royaume normalisé, non vide", nonVide,
-  function() return GetNormalizedRealmName and GetNormalizedRealmName() or "" end)
-function lib.RoyaumeNormalise() return (normalise():gsub("[%s%-]", "")) end
+-- Le royaume : le numéro de serveur du GUID du personnage connecté (« Player-6942-… » -> « 6942 », LibCommune#35). Depuis
+-- le build 71037, GetRealmName et GetNormalizedRealmName rendent "" ; le GUID, fourni par le serveur, reste. Un numéro 0
+-- (ou pas de GUID : nil) est rendu tel quel, la sonde le dit.
+lib.Royaume = releve("royaume", "UnitGUID(\"player\") porte un numéro de serveur différent de 0 (Player-<n°>-…)",
+  function(n) return tonumber(n) ~= nil and tonumber(n) ~= 0 end,
+  function() return (tostring(UnitGUID("player")):match("^Player%-(%d+)%-")) end)
 
 -- La faction du personnage connecté, « Alliance » ou « Horde ».
 lib.Faction = releve("faction", "UnitFactionGroup(\"player\") rend Alliance ou Horde",
   function(f) return f == "Alliance" or f == "Horde" end, function() return (UnitFactionGroup("player")) end)
 
--- La maison de l'HV du personnage connecté, « royaume-faction » au royaume affiché (« CAMWOW EU4 Realm 8 PvP-Alliance ») :
--- la clé des scans de l'HV de GameData ; nil si la faction est inconnue.
-lib.MaisonHV = releve("maison de l'HV", "la maison de l'HV est « royaume-faction », royaume non vide, faction Alliance ou Horde",
-  function(m) return type(m) == "string" and (m:match("^.+%-Alliance$") or m:match("^.+%-Horde$")) ~= nil end,
-  function() local f = lib.Faction() return f and (lib.Royaume() .. "-" .. f) end)
+-- La maison de l'HV du personnage connecté, « royaume-faction » (« 6942-Alliance ») : la clé des scans de l'HV de
+-- GameData ; nil si la faction ou le royaume est inconnu. Les scans rangés sous l'ancienne clé (royaume affiché) ne sont
+-- plus lus : ils se refont.
+lib.MaisonHV = releve("maison de l'HV", "la maison de l'HV est « n° de serveur-faction », n° différent de 0, faction Alliance ou Horde",
+  function(m) return type(m) == "string" and (m:match("^[1-9]%d*%-Alliance$") or m:match("^[1-9]%d*%-Horde$")) ~= nil end,
+  function() local f, r = lib.Faction(), lib.Royaume() return f and r and (r .. "-" .. f) end)
 
 -- Le GUID du personnage connecté, et son prénom et nom de famille (Forever : le 2e retour de UnitName est le nom de famille).
 local monGUID = releve("GUID", "UnitGUID(\"player\") est de la forme Player-…",
@@ -203,50 +205,29 @@ local function lotDuJour()
 end
 
 ---------------------------------------------------------------------------------------------------
--- Personnage (CONTEXT-MAP de l'atelier) : identifié par son GUID (UnitGUID), qui survit à un renommage. Son adresse,
--- « Prénom-Royaume » au royaume normalisé (sans espace ni tiret), sert à lui envoyer un message ; son nom, « Prénom Nom »
--- sur Forever, à l'afficher.
+-- Personnage (CONTEXT-MAP de l'atelier) : identifié par son GUID (UnitGUID), unique, fourni par le serveur, qui survit à
+-- un renommage ; son nom, « Prénom Nom » sur Forever, sert à l'afficher et à lui chuchoter (LibCommune#35).
 -- Sur Forever, le 2e retour de UnitName, UnitFullName et GetUnitName(unité, true) est le NOM DE FAMILLE, pas le royaume
--- (/handshake noms en jeu, 20/11/2026) : le royaume vient de GetNormalizedRealmName. Un nom de famille n'a ni tiret ni
--- espace (refusé par le jeu) : dans une adresse, le dernier tiret sépare le prénom du royaume.
-local ADRESSE = "^[^%-|,:%s%c]+%-[^%-|,:%s%c]+$"
+-- (/handshake noms en jeu, 20/11/2026).
 
--- L'adresse d'un nom reçu (« Prénom », « Prénom-Royaume », « Prénom Nom », « Prénom Nom-Royaume ») ou d'un prénom et de
--- son royaume (brut ou normalisé) : « Prénom-Royaume », notre royaume s'il n'y en a pas ; nil pour un nom piégé.
-function lib.Adresse(nom, royaume)
-  if type(nom) ~= "string" or nom == "" then return nil end
-  if not royaume then
-    local avant, apres = nom:match("^(.+)%-([^%-]+)$")
-    if apres then nom, royaume = avant, apres end
-  end
-  local prenom = nom:match("^[^%s%-]+")
-  if not prenom then return nil end
-  royaume = (royaume and royaume ~= "") and royaume:gsub("[%s%-]", "") or lib.RoyaumeNormalise()
-  local adresse = prenom .. "-" .. royaume
-  return adresse:match(ADRESSE) and adresse or nil
-end
-
--- À qui adresser un chuchotement : le prénom seul sur notre royaume (Forever lit « Prénom-Royaume » comme « Prénom
--- NomDeFamille » : « Aucun joueur nommé 'Testeur CAMWOWEU4Realm8PvP' », 18/11/2026), sinon l'adresse ; un nom illisible
--- est rendu tel quel.
--- ponytail: un autre royaume garde « Prénom-Royaume », à vérifier le jour où on joue entre royaumes
+-- À qui adresser un chuchotement : « Prénom Nom », la forme que le serveur accepte et qu'il donne comme expéditeur d'un
+-- message d'add-on (au prénom seul : « Aucun joueur nommé 'Belegard' », 21/11/2026). Un « -Royaume » est retiré : Forever
+-- le lit comme un nom de famille (« Aucun joueur nommé 'Testeur CAMWOWEU4Realm8PvP' », 18/11/2026). Un nom illisible est
+-- rendu tel quel.
 function lib.Destinataire(nom)
-  local adresse = lib.Adresse(nom)
-  if not adresse then return nom end
-  local prenom, royaume = adresse:match("^([^%-]+)%-(.+)$")
-  return royaume == lib.RoyaumeNormalise() and prenom or adresse
+  if type(nom) ~= "string" then return nom end
+  return nom:match("^([^%-]+)%-[^%-]+$") or nom
 end
 
--- { guid, adresse, nom } du personnage connecté (guid nil ou le sien), ou d'un personnage du joueur dont GameData a la
--- fiche (écrite à chaque connexion de ce personnage) ; nil sinon.
--- ponytail: pas de GetPlayerInfoByGUID pour un autre joueur (ni nom de famille, ni royaume vérifié sur Forever) ; à
--- ajouter quand un add-on aura besoin du nom d'un autre joueur par son GUID.
+-- { guid, nom } du personnage connecté (guid nil ou le sien), ou d'un personnage du joueur dont GameData a la fiche
+-- (écrite à chaque connexion de ce personnage) ; nil sinon.
+-- ponytail: pas de GetPlayerInfoByGUID pour un autre joueur (forme de ses retours pas relevée sur Forever) ; à ajouter
+-- quand un add-on aura besoin du nom d'un autre joueur par son GUID.
 function lib.Personnage(guid)
   local moi = monGUID()
   if guid == nil or guid == moi then
     local prenom, nomDeFamille = monNom()
-    return { guid = moi, adresse = lib.Adresse(prenom),
-      nom = (nomDeFamille and nomDeFamille ~= "") and (prenom .. " " .. nomDeFamille) or prenom }
+    return { guid = moi, nom = (nomDeFamille and nomDeFamille ~= "") and (prenom .. " " .. nomDeFamille) or prenom }
   end
   local fiche = GameDataAPI and GameDataAPI.personnage
   return fiche and fiche(guid) or nil

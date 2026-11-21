@@ -51,7 +51,7 @@ end)
 test("scan de GameData pour ton HV : son heure dans le lot (scan = { time, scanned })", function()
     local lib = LibStub("LibCommune-1.0")
     local coursHV, faction = GameDataAPI.coursHV, UnitFactionGroup("player")
-    local maison = GetRealmName() .. "-" .. tostring(faction)
+    local maison = lib.MaisonHV() or "?" -- « n° de serveur-faction », la clé des scans de GameData (LibCommune#35)
     GameDataAPI.coursHV = function()
         return { hv = { [maison] = { time = 1234, scanned = "2026-11-20 10:00:00", items = { [2772] = { min = 100, qty = 5 } } } } },
             { provenance = "relevé direct" }

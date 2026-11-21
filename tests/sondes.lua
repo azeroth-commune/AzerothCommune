@@ -1,9 +1,15 @@
 -- Sondes d'identité dans wow-ui-sim (tools/sim.sh test LibCommune, LibCommune#30) : relancées après le chargement,
--- vertes. Une sonde rouge fait échouer le test en disant ce que le simulateur a rendu (un royaume vide n'est pas masqué).
--- Seule exception, dite par son propre test : le simulateur ne donne pas de nom de famille au personnage par défaut
--- (« Uther », il n'en donne qu'avec WOW_SIM_WTF_CHARACTER=Prénom-Nom), la sonde du nom y est donc rouge, à raison.
-local IDENTITE = { "build", "royaume", "royaume normalisé", "faction", "maison de l'HV", "GUID", "nom" }
+-- vertes. Une sonde rouge fait échouer le test en disant ce que le simulateur a rendu (rien n'est masqué).
+-- Exceptions, chacune dite par son propre test (lacunes du simulateur, pas de la lib) :
+--   * le simulateur ne donne pas de nom de famille au personnage par défaut (« Uther », il n'en donne qu'avec
+--     WOW_SIM_WTF_CHARACTER=Prénom-Nom) : la sonde du nom y est rouge, à raison ;
+--   * son GUID peut porter le numéro de serveur 0 (« Player-0-… ») : les sondes du royaume et de la maison de l'HV y
+--     sont alors rouges, à raison (LibCommune#35 : le royaume est le numéro de serveur du GUID).
+local IDENTITE = { "build", "royaume", "faction", "maison de l'HV", "GUID", "nom" }
 local SANS_NOM_DE_FAMILLE = not select(2, UnitName("player"))
+local NUMERO = tostring(UnitGUID("player")):match("^Player%-(%d+)%-")
+local SERVEUR_0 = tonumber(NUMERO) == 0
+local LACUNES = { nom = SANS_NOM_DE_FAMILLE, royaume = SERVEUR_0, ["maison de l'HV"] = SERVEUR_0 }
 
 local function montrer(v)
     if type(v) ~= "table" then return tostring(v) == "" and '""' or tostring(v) end
@@ -18,21 +24,32 @@ test("sondes d'identité : vertes après le chargement (relancées)", function()
     for _, nom in ipairs(IDENTITE) do
         local s = etat[nom]
         assertNotNil(s, "sonde déclarée : " .. nom)
-        if s.etat ~= "vert" and not (nom == "nom" and SANS_NOM_DE_FAMILLE) then
+        if s.etat ~= "vert" and not LACUNES[nom] then
             rouges[#rouges + 1] = ("%s %s (%s ; reçu %s, build %s)"):format(nom, s.etat, s.attente, montrer(s.valeur), tostring(s.build))
         end
     end
     if #rouges > 0 then error("sondes pas vertes dans le simulateur : " .. table.concat(rouges, " | "), 0) end
+    assertNil(etat["royaume normalisé"], "plus de royaume normalisé (LibCommune#35)")
 end)
 
-test("royaume, royaume normalisé, maison de l'HV rendus par la lib, et non vides", function()
+test("royaume = numéro de serveur du GUID, maison de l'HV « n°-faction » ; numéro 0 du simulateur dit, pas masqué", function()
     local lib = LibStub("LibCommune-1.0")
-    local royaume = lib.Royaume()
-    assertType("string", royaume)
-    assertTrue(royaume ~= "", "le simulateur rend un royaume vide (GetRealmName)")
-    assertTrue(lib.RoyaumeNormalise() ~= "", "le simulateur rend un royaume normalisé vide (GetNormalizedRealmName)")
-    assertEquals(royaume .. "-" .. lib.Faction(), lib.MaisonHV())
+    local guid = UnitGUID("player")
+    assertType("string", guid)
+    assertNotNil(NUMERO, "le simulateur rend un GUID d'une autre forme que Player-<n°>-… : " .. guid)
+    assertEquals(NUMERO, lib.Royaume())
+    assertEquals(NUMERO .. "-" .. lib.Faction(), lib.MaisonHV())
+    assertNil(lib.RoyaumeNormalise)
     assertType("number", lib.Build())
+    local etat = lib.Sondes()
+    if SERVEUR_0 then
+        print("LACUNE DU SIMULATEUR : UnitGUID(\"player\") = " .. guid .. ", numéro de serveur 0 ; sondes royaume et maison de l'HV rouges, à raison")
+        assertEquals("rouge", etat.royaume.etat)
+        assertEquals("rouge", etat["maison de l'HV"].etat)
+    else
+        assertEquals("vert", etat.royaume.etat)
+        assertEquals("vert", etat["maison de l'HV"].etat)
+    end
 end)
 
 test("nom : vert avec un nom de famille ; rouge si le simulateur n'en donne pas (lacune du simulateur, pas de la lib)", function()
