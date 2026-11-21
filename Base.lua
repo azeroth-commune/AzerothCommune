@@ -296,7 +296,6 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
     ns.verifierLots()
   elseif event == "PLAYER_LOGIN" then
     char() -- la fiche du perso connecté, reprise tout de suite sous son GUID
-    ns.retenirSouscriptions()
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)
     C_Timer.NewTicker(60, scanAll)
     setItemScan(AzerothCommuneDB.item_scan)

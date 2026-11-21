@@ -28,8 +28,10 @@ ns.rangement = RANGEMENT
 local typeDuChamp = {}
 for nom, r in pairs(RANGEMENT) do for _, c in ipairs(r.persos or {}) do typeDuChamp[c] = nom end end
 
-function ns.souscrire(nom) -- appelé par AzerothCommune:Souscrire ; avant la lecture des SavedVariables, retenu à la connexion
-  if not (RANGEMENT[nom] and AzerothCommuneDB) then return end
+-- Le seul endroit où une souscription est tenue (AzerothCommune:Souscrire, /ac souscrire). Un add-on souscrit à son
+-- chargement : le socle, chargé avant lui (## Dependencies), a déjà lu ses SavedVariables.
+function ns.souscrire(nom)
+  AzerothCommuneDB = AzerothCommuneDB or {} -- ponytail: filet si un jour une souscription précède ADDON_LOADED du socle
   AzerothCommuneDB.souscriptions = AzerothCommuneDB.souscriptions or {}
   AzerothCommuneDB.souscriptions[nom] = time()
 end
@@ -39,10 +41,6 @@ function ns.souscrit(nom) -- une souscription en cours : ce type est à relever
   return quand ~= nil and time() - quand < DUREE
 end
 function ns.champSouscrit(champ) return ns.souscrit(typeDuChamp[champ]) end
-
-function ns.retenirSouscriptions() -- à la connexion, avant tout relevé : les souscriptions faites pendant le chargement
-  for nom in pairs(lib.souscriptions) do ns.souscrire(nom) end
-end
 
 ---------------------------------------------------------------------------------------------------
 local function plein(v) return v ~= nil and (type(v) ~= "table" or next(v) ~= nil) end

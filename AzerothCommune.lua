@@ -406,15 +406,9 @@ function lib:Signaler(typeDeDonnees)
   end
 end
 
--- Les types souscrits pendant cette session : la base les retient à la connexion (une souscription faite pendant le
--- chargement arrive avant que ses SavedVariables soient lues).
--- ponytail: tenues en double (ici et dans la base) jusqu'au ménage interne (#41).
-lib.souscriptions = {}
-
+-- La souscription est tenue par la base seule (Souscriptions.lua : AzerothCommuneDB.souscriptions, avec sa date).
 function lib:Souscrire(typeDeDonnees)
-  local t = TYPES[typeDeDonnees]
-  if not t then return nil, "type inconnu" end
-  self.souscriptions[typeDeDonnees] = true
+  if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
   ns.souscrire(typeDeDonnees)
   return true
 end

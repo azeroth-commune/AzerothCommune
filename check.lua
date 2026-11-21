@@ -182,12 +182,12 @@ local nTypes = 0
 for _ in pairs(lib.types) do nTypes = nTypes + 1 end
 assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
 for _, nom in ipairs(attendus) do assert(lib.types[nom], "au catalogue : " .. nom) end
--- Souscription avec la base : transmise à ns.souscrire (qui la retient pour le joueur), et gardée pour la session.
+-- Souscription : transmise à ns.souscrire, qui la retient dans la base pour le joueur ; rien de gardé à côté (#41).
 local transmis = {}
 ns.souscrire = function(t) transmis[#transmis + 1] = t end
 for _, nom in ipairs(attendus) do assert(lib:Souscrire(nom), "souscription : " .. nom) end
 assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscription transmise à GameData")
-assert(lib.souscriptions.objets and lib.souscriptions["recettes connues"], "et retenue pour la session")
+assert(lib.souscriptions == nil, "pas de copie des souscriptions pour la session")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
 ns.lire.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, [ALT] = { bank = {} } } } end
 local inv = assert(lib:Lire("inventaires"))
@@ -201,8 +201,7 @@ assert(d == nil and raison == "pas encore relevé", "aucun marchand : " .. tostr
 ns.lire.objets = function() return nil end
 d, raison = lib:Lire("objets")
 assert(d == nil and raison == "pas encore relevé", "objets absents : " .. tostring(raison))
-lib.souscriptions = {}
-print("Azeroth Commune : catalogue et souscriptions avec la base OK")
+print("Azeroth Commune : catalogue et souscriptions OK")
 
 -- Provenance (GameData#5) : lire un type rend son lot, provenance, build et date ; par personnage pour un type par perso.
 local lotM = { provenance = "relevé direct", build = 64000, version = "1.16.1", date = "2026-11-19 10:00:00" }
@@ -1129,9 +1128,14 @@ local function ac(cmd) print = function(...) sortie[#sortie + 1] = table.concat(
 local function objetsScannes() for _, t in ipairs(tickers) do if t == 0.5 then return true end end return false end
 local A, B, C = GUID.Alice, GUID.Bob, GUID.Carl -- les fiches sont rangées par GUID (LibCommune#19)
 
+-- Une souscription faite par un add-on (#41) : relevée, visible dans /ac souscriptions, tenue à un seul endroit (la base).
 local gns, glib = session("Alice", { "inventaires" })
 assert(type(AzerothCommuneDB.souscriptions.inventaires) == "number", "souscription retenue avec sa date")
 assert(AzerothCommuneDB.chars[A].bags.Backpack, "A : inventaires relevés")
+assert(glib.souscriptions == nil and gns.retenirSouscriptions == nil, "pas d'état en double")
+ac("souscriptions")
+assert(table.concat(sortie, "\n"):find("inventaires : souscrit le " .. os.date("%Y-%m-%d") .. ", relevé (données gardées)", 1, true),
+  table.concat(sortie, "\n"))
 
 -- Sacs et banque relevés par lib.Conteneurs (LibCommune#20) : exactement ce que rendait la copie de GameData d'avant,
 -- gardée ici comme référence.
