@@ -19,8 +19,8 @@
 --   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
--- Recherche d'objets : AC.ChercherObjets(texte, max) parmi les objets vus et les objets fabriqués de la base des recettes
--- (Interface.lua) ; l'add-on qui cherche souscrit à « objets » et à « base des recettes ».
+-- Recherche d'objets : AC.ChercherObjets(texte, max) parmi les objets (relevés, puis le catalogue extrait du client) et les
+-- objets fabriqués de la base des recettes (Interface.lua) ; l'add-on qui cherche souscrit à « objets » et à « base des recettes ».
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
 -- clé des scans de l'HV), AC.Faction(), AC.Build() (nombre).
 -- Sondes : AC.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
@@ -59,7 +59,9 @@ local TYPES = {
   --   la base ({ [royaume-faction] = { items, hist, … } } ; hist absent quand AuctionDB le tient) } : le scan du
   --   socle fait foi, les fournisseurs pour l'historique et quand le socle n'a pas scanné l'HV (Fournisseurs.lua)
   ["cours de l'HV"] = {},
-  objets = {}, -- { [itemID] = { name, class, price, stack, … } }
+  -- { [itemID] = { name, class, price, stack, quality, … } } : les objets relevés, puis le catalogue des objets extrait du
+  --   client (CatalogueObjets.lua : name, quality, champ provenance) pour les autres (Souscriptions.lua).
+  objets = {},
 }
 lib.types = TYPES -- lecture seule
 -- Les accesseurs privés de la base, un par type : ns.lire[type]() rend les données et leur lot (Souscriptions.lua,

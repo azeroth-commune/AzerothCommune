@@ -37,7 +37,7 @@ local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", 
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 10, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48)")
+assert(#fichiersCharges("AzerothCommune") == 11, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
@@ -1109,6 +1109,41 @@ assert(br[9002] and lotBr.provenance == "source externe" and lotBr.perime, "la r
 ns.recettesClassic = nil
 assert(select(2, AzerothCommune:Lire("base des recettes")) == "pas encore relevé", "ni recette vue ni réserve")
 AzerothCommuneDB.recipes = vuesAvant
+-- Objets (#52) : les objets relevés (1 nommé, 2 vu sans nom, 5 inconnu du serveur : scan plus haut), puis le catalogue des
+-- objets extrait du client (CatalogueObjets.lua, généré, privé au socle : ns.catalogueObjets) pour les autres, chaque
+-- ligne marquée « extrait du client ». La fusion est gardée 5 s.
+do
+local horloge, vus = 100, AzerothCommuneItems.items
+GetTime = function() return horloge end
+AzerothCommuneDB.lots.objets = { provenance = "relevé direct", build = 64000 }
+local ob, lotOb = AzerothCommune:Lire("objets")
+assert(ob == vus and lotOb == AzerothCommuneDB.lots.objets, "sans catalogue (repo cloné tel quel) : les objets relevés, comme avant")
+local function ligne(nom, q) return { name = nom, quality = q, provenance = "extrait du client" } end
+ns.catalogueObjets = { [1] = ligne("Casque (client)", 1), [2] = ligne("Gants", 2), [5] = ligne("Objet fantôme", 1),
+  [7] = ligne("Épée", 3) }
+ns.catalogueObjetsLot = { provenance = "extrait du client", build = 64000, version = "1.16.1.64000", date = "2026-11-21" }
+ob, lotOb = AzerothCommune:Lire("objets")
+assert(ob[1] == vus[1] and ob[1].name == "Casque", "un objet relevé l'emporte")
+assert(ob[2].name == "Gants" and ob[2].provenance == "extrait du client", "vu, nom pas encore demandé au serveur : le catalogue")
+assert(ob[5] == vus[5], "inconnu du serveur : le relevé l'emporte")
+assert(ob[7].name == "Épée" and ob[7].quality == 3 and ob[7].provenance == "extrait du client", "jamais vu : le catalogue")
+assert(lotOb == AzerothCommuneDB.lots.objets and vus[7] == nil, "lot du relevé ; les objets relevés ne sont pas touchés")
+vus[8] = { name = "Neuf" }
+assert(AzerothCommune:Lire("objets")[8] == nil, "fusion gardée moins de 5 s")
+horloge = 105
+assert(AzerothCommune:Lire("objets")[8] == vus[8], "puis refaite")
+-- Le catalogue seul (rien de relevé, ou relevé sans nom) : son lot, extrait du client, peut-être périmé sous un autre build.
+AzerothCommuneItems.items = { [2] = { class = 4 } }
+ob, lotOb = AzerothCommune:Lire("objets")
+assert(ob[2].name == "Gants" and ob[7] and lotOb.provenance == "extrait du client" and lotOb.build == 64000
+  and not lotOb.perime, "le catalogue seul, sous le build du client")
+ns.catalogueObjetsLot.build = 63000
+assert(select(2, AzerothCommune:Lire("objets")).perime, "extrait sous un autre build : peut-être périmé")
+ns.catalogueObjets, AzerothCommuneItems.items = {}, {}
+assert(select(2, AzerothCommune:Lire("objets")) == "pas encore relevé", "ni objet relevé ni catalogue : pas encore relevé")
+ns.catalogueObjets, ns.catalogueObjetsLot, AzerothCommuneItems.items = nil, nil, vus
+GetTime = function() return 100 end
+end
 -- Connexion : recettes connues relevées sans fenêtre (IsPlayerSpell, recettes déjà vues), pour un perso jamais passé par
 -- sa fenêtre de métier, et sauvegardées dans son perso. Puis la fenêtre s'ouvre : elle prime, sans rien perdre.
 local neuf, char0, run0 = { errors = {}, lots = {} }, ns.char, ns.run
