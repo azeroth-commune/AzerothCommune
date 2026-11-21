@@ -31,8 +31,11 @@ local function appelsInterdits(dossier, textes)
   return trouves
 end
 -- Le socle : ni LibStub, ni GameDataAPI, ni MINOR ou VERSION par fichier, ni les emplacements que Handshake remplissait.
+-- Ni aucun global d'un consommateur (#46 : les recettes Classic de Handshake lui sont remises) ; « Diagnostic » est aussi
+-- le libellé d'un export du socle, pas cherché.
 local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", "MINOR", "local VERSION", "lib.versions",
-  "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket" })
+  "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
+  "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
 assert(#fichiersCharges("AzerothCommune") == 9, "les fichiers des deux, dans une seule TOC")
 local nos = {}
@@ -414,7 +417,7 @@ ns.rappels["cours de l'HV"] = nil
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell ; la base le lance à la connexion) : un personnage jamais passé
--- par sa fenêtre. Candidates : les recettes déjà vues (3307, 3308) et la réserve Classic de Handshake.
+-- par sa fenêtre. Candidates : les recettes déjà vues (3307, 3308) et celles qu'un add-on a remises (#46).
 local metiers, vues = {}, { [3307] = { profession = "Minage" }, [3308] = { profession = "Minage" } }
 local images = {}
 C_Timer = { After = function(_, fn) images[#images + 1] = fn end } -- une image à la fois, pompée à la main
@@ -425,9 +428,16 @@ GetProfessions = function() return 1, nil, nil, 2 end -- des trous, comme en jeu
 GetProfessionInfo = function(i) if i == 1 then return "Minage", "icône", 150, 225 end return "Pêche", "icône", 1, 75 end
 local connues, demandees, parImage = { [3307] = true, [9001] = true, [10100] = true }, {}, 0
 IsPlayerSpell = function(id) demandees[id] = true; parImage = parImage + 1; return connues[id] or false end
-HandshakeClassicRecipes = { [9001] = { 2840, 1, 1, "Minage", "Barre de cuivre", { 2770, 1 } },
-  [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 } } }
-for id = 10000, 10149 do HandshakeClassicRecipes[id] = { 1, 1, 1, "Minage", "Recette " .. id, {} } end
+-- Sans recettes remises : les recettes déjà vues seules, relevées d'un coup (moins de 60).
+local seul = {}
+assert(lib:ReleverRecettesSansFenetre(seul, vues) and image() == 0, "sans recettes remises : une seule image")
+assert(seul.Minage.known[3307] and not demandees[9001] and not next(seul.Minage.known, next(seul.Minage.known)), "sans recettes remises : les vues seules")
+demandees, parImage = {}, 0
+-- Un add-on remet ses recettes livrées (provenance « autre add-on ») : la forme des recettes de la base.
+local remises = { [9001] = { profession = "Minage", name = "Barre de cuivre" }, [9002] = { profession = "Travail du cuir" } }
+for id = 10000, 10149 do remises[id] = { profession = "Minage" } end
+assert(lib:RemettreRecettes(remises), "recettes remises")
+assert(select(2, lib:RemettreRecettes("pas une table")) == "pas une table", "remise illisible refusée")
 local finis = 0
 assert(lib:ReleverRecettesSansFenetre(metiers, vues, function() finis = finis + 1 end))
 local nImages, maxParImage = 1, parImage
@@ -474,7 +484,7 @@ assert(apres.known[9001] and apres.known[10100] and n == 3, "rien de perdu, rien
 -- Fenêtre déjà relevée, relevé sans fenêtre ensuite (ex. ouverte pendant le relevé) : rien d'écrasé.
 lib:ReleverRecettesSansFenetre(metiers, vues)
 assert(metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")
-HandshakeClassicRecipes, C_TradeSkillUI = nil, nil
+C_TradeSkillUI = nil
 print("Azeroth Commune : fenêtre après le relevé sans fenêtre OK")
 
 ---------------------------------------------------------------------------------------------------
@@ -925,7 +935,7 @@ do
     Destinataire EXPORT_N EXPORT_PAGE_BYTES EstBanque EstSac Exporter Exports Faction Fenetre Fusionner GrilleExport JsonSur
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
-    Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
+    Souscrire RemettreRecettes Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
@@ -937,7 +947,7 @@ print("Azeroth Commune : le global ne porte que l'API publique OK")
 -- noms neuf. Simule juste ce qu'il faut de l'API WoW pour le filtre des conteneurs, le scan des objets, le commerce.
 do
 AzerothCommune = nil
-Auctionator, TSM_API, AuctionDBForeverSaved, HandshakeClassicRecipes, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil, nil
+Auctionator, TSM_API, AuctionDBForeverSaved, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil
 hooksecurefunc = function() error("crochet posé : le socle n'en pose aucun (#41)") end
 local ns = {}
 local noop = function() end

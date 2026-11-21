@@ -17,6 +17,11 @@
 -- Commerce.lua).
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
+--   AC:RemettreRecettes(recettes): un add-on remet au socle, à son chargement, des recettes livrées avec lui (provenance
+--                                  « autre add-on ») : { [ID du sort de la recette] = { profession = métier, … } }, la forme
+--                                  des recettes de la base. Elles servent de candidates au relevé des recettes connues sans
+--                                  fenêtre de métier ; seul ce que le jeu y répond est gardé (relevé direct). Rend true, ou
+--                                  nil, « pas une table ».
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
@@ -303,8 +308,8 @@ end
 ---------------------------------------------------------------------------------------------------
 -- Relevé des recettes connues sans la fenêtre : sur Forever, IsPlayerSpell(ID du sort de la recette) dit vrai pour une
 -- recette connue (idée vue dans Mastercraft, dont le code n'est pas repris). Pour chaque métier du personnage, interroge
--- les recettes candidates : celles déjà relevées (recettes = { [ID] = { profession, … } }) et la réserve Classic de
--- Handshake si elle est chargée. PAR_IMAGE par image, jamais en combat (reprise à la fin du combat). Fusionne dans
+-- les recettes candidates : celles déjà relevées (recettes = { [ID] = { profession, … } }) et celles que des add-ons ont
+-- remises (AC:RemettreRecettes). PAR_IMAGE par image, jamais en combat (reprise à la fin du combat). Fusionne dans
 -- metiers = { [métier] = { rank, max, known } } : ajoute les connues qui manquent (true), ne retire rien, garde la
 -- difficulté lue en fenêtre. fini() une fois tout interrogé.
 local PAR_IMAGE = 60
@@ -319,6 +324,14 @@ cadre:SetScript("OnEvent", function(_, evenement)
   if r then r() end
 end)
 
+local remises = {} -- les tables remises par les add-ons, dans l'ordre d'arrivée
+
+function lib:RemettreRecettes(recettes)
+  if type(recettes) ~= "table" then return nil, "pas une table" end
+  remises[#remises + 1] = recettes
+  return true
+end
+
 function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
   if not (IsPlayerSpell and GetProfessions) then return nil, "API absente" end
   local miens = {}
@@ -330,9 +343,10 @@ function lib:ReleverRecettesSansFenetre(metiers, recettes, fini)
   local function candidate(id, metier)
     if type(id) == "number" and miens[metier] and not vu[id] then vu[id], file[#file + 1] = true, { id, metier } end
   end
-  for id, rec in pairs(recettes or {}) do candidate(id, rec.profession) end
-  -- ponytail: la réserve de Handshake nomme les métiers en français ; sur un client d'une autre langue elle ne sert pas.
-  for id, c in pairs(HandshakeClassicRecipes or {}) do candidate(id, c[4]) end -- { objet, min, max, métier, … }
+  -- ponytail: un métier se reconnaît à son nom ; des recettes remises sous un nom d'une autre langue que le client ne servent pas.
+  for _, t in ipairs({ recettes or {}, unpack(remises) }) do
+    for id, rec in pairs(t) do candidate(id, type(rec) == "table" and rec.profession) end
+  end
   local i = 0
   local function image()
     if InCombatLockdown() then
