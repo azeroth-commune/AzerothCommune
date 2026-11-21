@@ -161,6 +161,10 @@ AC.TrierLignes(lignes, colonnes, { key = "prix", desc = true }) -- vides en bas,
 AC.Argent(c), AC.ArgentCourt(c), AC.ArgentSigne(c)           -- montants (court : pour une case de tableau)
 AC.NomObjet(id, objets, garde)       -- lien ou nom ; inconnu : demandé au serveur, retenu dans garde à l'arrivée
 AC.RetenirObjet(id, garde), AC.TrouverObjet(texte, objets, recettes) -- d'après un lien, un ID, un nom d'objet ou de recette
+AC.ChercherObjets(texte, max)        -- { { id, name, fabricable }, … } : les objets dont le nom contient texte (2 lettres
+                                     -- au moins, 8 par défaut), vus ou fabriqués par la base des recettes (jamais vus : par
+                                     -- le nom de leur recette) ; fabricables d'abord, puis ceux qui commencent par texte.
+                                     -- Lit « objets » et « base des recettes » : l'add-on qui cherche y souscrit.
 AC.Capturer(cadre, libellé), AC.BoutonCapture(cadre, libellé, x, y) -- photo de l'écran avec repères magenta
 AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs (tools/crop_captures.py)
 ```

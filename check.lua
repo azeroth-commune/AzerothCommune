@@ -536,6 +536,37 @@ assert(lib.TrouverObjet("barre DE fer", objets, recettes) == 1 and lib.TrouverOb
 assert(lib.TrouverObjet("rien", objets, recettes) == nil and lib.TrouverObjet("rien") == nil)
 print("Azeroth Commune : noms d'objets OK")
 
+-- Recherche d'objets (#49) : objets vus et objets fabriqués de la base des recettes, sans doublon ; fabricables d'abord,
+-- puis ceux qui commencent par le texte, puis les noms courts, puis l'ID. L'index est refait au plus toutes les 5 s.
+do
+local horloge = 0
+GetTime = function() return horloge end
+ns.lire.objets = function() return { [1] = { name = "Barre de bronze" }, [2] = { name = "Bronze" },
+  [3] = { name = "Lame en bronze" }, [4] = { name = "Fer" }, [5] = {} } end
+ns.lire["base des recettes"] = function() return { [9] = { name = "Lame en bronze", output = 3 },
+  [8] = { name = "Cuirasse changeante", output = 210794 } } end
+local trouves = lib.ChercherObjets("  BRON ")
+assert(#trouves == 3 and trouves[1].id == 3 and trouves[1].fabricable and trouves[2].id == 2 and trouves[3].id == 1
+  and not trouves[2].fabricable, "ordre, sans doublon")
+assert(trouves[1].name == "Lame en bronze", trouves[1].name)
+local change = lib.ChercherObjets("chang")
+assert(#change == 1 and change[1].id == 210794 and change[1].name == "Cuirasse changeante" and change[1].fabricable,
+  "objet fabriqué jamais vu : trouvé par le nom de sa recette")
+assert(#lib.ChercherObjets("b") == 0 and #lib.ChercherObjets(nil) == 0, "au moins 2 lettres")
+assert(#lib.ChercherObjets("bron", 1) == 1 and lib.ChercherObjets("bron", 1)[1].id == 3, "en nombre limité")
+local beaucoup = {}
+for i = 1, 20 do beaucoup[100 + i] = { name = "Objet " .. i } end
+ns.lire.objets = function() return beaucoup end
+assert(#lib.ChercherObjets("objet") == 0, "index gardé moins de 5 s")
+horloge = 5
+assert(#lib.ChercherObjets("objet") == 8 and #lib.ChercherObjets("objet", 30) == 20, "8 par défaut")
+ns.lire.objets, ns.lire["base des recettes"] = function() return nil end, function() return {} end
+horloge = 10
+assert(#lib.ChercherObjets("objet") == 0, "rien de relevé : rien")
+GetTime = nil
+end
+print("Azeroth Commune : recherche d'objets OK")
+
 -- Export : pages (en-tête + morceau), grille de couleurs, et retour grille -> octets -> donnée, comme le décodeur.
 local N = lib.EXPORT_N
 local data = {}
@@ -931,7 +962,7 @@ print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseur
 -- locaux), après un regroupement, des noms d'objets demandés au serveur, des sondes vérifiées et des rappels posés.
 do
   local documentes = {}
-  for nom in ([[Argent ArgentCourt ArgentSigne BoutonCapture Build Capturer ChampsARelever Conteneurs DeclarerSonde
+  for nom in ([[Argent ArgentCourt ArgentSigne BoutonCapture Build Capturer ChampsARelever ChercherObjets Conteneurs DeclarerSonde
     Destinataire EXPORT_N EXPORT_PAGE_BYTES EstBanque EstSac Exporter Exports Faction Fenetre Fusionner GrilleExport JsonSur
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
