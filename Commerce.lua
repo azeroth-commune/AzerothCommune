@@ -87,7 +87,7 @@ local function scanKnownRecipes()
 end
 
 -- Lu par AzerothCommune:Lire (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
-function ns.recettesConnues()
+ns.lire["recettes connues"] = function()
   local persos, lots = {}, {}
   for k, c in pairs(AzerothCommuneDB.chars) do persos[k], lots[k] = c.recipes, c.recipes and c.lots and c.lots.recipes end
   return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
@@ -268,7 +268,7 @@ local function readReplicate()
     ns.noterLot("cours de l'HV", true)
     reading, readAt = false, GetTime()
     print(("Azeroth Commune : hôtel des ventes lu, %d enchères. /reload pour l'écrire sur le disque."):format(n))
-    safe("market_scanned", ns.marketScanned)
+    lib:Signaler("cours de l'HV") -- les abonnés de AzerothCommune:QuandReleve("cours de l'HV")
   end
   step()
 end
@@ -296,10 +296,6 @@ local function learnDeposit()
   local function median(t) table.sort(t) return t[math.floor((#t + 1) / 2)] end
   AzerothCommuneDB.deposit = { rate24 = median(rates), min = #mins > 0 and median(mins) or nil, checked = ns.now() }
 end
-
--- Appelé après chaque lecture de l'HV ; AzerothCommune.lua s'y accroche pour le signal « type relevé à nouveau »
--- (un add-on qui veut réagir au scan frais : AzerothCommune:QuandReleve("cours de l'HV", fn)).
-function ns.marketScanned() end
 
 local function requestScan()
   if GetTime() - lastRequest < SCAN_COOLDOWN then return end

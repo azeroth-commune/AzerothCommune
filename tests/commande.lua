@@ -29,6 +29,20 @@ test("/ac souscriptions : chaque type, souscrit ou non", function()
     assertTrue(dit:find("inventaires : souscrit le", 1, true) ~= nil, dit)
 end)
 
+-- #41 : la souscription n'est tenue qu'à un endroit, la base (AzerothCommuneDB.souscriptions, avec sa date).
+test("une souscription d'un add-on : relevée et dans /ac souscriptions, sans état en double", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("réputations"))
+    assertNil(lib.souscriptions)
+    assertType("number", AzerothCommuneDB.souscriptions["réputations"])
+    dire("") -- /ac : relevé tout de suite
+    local d = lib:Lire("réputations")
+    assertNotNil(d, "réputations relevées")
+    assertType("table", d.persos[UnitGUID("player")])
+    local dit = dire("souscriptions")
+    assertTrue(dit:find("réputations : souscrit le " .. date("%Y-%m-%d") .. ", relevé (données gardées)", 1, true) ~= nil, dit)
+end)
+
 test("/ac export sans clé : la liste des clés dans le chat", function()
     local liste = dire("export")
     for _, e in ipairs(AzerothCommune.Exports()) do
