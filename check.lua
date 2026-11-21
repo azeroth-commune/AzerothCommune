@@ -120,9 +120,11 @@ ns.char, ns.run = char0, run0
 -- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
 C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
   GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
--- La maison de l'HV vient de la lib (lib.MaisonHV) : la même qu'avant, « royaume-faction » au royaume rendu (GameData#24).
-local MAISON = "CAMWOW EU4 Realm 8 PvP-Alliance"
-GetRealmName, UnitFactionGroup, time, GameDataMarket = function() return "CAMWOW EU4 Realm 8 PvP" end, function() return "Alliance" end, os.time, {}
+-- La maison de l'HV vient de la lib (lib.MaisonHV, GameData#24) : « n° de serveur-faction », le numéro tiré du GUID
+-- (LibCommune#35 : le jeu ne donne plus le royaume).
+local MAISON = "6942-Alliance"
+UnitGUID = function(u) if u == "player" then return "Player-6942-014B6DDC" end end
+UnitFactionGroup, time, GameDataMarket = function() return "Alliance" end, os.time, {}
 local scanned, realPrint = 0, print
 ns.marketScanned = function() scanned = scanned + 1 end
 print = noop
@@ -232,11 +234,11 @@ print("GameData : sans négoce OK")
 -- souscription n'est pas relevé ; après 30 jours sans souscription il ne l'est plus, ses données restent ;
 -- /gdata effacer <type> les efface.
 GameDataDB, GameDataItems, GameDataMarket = nil, nil, nil
-time, GetRealmName = os.time, function() return "Kerys" end
+time = os.time
 local tickers
 C_Timer = { After = function(_, fn) fn() end, NewTicker = function(t) tickers[#tickers + 1] = t return { Cancel = noop } end }
 local sortie = {}
-local GUID = { Alice = "Player-1-0000A11C", Bob = "Player-1-00000B0B", Carl = "Player-1-0000CA71" }
+local GUID = { Alice = "Player-6942-0000A11C", Bob = "Player-6942-00000B0B", Carl = "Player-6942-0000CA71" }
 local NOM_DE_FAMILLE = {} -- 2e retour de UnitName sur Forever
 local function session(nom, souscriptions)
   UnitName = function() return nom, NOM_DE_FAMILLE[nom] end
@@ -444,11 +446,10 @@ print("GameData : lot des recettes connues, par métier OK")
 
 -- Fiches par GUID (LibCommune#19) : une base d'avant, rangée sous « Prénom Nom-Royaume » (le cas de Forever : prénom et
 -- nom de famille), sort de chars au chargement ; la fiche du perso connecté est reprise sous son GUID à sa connexion,
--- avec son adresse et son nom, et ses lots figés sous un autre build sont marqués peut-être périmés ; celle d'un perso
--- pas encore connecté attend dans anciensPersos, sans être lue par la lib, et /gdata effacer la touche aussi.
--- La clé d'Alice porte le royaume affiché d'alors (« Ker ys ») : la reprise compare les formes normalisées, et tient quand
--- lib.Royaume() passe au normalisé (LibCommune#35).
-GetNormalizedRealmName = function() return "Kerys" end
+-- avec son nom (plus d'adresse, LibCommune#35), et ses lots figés sous un autre build sont marqués peut-être périmés ;
+-- celle d'un perso pas encore connecté attend dans anciensPersos, sans être lue par la lib, et /gdata effacer la touche
+-- aussi. Le jeu ne donne plus le royaume (build 71037) : la reprise se fait au prénom et au nom, quel que soit le royaume
+-- de la clé d'avant (« Ker ys » pour Alice).
 NOM_DE_FAMILLE.Alice = "Dupont"
 GameDataDB = { souscriptions = { inventaires = os.time() }, chars = {
   ["Alice Dupont-Ker ys"] = { errors = {}, mail = { { subject = "d'Alice" } },
@@ -458,7 +459,7 @@ GameDataItems, GameDataMarket = nil, nil
 gns, glib = session("Alice")
 local fa = GameDataDB.chars[A]
 assert(fa and fa.mail[1].subject == "d'Alice", "fiche « Prénom Nom-Royaume » reprise sous le GUID")
-assert(fa.adresse == "Alice-Kerys" and fa.nom == "Alice Dupont", "adresse sans le nom de famille, nom avec : " .. tostring(fa.adresse))
+assert(fa.adresse == nil and fa.nom == "Alice Dupont", "le nom, plus d'adresse : " .. tostring(fa.adresse))
 assert(fa.lots.mail.perime and fa.lots.mail.build == 64000, "reprise sous un nouveau build (64100) : lot peut-être périmé")
 assert(GameDataDB.chars["Alice Dupont-Ker ys"] == nil and GameDataDB.chars["Bob-Kerys"] == nil, "plus d'ancienne clé dans chars")
 assert(GameDataDB.anciensPersos["Bob-Kerys"] and not GameDataDB.anciensPersos["Alice Dupont-Ker ys"], "Bob attend sa connexion")
@@ -467,14 +468,14 @@ local tousInv = glib:Lire("inventaires", "tous")
 for k in pairs(tousInv.persos) do assert(k:find("^Player%-"), "lu par la lib : seulement des GUID, pas " .. k) end
 assert(glib:Lire("inventaires", A).persos[A].mail, "Lire par GUID")
 local pa = glib.Personnage(A)
-assert(pa.guid == A and pa.adresse == "Alice-Kerys" and pa.nom == "Alice Dupont", "lib.Personnage : le perso connecté")
-assert(gns.personnage(A).nom == "Alice Dupont" and gns.personnage("Player-1-0000DEAD") == nil, "accesseur personnage de GameData")
+assert(pa.guid == A and pa.adresse == nil and pa.nom == "Alice Dupont", "lib.Personnage : le perso connecté")
+assert(gns.personnage(A).nom == "Alice Dupont" and gns.personnage("Player-6942-0000DEAD") == nil, "accesseur personnage de GameData")
 gdata("effacer quêtes terminées")
 assert(GameDataDB.anciensPersos["Bob-Kerys"].quests_done == nil, "effacer : aussi les fiches qui attendent leur perso")
 gns, glib = session("Bob")
 local fb = GameDataDB.chars[B]
 assert(fb.mail[1].subject == "gardé" and fb.quests_done == nil and GameDataDB.anciensPersos == nil, "Bob repris à sa connexion, champ effacé pas revenu")
-assert(glib.Personnage(A).nom == "Alice Dupont" and glib.Personnage(A).adresse == "Alice-Kerys", "un autre perso du joueur : sa fiche dans GameData")
+assert(glib.Personnage(A).nom == "Alice Dupont" and glib.Personnage(A).adresse == nil, "un autre perso du joueur : sa fiche dans GameData")
 local exportPerso
 for _, e in ipairs(glib.Exports()) do if e.cle == "perso" then exportPerso = e end end
 assert(next(exportPerso.donnees()) == B, "export perso : sous le GUID")

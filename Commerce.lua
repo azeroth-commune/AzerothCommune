@@ -6,7 +6,8 @@
 --   GameDataDB.trainers[npc]  : ce que chaque maître enseigne, à quel prix, quel rang et quel niveau requis.
 --   GameDataDB.vendors[npc]   : ce que chaque marchand vend, à quel prix, par combien, en stock limité ou non.
 --   GameDataDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
---   GameDataMarket[royaume-faction] : dernier scan complet de l'hôtel des ventes : par objet, le prix unitaire le
+--   GameDataMarket[maison]    : dernier scan complet de l'hôtel des ventes, sous la maison de l'HV (lib.MaisonHV,
+--                              « n° de serveur-faction », « 6942-Alliance ») : par objet, le prix unitaire le
 --                              plus bas, la quantité en vente et les paliers de prix les moins chers ; l'historique,
 --                              seulement si aucun fournisseur ne le tient (AuctionDB frais : LibCommune, Fournisseurs.lua).
 -- Rien ne se lit sans la fenêtre ouverte (sauf les recettes connues, relevées aussi à la connexion parmi celles déjà

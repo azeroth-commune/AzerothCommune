@@ -111,10 +111,10 @@ function ns.coursHV()
   if next(GameDataMarket) then return { hv = GameDataMarket, depot = GameDataDB.deposit }, GameDataDB.lots["cours de l'HV"] end
 end
 function ns.objets() return GameDataItems.items, GameDataDB.lots.objets end
--- Lu par lib.Personnage(guid) : l'adresse et le nom d'un perso du joueur, gardés dans sa fiche à chaque connexion.
+-- Lu par lib.Personnage(guid) : le nom d'un perso du joueur, gardé dans sa fiche à chaque connexion.
 function ns.personnage(guid)
   local c = GameDataDB and GameDataDB.chars[guid]
-  return c and c.adresse and { guid = guid, adresse = c.adresse, nom = c.nom } or nil
+  return c and c.nom and { guid = guid, nom = c.nom } or nil
 end
 
 -- Marchands : un lot mixte. Les marchands vus en jeu (relevé direct) et la base VendorData.lua, générée hors jeu (quel

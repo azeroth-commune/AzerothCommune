@@ -1,8 +1,8 @@
 -- GameData : une base de données du jeu, scannée en jouant, écrite dans les SavedVariables
 -- (WTF/Account/<COMPTE>/SavedVariables/GameData.lua, au /reload ou à la déconnexion).
---   GameDataDB.chars[GUID]          : chaque perso, sous son GUID (UnitGUID, LibCommune#19), avec son adresse
---                                     (« Prénom-Royaume ») et son nom (« Prénom Nom ») ; fiche, équipement, sacs, banque,
---                                     courrier, monnaies, réputations, métiers, compétences, recettes connues, quêtes.
+--   GameDataDB.chars[GUID]          : chaque perso, sous son GUID (UnitGUID, LibCommune#19), avec son nom
+--                                     (« Prénom Nom ») ; fiche, équipement, sacs, banque, courrier, monnaies,
+--                                     réputations, métiers, compétences, recettes connues, quêtes.
 --   GameDataDB.recipes / trainers / vendors, GameDataMarket : voir Commerce.lua.
 --   GameDataDB.addons               : les add-ons installés (titre, version, auteur, dépendances, état).
 --   GameDataItems.items[itemID]     : tous les objets du jeu.
@@ -149,23 +149,24 @@ function window.mail()
   return t
 end
 
--- La fiche du perso connecté, sous son GUID, avec son adresse et son nom à jour (un renommage les change, pas le GUID).
--- Une fiche d'avant le GUID (anciensPersos, clé « Prénom Nom-Royaume ») est reprise à la connexion de son perso.
+-- La fiche du perso connecté, sous son GUID, avec son nom à jour (un renommage le change, pas le GUID).
+-- Une fiche d'avant le GUID (anciensPersos, clé « Prénom Nom-Royaume ») est reprise à la connexion de son perso, au
+-- prénom et au nom : le jeu ne donne plus le royaume (build 71037, LibCommune#35).
 local function char()
   local p = lib.Personnage()
   local c = GameDataDB.chars[p.guid]
   if not c then
     local anciens = GameDataDB.anciensPersos or {}
-    -- la clé d'avant, au royaume affiché d'alors : comparée sous forme normalisée, quelle que soit celle de lib.Royaume()
-    local ancienne, cible = nil, (p.nom .. lib.RoyaumeNormalise()):gsub("[%s%-]", "")
-    for k in pairs(anciens) do if k:gsub("[%s%-]", "") == cible then ancienne = k end end
+    -- ponytail: le même « Prénom Nom » sur deux royaumes d'avant : une des deux fiches est reprise (rescannable)
+    local ancienne
+    for k in pairs(anciens) do if (k:match("^(.+)%-[^%-]*$") or k) == p.nom then ancienne = k end end
     c = ancienne and anciens[ancienne] or { errors = {}, lots = {} }
     if ancienne then anciens[ancienne] = nil end
     if not next(anciens) then GameDataDB.anciensPersos = nil end
     ns.verifierFiche(c) -- reprise : ses lots figés sous un autre build sont peut-être périmés, comme au chargement
     GameDataDB.chars[p.guid] = c
   end
-  c.adresse, c.nom = p.adresse, p.nom
+  c.adresse, c.nom = nil, p.nom
   return c
 end
 
