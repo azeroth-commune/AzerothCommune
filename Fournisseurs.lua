@@ -77,7 +77,7 @@ lib.fournisseurs = {
         local sonder = premiereLigne("prix Auctionator")
         return function(id)
           local p = api.GetAuctionPriceByItemID(APPELANT, id)
-          if not p then return nil end
+          if not p then sonder(p) return nil end -- nil : pas vérifié (premiereLigne) ; false : vérifié
           local age = api.GetAuctionAgeByItemID(APPELANT, id) -- jours ; nil au-delà de 21
           sonder(p, age)
           return { min = age == 0 and p or nil, age = age } -- pas vu aujourd'hui : plus en vente

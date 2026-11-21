@@ -434,7 +434,8 @@ function lib:Souscrire(typeDeDonnees)
   if not AzerothCommuneDB then
     if not prevenuTropTot then
       prevenuTropTot = true
-      local addon = debugstack and debugstack(2, 1, 0):match("[Aa]dd[Oo]ns[/\\]([^/\\]+)[/\\]")
+      local pile = debugstack and debugstack(2, 1, 0) -- la ligne de l'appelant ; jamais d'erreur si elle manque
+      local addon = type(pile) == "string" and pile:match("[Aa]dd[Oo]ns[/\\]([^/\\]+)[/\\]")
       print(("Azeroth Commune : %s a souscrit à « %s » avant le chargement du socle ; souscription perdue. Son TOC doit déclarer « ## Dependencies: AzerothCommune »."):format(
         addon and ("l'add-on " .. addon) or "un add-on", typeDeDonnees))
     end
