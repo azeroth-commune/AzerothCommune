@@ -1,7 +1,7 @@
 .claude/
 # Généré par tools/build_vendor_data.py (données cMaNGOS GPL-3.0) : hors du repo tant que la licence n'est pas choisie
 VendorData.lua
-# Généré par tools/build_recipe_data.py (données cMaNGOS GPL-3.0) : hors du repo tant que la licence n'est pas choisie
+# Généré par tools/build_recipe_data_client.py (tables du client Forever) : hors du repo tant que la licence n'est pas choisie
 RecettesClassic.lua
 # Généré par tools/build_item_catalog.py (table ItemSparse du client Forever) : hors du repo tant que la licence n'est pas choisie
 CatalogueObjets.lua
