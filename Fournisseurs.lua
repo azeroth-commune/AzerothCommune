@@ -18,7 +18,7 @@
 -- format décrit dans son History.lua. Sa qty compte aussi les enchères sans achat immédiat.
 -- Chargé après LibCommune.lua (le TOC, les check.lua) : la maison de l'HV et la faction viennent de ses relevés sondés.
 local lib = LibStub("LibCommune-1.0")
-local VERSION = 3
+local VERSION = 4 -- 4 : sondes des fournisseurs
 lib.versions = lib.versions or {}
 if (lib.versions.fournisseurs or 0) >= VERSION then return end
 lib.versions.fournisseurs = VERSION
@@ -29,6 +29,22 @@ local APPELANT = "LibCommune" -- l'API d'Auctionator demande le nom de l'add-on 
 local AUCTIONDB_RECENT = 6 * 3600 -- un scan d'AuctionDB plus vieux : son historique n'est plus frais pour ton HV
 
 local function maison() return lib.MaisonHV() end -- même clé que GameDataMarket, sondée ; nil si la faction est inconnue
+
+-- Sondes des fournisseurs : un prix numérique, ou rien, pour un objet. Vérifiées sur la première ligne de chaque lecture
+-- (relevé en masse) ; un fournisseur absent n'est jamais lu : sa sonde reste « pas encore vue », sans relevé sans contexte.
+local function prixOuRien(p) return p == nil or type(p) == "number" end
+lib.DeclarerSonde("prix Auctionator", "Auctionator.API.v1 rend un prix et un âge numériques, ou rien",
+  function(p, age) return prixOuRien(p) and prixOuRien(age) end)
+lib.DeclarerSonde("prix TSM", "TSM_API.GetCustomPriceValue rend un prix numérique, ou rien", prixOuRien)
+lib.DeclarerSonde("prix AuctionDB", "AuctionDBForeverSaved : la ligne d'un objet est « heure,min,médiane,qté … », ou rien",
+  function(l) return l == nil or (type(l) == "string" and l:find("^%d+,%d+,%d+,%d+") ~= nil) end)
+-- Une fonction qui sonde nom sur sa première ligne seulement (une par lecteur, donc par lecture).
+local function premiereLigne(nom)
+  local faite = false
+  return function(...)
+    if not faite then faite = true; lib.Sonder(nom, ...) end
+  end
+end
 
 -- AuctionDB v2.8.1 : AuctionDBForeverSaved.houses["<région-règles> <Faction>"] = { items = { [itemID] = "heure,min,médiane,
 -- qté heure,…" (du plus ancien au plus récent ; min 0 : seulement des enchères sans achat immédiat) }, scans = { {heure, …} } }.
@@ -59,10 +75,12 @@ lib.fournisseurs = {
       lecteur = function()
         local api = Auctionator and Auctionator.API and Auctionator.API.v1
         if not (api and api.GetAuctionPriceByItemID and api.GetAuctionAgeByItemID) then return nil end
+        local sonder = premiereLigne("prix Auctionator")
         return function(id)
           local p = api.GetAuctionPriceByItemID(APPELANT, id)
-          if not p then return nil end
+          if not p then sonder(p) return nil end
           local age = api.GetAuctionAgeByItemID(APPELANT, id) -- jours ; nil au-delà de 21
+          sonder(p, age)
           return { min = age == 0 and p or nil, age = age } -- pas vu aujourd'hui : plus en vente
         end
       end },
@@ -70,8 +88,10 @@ lib.fournisseurs = {
     { nom = "TSM", provenance = "autre add-on", champs = { "min" },
       lecteur = function()
         if not (TSM_API and TSM_API.GetCustomPriceValue) then return nil end
+        local sonder = premiereLigne("prix TSM")
         return function(id)
           local p = TSM_API.GetCustomPriceValue("dbminbuyout", "i:" .. id)
+          sonder(p)
           return p and { min = p }
         end
       end },
@@ -80,8 +100,12 @@ lib.fournisseurs = {
       lecteur = function()
         local h, quand = maisonAuctionDB()
         if not h then return nil end
+        local sondee = false
         return function(id)
           local s = h.items[id]
+          if not sondee then -- première ligne seulement ; son début : un historique peut être long
+            sondee = true; lib.Sonder("prix AuctionDB", type(s) == "string" and s:sub(1, 40) or s)
+          end
           if type(s) ~= "string" then return nil end
           local hist = {}
           for t, min, med, qty in s:gmatch("(%d+),(%d+),(%d+),(%d+)") do

@@ -24,7 +24,10 @@
 -- adresses), lib.MaisonHV() (« royaume-faction », clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
 -- Sondes : lib.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
 -- lib.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
-local MAJOR, MINOR = "LibCommune-1.0", 10
+-- Sondés aussi : sacs (lib.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
+-- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
+-- Pour les autres fichiers de la lib : lib.DeclarerSonde(nom, attente, verifier, relever), lib.Sonder(nom, ...).
+local MAJOR, MINOR = "LibCommune-1.0", 11
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
 
@@ -92,11 +95,15 @@ end
 -- vérifiée à chaque relevé. Une sonde rouge prévient dans le chat une fois par session et ne change rien à la valeur
 -- rendue (pas de mode dégradé : on débugge). Rien n'est sauvegardé : le dernier résultat de chacune, le temps de la session.
 lib.sondes = lib.sondes or {} -- [nom] = { etat, valeur, heure, build, prevenu } ; gardé d'une mineure à l'autre
-local SONDES = {} -- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même
+-- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même. Gardé d'une mineure à
+-- l'autre : une copie plus récente de ce fichier redéclare ses sondes à leur place, celles des autres fichiers restent
+-- (un fichier dont la version ne change pas n'est pas rechargé).
+local SONDES = lib.listeSondes or {}
+lib.listeSondes = SONDES
 
 local function montrer(v)
   if type(v) == "string" then return ("%q"):format(v) end
-  if type(v) ~= "table" then return tostring(v) end
+  if type(v) ~= "table" or not v.n then return tostring(v) end -- une table rendue par le jeu : pas plusieurs retours
   local t = {}
   for i = 1, v.n do t[i] = montrer(v[i]) end
   return table.concat(t, ", ")
@@ -112,7 +119,9 @@ end
 
 -- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
 local function sonder(nom, ...)
-  local s, r = SONDES[nom], lib.sondes[nom] or {}
+  local s = SONDES[nom]
+  if not s then return ... end -- pas déclarée (Interface.lua chargé seul avant ce fichier…) : jamais d'erreur dans un relevé
+  local r = lib.sondes[nom] or {}
   lib.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
   r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }
@@ -124,14 +133,20 @@ local function sonder(nom, ...)
   end
   return ...
 end
+lib.Sonder = sonder
+
+-- Déclare une sonde. relever() refait son relevé (qui la sonde) pour RelancerSondes ; nil pour une sonde qui demande un
+-- contexte (fenêtre de métier ouverte, fournisseur présent…) : elle reste « pas encore vue » tant qu'il ne s'est pas présenté.
+function lib.DeclarerSonde(nom, attente, verifier, relever)
+  local s = SONDES[nom]
+  if not s then s = {}; SONDES[#SONDES + 1], SONDES[nom] = s, s end
+  s.nom, s.attente, s.verifier, s.relever = nom, attente, verifier, relever
+end
 
 -- Déclare un relevé sondé sans contexte : appel() lit le jeu ; rend la fonction qui relève et sonde.
--- ponytail: toutes les sondes sont sans contexte pour l'instant ; une sonde qui en demande un (fenêtre ouverte…) se
--- déclarera sans relever, et RelancerSondes la sautera.
 local function releve(nom, attente, verifier, appel)
   local relever = function() return sonder(nom, appel()) end
-  SONDES[#SONDES + 1] = { nom = nom, attente = attente, verifier = verifier, relever = relever }
-  SONDES[nom] = SONDES[#SONDES]
+  lib.DeclarerSonde(nom, attente, verifier, relever)
   return relever
 end
 
@@ -244,6 +259,15 @@ end
 -- total, illisibles, premiereErreur }, ou nil, raison (et le métier pour « liste vide »).
 local DIFFICULTE = { [0] = "optimal", [1] = "medium", [2] = "easy", [3] = "trivial" } -- Enum.TradeskillRelativeDifficulty
 
+-- Sonde : la fiche de la première recette lisible (relevé en masse) a un nom, un produit (sauf un enchantement) et des
+-- composants. Fenêtre de métier ouverte : pas de relevé sans contexte, RelancerSondes la saute.
+-- ponytail: une liste vide n'est pas rouge : c'est l'état passager juste après l'ouverture (TRADE_SKILL_LIST_UPDATE
+-- suit) ; une liste toujours vide ne se verrait qu'à « pas encore vue ». La sonder si ce cas arrive.
+lib.DeclarerSonde("recettes", "la fiche d'une recette (GetRecipeInfo, GetRecipeSchematic) porte un nom, un produit (sauf un enchantement) et ses composants",
+  function(nom, produit, composants, enchant)
+    return nonVide(nom) and (type(produit) == "number" or enchant == true) and type(composants) == "number" and composants > 0
+  end)
+
 function lib:ReleverRecettes()
   local T = C_TradeSkillUI
   local p = T and T.GetBaseProfessionInfo and T.GetBaseProfessionInfo()
@@ -261,6 +285,7 @@ function lib:ReleverRecettes()
   end
   if not liste or #liste == 0 then return nil, "liste vide", metier end -- TRADE_SKILL_LIST_UPDATE suivra
   local r = { metier = metier, rang = p.skillLevel, max = p.maxSkillLevel, connues = {}, recettes = {}, total = #liste, illisibles = 0 }
+  local sondee = false
   for _, id in ipairs(liste) do
     -- une recette qui fait planter l'API ne doit pas faire perdre tout le métier
     local ok, err = pcall(function()
@@ -274,6 +299,10 @@ function lib:ReleverRecettes()
         if rg and base and slot.required ~= false then -- composants de base seulement (pas les optionnels)
           composants[#composants + 1] = { id = rg.itemID, currency = rg.currencyID, qty = slot.quantityRequired }
         end
+      end
+      if not sondee then
+        sondee = true
+        sonder("recettes", info.name, s and s.outputItemID, #composants, info.isEnchantingRecipe)
       end
       r.recettes[id] = {
         profession = metier, name = info.name, output = s and s.outputItemID, reagents = composants,
@@ -358,18 +387,28 @@ local EVENEMENTS = {
 
 -- Conteneurs d'Enum.BagIndex dont le nom passe le filtre (sacs, banque, onglets : ce que ce client a), lus à l'instant :
 -- { [nom] = { size, items = { { id, count, link }, … } } } (même forme que GameData). Seule lecture des sacs : GameData,
--- le Négoce et Handshake passent par elle.
+-- le Négoce et Handshake passent par elle. Sondes : le premier conteneur lu et le premier objet vu (relevé en masse).
+lib.DeclarerSonde("emplacements d'un conteneur", "C_Container.GetContainerNumSlots(sac) rend un nombre d'emplacements",
+  function(n) return type(n) == "number" end, function() lib.Conteneurs(lib.EstSac) end)
+lib.DeclarerSonde("objet d'un conteneur", "C_Container.GetContainerItemInfo rend, pour un objet présent, son itemID et son lien",
+  function(id, lien) return type(id) == "number" and type(lien) == "string" and lien:match("item:(%d+)") == tostring(id) end,
+  function() lib.Conteneurs(lib.EstSac) end)
+
 function lib.Conteneurs(garder)
-  local out, vus = {}, {}
+  local out, vus, sondeTaille, sondeObjet = {}, {}, true, true
   for nom, sac in pairs(Enum.BagIndex or {}) do
     if garder(nom) and not vus[sac] then
       vus[sac] = true
       local taille = C_Container.GetContainerNumSlots(sac)
+      if sondeTaille then sondeTaille = false; sonder("emplacements d'un conteneur", taille) end
       if taille and taille > 0 then
         local items = {}
         for slot = 1, taille do
           local it = C_Container.GetContainerItemInfo(sac, slot)
-          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink } end
+          if it then
+            if sondeObjet then sondeObjet = false; sonder("objet d'un conteneur", it.itemID, it.hyperlink) end
+            items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink }
+          end
         end
         out[nom] = { size = taille, items = items }
       end
