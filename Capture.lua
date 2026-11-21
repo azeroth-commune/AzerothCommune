@@ -16,7 +16,7 @@
 -- Aucun cadre n'est créé au chargement : le fichier se charge aussi hors du jeu (LibStub.lua puis ce fichier), pour
 -- PagesExport et GrilleExport.
 local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
-local VERSION = 1
+local VERSION = 2
 lib.versions = lib.versions or {}
 if (lib.versions.capture or 0) >= VERSION then return end
 lib.versions.capture = VERSION
@@ -42,7 +42,7 @@ local function cadrePhoto()
   shot:RegisterEvent("SCREENSHOT_FAILED")
   shot:SetScript("OnEvent", function(self, event)
     self:Hide()
-    self.token = (self.token or 0) + 1 -- la réponse est arrivée : le délai de 3 s ne sert plus
+    self.token = (self.token or 0) + 1 -- la réponse est arrivée : le délai de 10 s ne sert plus
     local onDone, quiet = self.onDone, self.quiet
     self.onDone, self.quiet = nil, nil
     if self.format then C_CVar.SetCVar("screenshotFormat", self.format); self.format = nil end
@@ -69,9 +69,9 @@ function lib.Capturer(frame, label, onDone, quiet)
     local ok, err = pcall(Screenshot)
     if not ok then dire("Screenshot() a échoué : " .. tostring(err)) end
   end)
-  C_Timer.After(3, function() -- pas de réponse du jeu : on n'attend pas indéfiniment
+  C_Timer.After(10, function() -- pas de réponse du jeu : on n'attend pas indéfiniment (une page 4K de grille peut dépasser 3 s)
     if s.token == mine and s:IsShown() then
-      dire("capture sans réponse du jeu au bout de 3 s (SCREENSHOT_SUCCEEDED jamais reçu).")
+      dire("capture sans réponse du jeu au bout de 10 s (SCREENSHOT_SUCCEEDED jamais reçu).")
       s:GetScript("OnEvent")(s, "SCREENSHOT_FAILED")
     end
   end)

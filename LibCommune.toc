@@ -3,7 +3,7 @@
 ## Category: Libraries
 ## Category-frFR: Bibliothèques
 ## Notes: Lib commune des add-ons Azeroth Commune : accès aux données relevées (catalogue des types de données, souscriptions, fournisseurs comme Auctionator pour les cours de l'HV), avec ou sans GameData ; fenêtres, tableaux, montants, noms d'objets, capture et export ; en jeu, un seul bouton de minicarte et une seule entrée des options pour les add-ons présents. Chargée seule en développement (lien symbolique), embarquée dans chaque add-on publié.
-## Version: 1.6.0
+## Version: 1.6.1
 LibStub.lua
 LibCommune.lua
 Interface.lua
