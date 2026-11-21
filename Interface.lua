@@ -119,7 +119,7 @@ end
 -- jamais vus (trouvés alors par le nom de leur recette). Sans catalogue, le jeu ne donnant aucune liste de ses objets, un
 -- objet jamais vu et non fabricable ne se trouve que par son lien (TrouverObjet). Lit les deux types elle-même : l'add-on
 -- qui cherche y souscrit.
--- Index en mémoire, refait au plus toutes les 5 s (le catalogue grossit pendant le scan des objets).
+-- Index en mémoire, refait au plus toutes les 5 s (les objets relevés grossissent pendant le balayage).
 -- ponytail: un objet relevé ou effacé (/ac effacer) dans ces 5 s attend l'index suivant ; si ça se voit, refaire
 -- l'index sur un rappel QuandReleve (« objets » et « base des recettes » ne signalent pas encore : lib:Signaler)
 local index, indexFait
