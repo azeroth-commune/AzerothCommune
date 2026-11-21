@@ -60,7 +60,8 @@ local function saveProfession(c, prof, rank, max, known)
   return releveRecettes(c)
 end
 
--- Rend false si rien n'a été relevé, sinon le 2e retour de ns.run.
+-- Rend false si rien n'a été relevé, sinon le 2e retour de ns.run. Sans fiche c (base des recettes souscrite seule) : les
+-- recettes vues seulement.
 local function scanTradeSkill(c)
   local r, why, prof = lib:ReleverRecettes()
   if why == "liste pas à jour" then ns.retryTrade() return false end
@@ -71,6 +72,7 @@ local function scanTradeSkill(c)
   if not r then return false end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
   for id, rec in pairs(r.recettes) do AzerothCommuneDB.recipes[id] = rec end
   AzerothCommuneDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
+  if not c then return false end
   c.recipes = c.recipes or {}
   local m = lib:RangerRecettes(c.recipes, r) -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
   m.scanned, m.build = ns.now(), ns.build()
@@ -349,7 +351,12 @@ local function queueTrade()
   tradeToken = tradeToken + 1
   local mine = tradeToken
   C_Timer.After(0.5, function()
-    if mine == tradeToken then ns.run("recipes", function(c) local releve = scanTradeSkill(c); return c.recipes, releve end) end
+    if mine ~= tradeToken then return end
+    if ns.souscrit("recettes connues") then
+      ns.run("recipes", function(c) local releve = scanTradeSkill(c); return c.recipes, releve end)
+    elseif ns.souscrit("base des recettes") then -- les recettes vues seules, pas les connues du perso
+      safe("recipes_base", scanTradeSkill)
+    end
   end)
 end
 function ns.retryTrade() -- liste pas encore à jour : jusqu'à 4 nouveaux essais
@@ -365,7 +372,8 @@ for _, e in ipairs({ "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDAT
 end
 
 -- Le type de données que relève chaque fenêtre : rien n'est lu sans souscription à ce type (Souscriptions.lua). Les recettes
--- passent par ns.run, qui vérifie lui-même.
+-- passent par queueTrade (recettes connues, ou base des recettes seule) et ns.run, qui vérifient eux-mêmes.
+-- ponytail: la fenêtre « Craft » de vanilla (scanCraft) ne relève que sous « recettes connues » ; Forever ne l'a plus.
 local TYPE_DE = { TRAINER_SHOW = "maîtres de métier", TRAINER_UPDATE = "maîtres de métier", MERCHANT_SHOW = "marchands",
   MERCHANT_UPDATE = "marchands", TAXIMAP_OPENED = "prix des vols", AUCTION_HOUSE_SHOW = "cours de l'HV",
   REPLICATE_ITEM_LIST_UPDATE = "cours de l'HV" }

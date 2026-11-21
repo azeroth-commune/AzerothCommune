@@ -1406,6 +1406,22 @@ fini()
 assert(ca.lots.recipes and ca.lots.recipes.build == 64100, "relevé sans fenêtre fini : lot noté")
 print("Azeroth Commune : lot des recettes connues, par métier OK")
 
+-- Base des recettes (#48) : sans souscription, la fenêtre de métier n'en relève rien ; souscrite seule (sans « recettes
+-- connues »), elle relève les recettes vues, pas les recettes connues du perso. /ac la connaît.
+AzerothCommuneDB = { souscriptions = { inventaires = os.time() } }
+AzerothCommuneItems, AzerothCommuneMarket = nil, nil
+gns, glib = session("Alice")
+frames.Commerce.fn(frames.Commerce, "TRADE_SKILL_LIST_UPDATE")
+assert(not next(AzerothCommuneDB.recipes or {}), "aucune souscription : aucune recette relevée")
+assert(select(2, glib:Lire("base des recettes")) == "pas encore relevé", "rien de relevé pour la base des recettes")
+gns, glib = session("Alice", { "base des recettes" })
+frames.Commerce.fn(frames.Commerce, "TRADE_SKILL_LIST_UPDATE")
+assert(AzerothCommuneDB.recipes[3307] and AzerothCommuneDB.chars[A].recipes == nil, "base des recettes seule : les recettes vues, pas les connues")
+assert(glib:Lire("base des recettes")[3307].output == 3575, "lue par Lire")
+ac("souscriptions")
+assert(table.concat(sortie, "\n"):find("base des recettes : souscrit le", 1, true), table.concat(sortie, "\n"))
+print("Azeroth Commune : souscription à la base des recettes OK")
+
 -- Fiches par GUID (LibCommune#19), avec le nom « Prénom Nom » ; un autre perso du joueur se lit par sa fiche.
 -- (SavedVariables neuves : plus de reprise des fiches d'avant le GUID.)
 NOM_DE_FAMILLE.Alice = "Dupont"

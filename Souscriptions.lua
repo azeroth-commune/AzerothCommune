@@ -17,6 +17,7 @@ local RANGEMENT = {
   ["métiers et compétences"] = { persos = { "professions", "skills" } },
   ["quêtes terminées"] = { persos = { "quests_done" } },
   ["recettes connues"] = { persos = { "recipes" }, base = { "recipes", "trade_seen" } },
+  ["base des recettes"] = { base = { "recipes" } }, -- les recettes vues, partagées avec les recettes connues ; la réserve n'est pas relevée
   ["maîtres de métier"] = { base = { "trainers" } },
   marchands = { base = { "vendors" } },
   ["prix des vols"] = { base = { "taxi" } },
