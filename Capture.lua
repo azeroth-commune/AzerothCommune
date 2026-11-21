@@ -1,4 +1,4 @@
--- LibCommune : capture d'une fenêtre et export de données par image, sans /reload. Relus hors du jeu par
+-- Azeroth Commune : capture d'une fenêtre et export de données par image, sans /reload. Relus hors du jeu par
 -- tools/crop_captures.py (atelier). Appel avec un point, comme Interface.lua.
 --   lib.Capturer(cadre, libellé, fini, discret)   photo de l'écran, repères magenta autour du cadre
 --   lib.BoutonCapture(cadre, libellé, x, y)        petit bouton loupe qui fait cette photo
@@ -13,13 +13,9 @@
 -- Données dans les 94 × 94 cases restantes, ligne par ligne. Couleur d'une case : rouge, vert, bleu = ses 3 bits.
 -- Chaque page commence par un en-tête de 16 octets : « BGP1 », n° d'export (4), page (2), pages (2),
 -- longueur (2), somme de contrôle (2) - tout en gros-boutiste.
--- Aucun cadre n'est créé au chargement : le fichier se charge aussi hors du jeu (LibStub.lua puis ce fichier), pour
--- PagesExport et GrilleExport.
-local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
-local VERSION = 2
-lib.versions = lib.versions or {}
-if (lib.versions.capture or 0) >= VERSION then return end
-lib.versions.capture = VERSION
+-- Aucun cadre n'est créé au chargement : le fichier se charge aussi seul hors du jeu (AzerothCommune = {} puis ce
+-- fichier, comme tools/crop_captures.py), pour PagesExport et GrilleExport.
+local lib = AzerothCommune
 
 local floor = math.floor
 local function dire(msg) print("Azeroth Commune : " .. msg) end
@@ -155,7 +151,7 @@ local frame, bands, pools
 
 -- 4 sous-cadres de 24 lignes ; dans chaque ligne, une texture par suite de cases de même couleur.
 local function build()
-  frame = CreateFrame("Frame", "LibCommuneExportCode", UIParent)
+  frame = CreateFrame("Frame", "AzerothCommuneExportCode", UIParent)
   frame:SetFrameStrata("FULLSCREEN_DIALOG")
   frame:SetSize(N * CELL, N * CELL)
   bands, pools = {}, {}

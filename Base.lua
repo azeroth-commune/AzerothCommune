@@ -1,50 +1,44 @@
--- GameData : une base de données du jeu, scannée en jouant, écrite dans les SavedVariables
--- (WTF/Account/<COMPTE>/SavedVariables/GameData.lua, au /reload ou à la déconnexion).
---   GameDataDB.chars[GUID]          : chaque perso, sous son GUID (UnitGUID, LibCommune#19), avec son nom
---                                     (« Prénom Nom ») ; fiche, équipement, sacs, banque, courrier, monnaies,
---                                     réputations, métiers, compétences, recettes connues, quêtes.
---   GameDataDB.recipes / trainers / vendors, GameDataMarket : voir Commerce.lua.
---   GameDataDB.addons               : les add-ons installés (titre, version, auteur, dépendances, état).
---   GameDataItems.items[itemID]     : tous les objets du jeu.
+-- Azeroth Commune, la base (l'ex-GameData) : les données relevées du jeu, scannées en jouant, écrites dans les
+-- SavedVariables (WTF/Account/<COMPTE>/SavedVariables/AzerothCommune.lua, au /reload ou à la déconnexion). Privée : les
+-- add-ons la lisent par AzerothCommune:Lire, jamais ses tables.
+--   AzerothCommuneDB.chars[GUID]      : chaque perso, sous son GUID (UnitGUID, LibCommune#19), avec son nom
+--                                       (« Prénom Nom ») ; fiche, équipement, sacs, banque, courrier, monnaies,
+--                                       réputations, métiers, compétences, recettes connues, quêtes.
+--   AzerothCommuneDB.recipes / trainers / vendors, AzerothCommuneMarket : voir Commerce.lua.
+--   AzerothCommuneDB.addons           : les add-ons installés (titre, version, auteur, dépendances, état).
+--   AzerothCommuneItems.items[itemID] : tous les objets du jeu.
 -- Un perso n'est lisible que connecté : chaque perso apparaît après une connexion. La banque, le courrier
 -- et les recettes ne se lisent que fenêtre ouverte : ouvre-les une fois par perso.
 -- Chaque lecture tourne sous pcall : une API absente sur ce client devient une ligne dans `errors`.
--- Seuls les types de données auxquels un add-on a souscrit sont relevés (Souscriptions.lua, /gdata souscriptions).
--- Chaque lot relevé porte sa provenance, le build du client et sa date (ns.lot) : GameDataDB.lots[type] pour un type du
+-- Seuls les types de données auxquels un add-on a souscrit sont relevés (Souscriptions.lua, /ac souscriptions).
+-- Chaque lot relevé porte sa provenance, le build du client et sa date (ns.lot) : AzerothCommuneDB.lots[type] pour un type du
 -- joueur, chars[perso].lots[champ] pour un champ de perso. Au chargement, un lot figé sous un autre build est marqué
 -- perime = true, « peut-être périmé » (Souscriptions.lua, ns.verifierLots).
 
 local _, ns = ...
-GameDataAPI = ns -- lu par Handshake (prix, stocks), le Négoce et LibCommune (recettesConnues)
-
-local lib = LibStub("LibCommune-1.0") -- embarquée (OptionalDeps en développement) : personnage, relevé des recettes
+local lib = AzerothCommune -- personnage, royaume, faction, sacs : relevés et sondés par AzerothCommune.lua
 
 local function now() return date("%Y-%m-%d %H:%M:%S") end
 
--- Le lot d'un relevé fait maintenant, par GameData en jeu.
+-- Le lot d'un relevé fait maintenant, par le socle en jeu.
 local function build() return tonumber((select(2, GetBuildInfo()))) end
 local function lot()
   return { provenance = "relevé direct", build = build(), version = (GetBuildInfo()), date = now() }
 end
--- Note un relevé dans le lot nom de lots (GameDataDB.lots par défaut). entier : le relevé remplace tout le lot ; sinon il
+-- Note un relevé dans le lot nom de lots (AzerothCommuneDB.lots par défaut). entier : le relevé remplace tout le lot ; sinon il
 -- n'en remplace qu'une partie (un marchand, un objet…) et un lot figé sous un autre build reste peut-être périmé, avec sa
 -- date d'alors (quand il a été figé).
 local function noterLot(nom, entier, lots)
-  lots = lots or GameDataDB.lots
+  lots = lots or AzerothCommuneDB.lots
   local l = lots[nom]
   if l and l.perime and not entier then return end
-  if l and not l.perime then l.date = now() return end -- ponytail: un lot de GameData est toujours un relevé direct
+  if l and not l.perime then l.date = now() return end -- ponytail: un lot de la base est toujours un relevé direct
   lots[nom] = lot()
 end
 ns.build, ns.lot, ns.noterLot = build, lot, noterLot
 
--- Sacs et banque : lus par LibCommune (lib.Conteneurs, avec les liens), seule lecture des sacs des add-ons. Sans elle,
--- pas relevés : la raison va dans errors (run), comme pour les recettes.
-local function containers(filtre)
-  local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not (lib and lib.Conteneurs) then error("LibCommune absente : sacs et banque pas relevés", 0) end
-  return lib.Conteneurs(lib[filtre])
-end
+-- Sacs et banque : lus par AzerothCommune.Conteneurs (avec les liens), seule lecture des sacs des add-ons.
+local function containers(filtre) return lib.Conteneurs(lib[filtre]) end
 
 -- Lisible à tout moment hors combat : à la connexion, puis toutes les 60 s.
 local scan = {}
@@ -150,35 +144,11 @@ function window.mail()
 end
 
 -- La fiche du perso connecté, sous son GUID, avec son nom à jour (un renommage le change, pas le GUID).
--- Une fiche d'avant le GUID (anciensPersos, clé « Prénom Nom-Royaume ») est reprise à la connexion de son perso, au
--- prénom et au nom : le jeu ne donne plus le royaume (build 71037, LibCommune#35).
 local function char()
   local p = lib.Personnage()
-  local c = GameDataDB.chars[p.guid]
-  if not c then
-    local anciens = GameDataDB.anciensPersos or {}
-    -- ponytail: le même « Prénom Nom » sur deux royaumes d'avant : une des deux fiches est reprise (rescannable)
-    local ancienne
-    for k in pairs(anciens) do if (k:match("^(.+)%-[^%-]*$") or k) == p.nom then ancienne = k end end
-    c = ancienne and anciens[ancienne] or { errors = {}, lots = {} }
-    if ancienne then anciens[ancienne] = nil end
-    if not next(anciens) then GameDataDB.anciensPersos = nil end
-    ns.verifierFiche(c) -- reprise : ses lots figés sous un autre build sont peut-être périmés, comme au chargement
-    GameDataDB.chars[p.guid] = c
-  end
-  c.adresse, c.nom = nil, p.nom
+  local c = AzerothCommuneDB.chars[p.guid] or { errors = {}, lots = {} }
+  AzerothCommuneDB.chars[p.guid], c.nom = c, p.nom
   return c
-end
-
--- Au chargement : les fiches d'avant le GUID sortent de chars (rangé par GUID) et attendent leur perso dans anciensPersos.
--- ponytail: une fiche jamais reprise y reste (données relevées, rescannables) ; /gdata effacer ne la touche pas.
-local function rangerAnciensPersos()
-  for k, c in pairs(GameDataDB.chars) do
-    if not k:find("^Player%-") then
-      GameDataDB.anciensPersos = GameDataDB.anciensPersos or {}
-      GameDataDB.anciensPersos[k], GameDataDB.chars[k] = c, nil
-    end
-  end
 end
 
 -- fn(c) rend le champ relevé, et en 2e retour false s'il n'a rien relevé, "partiel" s'il n'en a relevé qu'une partie.
@@ -205,7 +175,7 @@ local function scanAddons()
       dependencies = { C_AddOns.GetAddOnDependencies(i) },
     }
   end
-  GameDataDB.addons, GameDataDB.addons_scanned = t, now()
+  AzerothCommuneDB.addons, AzerothCommuneDB.addons_scanned = t, now()
   noterLot("add-ons installés", true)
 end
 
@@ -229,8 +199,8 @@ local todo, pos, quietUntil = {}, 1, 0
 ns.MAX_ITEM_ID = MAX_ITEM_ID
 
 local function record(id)
-  local it = GameDataItems.items[id]
-  if not it then return true end -- effacé entre-temps (/gdata effacer objets)
+  local it = AzerothCommuneItems.items[id]
+  if not it then return true end -- effacé entre-temps (/ac effacer objets)
   local name, link, quality, ilvl, minLevel, _, _, stack, _, _, price, _, _, bind = C_Item.GetItemInfo(id)
   if not name then return false end
   it.name, it.link, it.quality, it.ilvl, it.min_level, it.stack, it.price, it.bind = name, link, quality, ilvl, minLevel, stack, price, bind
@@ -247,8 +217,8 @@ local function quiet()
 end
 
 local function itemTick()
-  local items = GameDataItems.items
-  local first = GameDataItems.next_id
+  local items = AzerothCommuneItems.items
+  local first = AzerothCommuneItems.next_id
   local last = math.min(first + LOCAL_PER_TICK - 1, MAX_ITEM_ID)
   for id = first, last do
     if not items[id] then
@@ -261,7 +231,7 @@ local function itemTick()
       end
     end
   end
-  GameDataItems.next_id = last + 1
+  AzerothCommuneItems.next_id = last + 1
   if quiet() then return end
   local asked = 0
   while pos <= #todo and asked < ASK_PER_TICK do
@@ -273,17 +243,16 @@ end
 ns.itemTick = itemTick
 
 local function itemLoaded(id, success)
-  local it = GameDataItems.items[id]
+  local it = AzerothCommuneItems.items[id]
   if not it or it.name then return end
   if success then record(id) else it.unknown = true end -- le serveur ne le connaît pas : on ne redemandera pas
 end
 ns.itemLoaded = itemLoaded
 
 local function itemsReady() -- à la connexion : reprendre les objets encore sans détails
-  GameDataItems.items = GameDataItems.items or {}
-  GameDataItems.next_id = GameDataItems.next_id or 1
-  if GameDataItems.scan_version ~= 2 then GameDataItems.next_id, GameDataItems.scan_version = 1, 2 end -- balayage corrigé : on repart de 1
-  for id, it in pairs(GameDataItems.items) do
+  AzerothCommuneItems.items = AzerothCommuneItems.items or {}
+  AzerothCommuneItems.next_id = AzerothCommuneItems.next_id or 1
+  for id, it in pairs(AzerothCommuneItems.items) do
     if not it.name and not it.unknown then todo[#todo + 1] = id end
   end
   table.sort(todo)
@@ -301,15 +270,15 @@ end
 
 local itemTicker
 local function setItemScan(on)
-  GameDataDB.item_scan = on
+  AzerothCommuneDB.item_scan = on
   if itemTicker then itemTicker:Cancel(); itemTicker = nil end
   if on and ns.souscrit("objets") then
     itemTicker = C_Timer.NewTicker(TICK, function()
       local ok, err = pcall(itemTick)
       if not ok then
         itemTicker:Cancel(); itemTicker = nil
-        GameDataDB.errors.item_scan = now() .. " " .. tostring(err)
-        print("GameData : scan des objets arrêté, " .. tostring(err))
+        AzerothCommuneDB.errors.item_scan = now() .. " " .. tostring(err)
+        print("Azeroth Commune : scan des objets arrêté, " .. tostring(err))
       end
     end)
   end
@@ -317,21 +286,20 @@ end
 
 f:SetScript("OnEvent", function(_, event, a1, a2)
   if event == "ADDON_LOADED" then
-    if a1 ~= "GameData" then return end
-    GameDataDB = GameDataDB or {}
-    for _, k in ipairs({ "chars", "recipes", "trainers", "vendors", "errors", "lots" }) do GameDataDB[k] = GameDataDB[k] or {} end
-    GameDataMarket = GameDataMarket or {}
-    if GameDataDB.item_scan == nil then GameDataDB.item_scan = true end
-    GameDataItems = GameDataItems or {}
+    if a1 ~= "AzerothCommune" then return end
+    AzerothCommuneDB = AzerothCommuneDB or {}
+    for _, k in ipairs({ "chars", "recipes", "trainers", "vendors", "errors", "lots" }) do AzerothCommuneDB[k] = AzerothCommuneDB[k] or {} end
+    AzerothCommuneMarket = AzerothCommuneMarket or {}
+    if AzerothCommuneDB.item_scan == nil then AzerothCommuneDB.item_scan = true end
+    AzerothCommuneItems = AzerothCommuneItems or {}
     itemsReady()
-    rangerAnciensPersos()
     ns.verifierLots()
   elseif event == "PLAYER_LOGIN" then
     char() -- la fiche du perso connecté, reprise tout de suite sous son GUID
     ns.retenirSouscriptions()
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)
     C_Timer.NewTicker(60, scanAll)
-    setItemScan(GameDataDB.item_scan)
+    setItemScan(AzerothCommuneDB.item_scan)
   elseif event == "PLAYER_ENTERING_WORLD" then
     quietUntil = GetTime() + 5
   elseif event == "ITEM_DATA_LOAD_RESULT" then
@@ -348,13 +316,13 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
   end
 end)
 
--- Les exports de GameData (/gdata export <clé>, ou la liste de Diagnostic) : chacun photographie une partie de la base en
--- grilles (export de LibCommune), sans /reload. Déclarés à LibCommune comme ceux de tout add-on regroupé.
+-- Les exports du socle (/ac export <clé>, ou la liste de Diagnostic) : chacun photographie une partie de la base en
+-- grilles (AzerothCommune.Exporter), sans /reload. Rendus par AzerothCommune.Exports() avant ceux des add-ons regroupés.
 -- HV en lignes compactes (65 pages en JSON complet avec l'historique, le 18/11/2026) : le dernier scan de ton HV,
 -- une ligne par objet « id,min,quantité,enchères,prix:qté prix:qté prix:qté » (3 premiers paliers).
 local function exportHV()
   local h = lib.MaisonHV()
-  local m = GameDataMarket[h]
+  local m = AzerothCommuneMarket[h]
   if not m then return { hv = h, absent = true } end
   local lines = {}
   for id, it in pairs(m.items or {}) do
@@ -365,30 +333,29 @@ local function exportHV()
   end
   return { hv = h, scanned = m.scanned, auctions = m.auctions, format = "id,min,qty,auctions,tiers", items = table.concat(lines, "\n") }
 end
-local EXPORTS = {
+ns.exportsSocle = {
   { cle = "perso", libelle = "Mon perso", description = "fiche, sacs, banque, courrier, équipement, monnaies, réputations, métiers, quêtes",
     donnees = function() scanAll() return { [lib.Personnage().guid] = char() } end },
   { cle = "persos", libelle = "Tous mes persos", description = "la même chose pour chaque perso déjà connecté",
-    donnees = function() scanAll() return GameDataDB.chars end },
+    donnees = function() scanAll() return AzerothCommuneDB.chars end },
   { cle = "recettes", libelle = "Recettes", description = "toutes les recettes vues, avec produit et composants",
-    donnees = function() return GameDataDB.recipes end },
+    donnees = function() return AzerothCommuneDB.recipes end },
   { cle = "marchands", libelle = "Marchands", description = "ce que chaque marchand visité vend, et à quel prix",
-    donnees = function() return GameDataDB.vendors end },
+    donnees = function() return AzerothCommuneDB.vendors end },
   { cle = "maitres", libelle = "Maîtres", description = "ce que chaque maître enseigne, prix et niveau requis",
-    donnees = function() return GameDataDB.trainers end },
+    donnees = function() return AzerothCommuneDB.trainers end },
   { cle = "hv", libelle = "Hôtel des ventes", description = "le dernier scan : prix le plus bas, quantité, 3 premiers paliers",
     donnees = exportHV },
   { cle = "addons", libelle = "Add-ons", description = "les add-ons installés : version, auteur, dépendances",
-    donnees = function() return GameDataDB.addons end },
+    donnees = function() return AzerothCommuneDB.addons end },
   { cle = "erreurs", libelle = "Diagnostic", description = "erreurs de scan et derniers événements vus",
-    donnees = function() return { base = GameDataDB.errors, perso = char().errors, events = GameDataDB.events } end },
+    donnees = function() return { base = AzerothCommuneDB.errors, perso = char().errors, events = AzerothCommuneDB.events } end },
 }
 
--- /gdata export <clé> : l'export déclaré sous cette clé par n'importe quel add-on regroupé (lib.Exports) ; sans clé (ou
--- une clé inconnue), la liste des clés. La liste à cliquer est dans Diagnostic, l'add-on de debug de l'atelier.
+-- /ac export <clé> : l'export déclaré sous cette clé, par le socle ou n'importe quel add-on regroupé
+-- (AzerothCommune.Exports) ; sans clé (ou une clé inconnue), la liste des clés. L'image est nommée « ac-<clé> ». La
+-- liste à cliquer est dans Diagnostic, l'add-on de debug de l'atelier.
 function ns.exportCommand(what)
-  local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not (lib and lib.Exporter and lib.Exports) then return print("GameData : l'export par image demande LibCommune.") end
   local e, cles = nil, {}
   for _, x in ipairs(lib.Exports()) do
     cles[#cles + 1] = x.cle
@@ -396,46 +363,39 @@ function ns.exportCommand(what)
   end
   if not e then
     table.sort(cles)
-    return print("GameData : /gdata export " .. table.concat(cles, " | "))
+    return print("Azeroth Commune : /ac export " .. table.concat(cles, " | "))
   end
-  print("GameData : préparation de l'export « " .. what .. " »…")
-  local ok, err = pcall(function() lib.Exporter(e.donnees(), "gamedata-" .. what) end)
+  print("Azeroth Commune : préparation de l'export « " .. what .. " »…")
+  local ok, err = pcall(function() lib.Exporter(e.donnees(), "ac-" .. what) end)
   if not ok then
-    GameDataDB.errors.export = ns.now() .. " " .. what .. " : " .. tostring(err)
-    print("|cffe64d4dGameData : l'export « " .. what .. " » a planté :|r " .. tostring(err))
+    AzerothCommuneDB.errors.export = ns.now() .. " " .. what .. " : " .. tostring(err)
+    print("|cffe64d4dAzeroth Commune : l'export « " .. what .. " » a planté :|r " .. tostring(err))
   end
 end
 
--- Bouton de la minicarte et entrée des options : ceux d'Azeroth Commune, communs aux add-ons présents (LibCommune#3).
--- Clic (GameData seul) ou sa ligne du menu = le résumé de /gdata dans le chat. L'angle reste dans GameDataDB.minimap_angle.
-local lib = LibStub and LibStub("LibCommune-1.0", true)
-if lib and lib.Regrouper then
-  lib.Regrouper({ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
-    ouvrir = function() SlashCmdList.GAMEDATA("") end, store = function() return GameDataDB end, exports = EXPORTS })
-end
-
-SLASH_GAMEDATA1 = "/gdata"
-SlashCmdList.GAMEDATA = function(msg)
+-- /ac : le résumé de la base ; /ac objets : scan des objets en marche ou en pause ; /ac export <clé> ;
+-- /ac souscriptions | effacer <type> | souscrire <type|tout> (Souscriptions.lua). Le socle n'appelle aucun add-on.
+SLASH_AZEROTHCOMMUNE1 = "/ac"
+SlashCmdList.AZEROTHCOMMUNE = function(msg)
   local cmd, rest = (msg or ""):match("^%s*(%S*)%s*(.-)$")
-  if cmd:lower() == "cout" and ns.costCommand then return ns.costCommand(rest) end
   if cmd:lower() == "export" then return ns.exportCommand(rest:lower()) end
   if ns.souscriptionsCommand(cmd:lower(), rest) then return end
   msg = (msg or ""):lower()
   if msg == "objets" then
-    setItemScan(not GameDataDB.item_scan)
-    return print("GameData : scan des objets " .. (GameDataDB.item_scan and "en marche." or "en pause."))
+    setItemScan(not AzerothCommuneDB.item_scan)
+    return print("Azeroth Commune : scan des objets " .. (AzerothCommuneDB.item_scan and "en marche." or "en pause."))
   end
   scanAll(); pcall(scanAddons)
   local chars, total, named, unknown = 0, 0, 0, 0
-  for _ in pairs(GameDataDB.chars) do chars = chars + 1 end
-  for _, it in pairs(GameDataItems.items) do
+  for _ in pairs(AzerothCommuneDB.chars) do chars = chars + 1 end
+  for _, it in pairs(AzerothCommuneItems.items) do
     total = total + 1
     if it.name then named = named + 1 elseif it.unknown then unknown = unknown + 1 end
   end
-  print(("GameData : %d perso(s). Objets : %d connus du client (IDs lus jusqu'à %d sur %d), %d avec détails, %d inconnus du serveur. Scan %s (/gdata objets)."):format(
-    chars, total, math.min(GameDataItems.next_id - 1, MAX_ITEM_ID), MAX_ITEM_ID, named, unknown, GameDataDB.item_scan and "en marche" or "en pause"))
-  print("  " .. (ns.commerceStatus and ns.commerceStatus() or "Commerce.lua n'est pas chargé : recettes, marchands et HV ne sont pas lus."))
+  print(("Azeroth Commune : %d perso(s). Objets : %d connus du client (IDs lus jusqu'à %d sur %d), %d avec détails, %d inconnus du serveur. Scan %s (/ac objets)."):format(
+    chars, total, math.min(AzerothCommuneItems.next_id - 1, MAX_ITEM_ID), MAX_ITEM_ID, named, unknown, AzerothCommuneDB.item_scan and "en marche" or "en pause"))
+  print("  " .. ns.commerceStatus())
   for name, err in pairs(char().errors) do print("  erreur", name, err) end
-  for name, err in pairs(GameDataDB.errors) do print("  erreur", name, err) end
-  print("  /reload pour écrire la base sur le disque. /gdata export <clé> : photographier un export (sans clé : la liste).")
+  for name, err in pairs(AzerothCommuneDB.errors) do print("  erreur", name, err) end
+  print("  /reload pour écrire la base sur le disque. /ac souscriptions : ce qui est relevé. /ac export <clé> : photographier un export (sans clé : la liste).")
 end

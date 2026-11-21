@@ -1,19 +1,19 @@
--- GameData, partie commerce : recettes, maîtres de métier, marchands et hôtel des ventes.
---   GameDataDB.recipes[clé]  : chaque recette vue dans une fenêtre de métier, avec ce qu'elle produit et ses
+-- Azeroth Commune, la base, partie commerce : recettes, maîtres de métier, marchands et hôtel des ventes.
+--   AzerothCommuneDB.recipes[clé]  : chaque recette vue dans une fenêtre de métier, avec ce qu'elle produit et ses
 --                              composants. Clé = ID du sort de la recette quand le jeu le donne, sinon « Métier:Nom ».
 --   chars[perso].recipes      : par métier, rang, maximum et recettes connues (clé -> difficulté,
 --                              ou true quand relevée sans fenêtre).
---   GameDataDB.trainers[npc]  : ce que chaque maître enseigne, à quel prix, quel rang et quel niveau requis.
---   GameDataDB.vendors[npc]   : ce que chaque marchand vend, à quel prix, par combien, en stock limité ou non.
---   GameDataDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
---   GameDataMarket[maison]    : dernier scan complet de l'hôtel des ventes, sous la maison de l'HV (lib.MaisonHV,
+--   AzerothCommuneDB.trainers[npc]  : ce que chaque maître enseigne, à quel prix, quel rang et quel niveau requis.
+--   AzerothCommuneDB.vendors[npc]   : ce que chaque marchand vend, à quel prix, par combien, en stock limité ou non.
+--   AzerothCommuneDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
+--   AzerothCommuneMarket[maison] : dernier scan complet de l'hôtel des ventes, sous la maison de l'HV (lib.MaisonHV,
 --                              « n° de serveur-faction », « 6942-Alliance ») : par objet, le prix unitaire le
 --                              plus bas, la quantité en vente et les paliers de prix les moins chers ; l'historique,
---                              seulement si aucun fournisseur ne le tient (AuctionDB frais : LibCommune, Fournisseurs.lua).
+--                              seulement si aucun fournisseur ne le tient (AuctionDB frais : Fournisseurs.lua).
 -- Rien ne se lit sans la fenêtre ouverte (sauf les recettes connues, relevées aussi à la connexion parmi celles déjà
 -- vues) : ouvre tes métiers, parle aux maîtres et aux marchands, ouvre l'HV.
 local _, ns = ...
-local lib = LibStub("LibCommune-1.0") -- royaume, faction, maison de l'HV : relevés et sondés par la lib (GameData#24)
+local lib = AzerothCommune -- royaume, faction, maison de l'HV, relevé des recettes : relevés et sondés par AzerothCommune.lua
 
 local function itemIDOf(link) return tonumber(link and link:match("item:(%d+)")) end
 
@@ -26,7 +26,7 @@ ns.itemIDOf, ns.recipeKey = itemIDOf, recipeKey
 
 local function safe(name, fn, ...)
   local ok, err = pcall(fn, ...)
-  GameDataDB.errors[name] = (not ok) and tostring(err) or nil
+  AzerothCommuneDB.errors[name] = (not ok) and tostring(err) or nil
 end
 
 -- Le PNJ de la fenêtre ouverte : son ID (6e champ du GUID « Creature-0-…-npcID-… ») et où on l'a vu.
@@ -46,8 +46,7 @@ end
 
 ---------------------------------------------------------------------------------------------------
 -- Recettes. Sur Forever les métiers passent par l'API moderne C_TradeSkillUI (GetTradeSkillLine n'existe pas). Le
--- relevé de la fenêtre ouverte est dans LibCommune (lib:ReleverRecettes, partagé avec le relevé de repli des add-ons
--- sans GameData) ; GameData sauvegarde ce qu'il rend.
+-- relevé de la fenêtre ouverte est dans AzerothCommune.lua (lib:ReleverRecettes) ; la base sauvegarde ce qu'il rend.
 -- Une fenêtre ne relève qu'un métier : le lot des recettes d'un perso n'est relevé entier (plus peut-être périmé) que
 -- quand chacun de ses métiers a été relevé sous ce build (build noté par métier). Rend le 2e retour attendu par ns.run.
 local function releveRecettes(c)
@@ -63,40 +62,35 @@ end
 
 -- Rend false si rien n'a été relevé, sinon le 2e retour de ns.run.
 local function scanTradeSkill(c)
-  local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not lib then GameDataDB.errors.recipes = "LibCommune absente : recettes pas relevées" return false end
-  GameDataDB.errors.recipes = nil
   local r, why, prof = lib:ReleverRecettes()
   if why == "liste pas à jour" then ns.retryTrade() return false end
-  GameDataDB.trade_seen = GameDataDB.trade_seen or {}
+  AzerothCommuneDB.trade_seen = AzerothCommuneDB.trade_seen or {}
   if r or why == "liste vide" then
-    GameDataDB.trade_seen[r and r.metier or prof] = ns.now() .. " : " .. (r and r.total or "aucune") .. " recette(s) données par le jeu"
+    AzerothCommuneDB.trade_seen[r and r.metier or prof] = ns.now() .. " : " .. (r and r.total or "aucune") .. " recette(s) données par le jeu"
   end
   if not r then return false end -- pas notre métier, ou données pas prêtes : TRADE_SKILL_LIST_UPDATE suivra
-  for id, rec in pairs(r.recettes) do GameDataDB.recipes[id] = rec end
-  GameDataDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
+  for id, rec in pairs(r.recettes) do AzerothCommuneDB.recipes[id] = rec end
+  AzerothCommuneDB.errors["recipes:" .. r.metier] = r.premiereErreur and (r.illisibles .. " recette(s) illisible(s), ex. " .. r.premiereErreur) or nil
   c.recipes = c.recipes or {}
-  if not lib.RangerRecettes then return saveProfession(c, r.metier, r.rang, r.max, r.connues) end -- LibCommune mineure 1
   local m = lib:RangerRecettes(c.recipes, r) -- la liste de la fenêtre prime, sans perdre une connue relevée sans elle
   m.scanned, m.build = ns.now(), ns.build()
   return releveRecettes(c)
 end
 
--- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par LibCommune.
+-- À la connexion, sans fenêtre : les recettes connues parmi celles déjà vues (tous persos), relevées par AzerothCommune.lua.
 local function scanKnownRecipes()
-  local lib = LibStub and LibStub("LibCommune-1.0", true)
-  if not (lib and lib.ReleverRecettesSansFenetre) or not ns.souscrit("recettes connues") then return end -- absente, ou mineure 1
+  if not ns.souscrit("recettes connues") then return end
   local c = ns.char()
   c.recipes = c.recipes or {}
   -- ajoute des connues sans rien retirer : relevé partiel, noté une fois fini (il court sur plusieurs images)
-  lib:ReleverRecettesSansFenetre(c.recipes, GameDataDB.recipes, function() ns.noterLot("recipes", false, c.lots) end)
+  lib:ReleverRecettesSansFenetre(c.recipes, AzerothCommuneDB.recipes, function() ns.noterLot("recipes", false, c.lots) end)
 end
 
--- Lu par LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
+-- Lu par AzerothCommune:Lire (type « recettes connues ») : les recettes vues et, par perso, ses métiers et recettes connues.
 function ns.recettesConnues()
   local persos, lots = {}, {}
-  for k, c in pairs(GameDataDB.chars) do persos[k], lots[k] = c.recipes, c.recipes and c.lots and c.lots.recipes end
-  return { recettes = GameDataDB.recipes, persos = persos }, { persos = lots }
+  for k, c in pairs(AzerothCommuneDB.chars) do persos[k], lots[k] = c.recipes, c.recipes and c.lots and c.lots.recipes end
+  return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore
@@ -114,7 +108,7 @@ local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement)
         local rname, _, qty = GetCraftReagentInfo(i, r)
         reagents[r] = { id = itemIDOf(GetCraftReagentItemLink(i, r)), qty = qty, name = rname }
       end
-      GameDataDB.recipes[key] = { profession = prof, name = name, output = itemIDOf(link), made_min = 1, reagents = reagents }
+      AzerothCommuneDB.recipes[key] = { profession = prof, name = name, output = itemIDOf(link), made_min = 1, reagents = reagents }
       known[key] = kind
     end
   end
@@ -144,7 +138,7 @@ local function scanTrainer()
     info.filters[f] = GetTrainerServiceTypeFilter and (GetTrainerServiceTypeFilter(f) and true or false) or nil
   end
   info.tradeskill = IsTradeskillTrainer and IsTradeskillTrainer() or nil
-  GameDataDB.trainers[id] = info
+  AzerothCommuneDB.trainers[id] = info
   ns.noterLot("maîtres de métier")
 end
 
@@ -171,12 +165,12 @@ local function scanMerchant()
     end
   end
   info.items = items
-  GameDataDB.vendors[id] = info
+  AzerothCommuneDB.vendors[id] = info
   ns.noterLot("marchands")
 end
 
 ---------------------------------------------------------------------------------------------------
--- Maîtres de vol : le prix de chaque destination depuis celui-ci. GameDataDB.taxi[départ][arrivée] = prix (cuivre).
+-- Maîtres de vol : le prix de chaque destination depuis celui-ci. AzerothCommuneDB.taxi[départ][arrivée] = prix (cuivre).
 local function scanTaxi()
   local here, costs = nil, {}
   for i = 1, NumTaxiNodes() do
@@ -185,8 +179,8 @@ local function scanTaxi()
     elseif kind == "REACHABLE" then costs[name] = TaxiNodeCost(i) end
   end
   if here then
-    GameDataDB.taxi = GameDataDB.taxi or {}
-    GameDataDB.taxi[here] = costs
+    AzerothCommuneDB.taxi = AzerothCommuneDB.taxi or {}
+    AzerothCommuneDB.taxi[here] = costs
     ns.noterLot("prix des vols")
   end
 end
@@ -237,12 +231,9 @@ local function aggregate(rows)
 end
 ns.aggregate = aggregate
 
--- L'historique (lourd) n'est pas copié quand un fournisseur le tient, frais, pour cet HV (LibCommune) ; prix, quantité,
--- annonces et paliers que le scan vient de voir sont toujours gardés : ils font foi.
-local function historiqueFourni()
-  local lib = LibStub and LibStub("LibCommune-1.0", true)
-  return lib and lib.ChampsARelever and not lib:ChampsARelever("cours de l'HV").hist
-end
+-- L'historique (lourd) n'est pas copié quand un fournisseur le tient, frais, pour cet HV (Fournisseurs.lua) ; prix,
+-- quantité, annonces et paliers que le scan vient de voir sont toujours gardés : ils font foi.
+local function historiqueFourni() return not lib:ChampsARelever("cours de l'HV").hist end
 
 local function readReplicate()
   local n = C_AuctionHouse.GetNumReplicateItems()
@@ -257,7 +248,7 @@ local function readReplicate()
     local items = aggregate(rows)
     local h = house()
     -- Historique : prix le plus bas et quantité en vente à chaque scan (les 12 derniers), pour estimer ce qui part.
-    local hist = GameDataMarket[h] and GameDataMarket[h].hist or {}
+    local hist = AzerothCommuneMarket[h] and AzerothCommuneMarket[h].hist or {}
     local stamp = time()
     for id, it in pairs(items) do
       local list = hist[id] or {}
@@ -271,12 +262,12 @@ local function readReplicate()
         while #list > 12 do table.remove(list, 1) end
       end
     end
-    GameDataMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = not historiqueFourni() and hist or nil }
+    AzerothCommuneMarket[h] = { scanned = ns.now(), time = stamp, auctions = n, items = items, hist = not historiqueFourni() and hist or nil }
     -- ponytail: lot entier, un seul HV relevé en pratique ; un lot par HV si un joueur en relève plusieurs (sinon l'HV
     -- de l'autre faction passe pour frais après un nouveau build)
     ns.noterLot("cours de l'HV", true)
     reading, readAt = false, GetTime()
-    print(("GameData : hôtel des ventes lu, %d enchères. /reload pour l'écrire sur le disque."):format(n))
+    print(("Azeroth Commune : hôtel des ventes lu, %d enchères. /reload pour l'écrire sur le disque."):format(n))
     safe("market_scanned", ns.marketScanned)
   end
   step()
@@ -285,7 +276,7 @@ end
 -- Dépôt d'une annonce. Règle : 15 % du prix de revente au marchand par tranche de 12 h (30 % pour 24 h), avec sur
 -- Forever un minimum de 1 pa par annonce (voulu par Blizzard, annoncé à 1 pc « bientôt » ; Icy Veins, nov. 2026).
 -- HV ouvert, on vérifie avec le jeu (C_AuctionHouse.CalculateCommodityDeposit, 24 h) : le taux sur 1 000 unités
--- (le minimum n'y joue pas) et le minimum sur une seule unité d'un objet bon marché. Résultats : GameDataDB.deposit.
+-- (le minimum n'y joue pas) et le minimum sur une seule unité d'un objet bon marché. Résultats : AzerothCommuneDB.deposit.
 local function learnDeposit()
   local rates, mins = {}, {}
   for id, d in pairs(ns.VENDOR_DB or {}) do
@@ -303,11 +294,11 @@ local function learnDeposit()
   end
   if #rates == 0 then return end
   local function median(t) table.sort(t) return t[math.floor((#t + 1) / 2)] end
-  GameDataDB.deposit = { rate24 = median(rates), min = #mins > 0 and median(mins) or nil, checked = ns.now() }
+  AzerothCommuneDB.deposit = { rate24 = median(rates), min = #mins > 0 and median(mins) or nil, checked = ns.now() }
 end
 
--- Appelé après chaque lecture de l'HV. Un add-on qui veut réagir au scan frais (le Négoce) s'y accroche :
--- hooksecurefunc(GameDataAPI, "marketScanned", fn).
+-- Appelé après chaque lecture de l'HV ; AzerothCommune.lua s'y accroche pour le signal « type relevé à nouveau »
+-- (un add-on qui veut réagir au scan frais : AzerothCommune:QuandReleve("cours de l'HV", fn)).
 function ns.marketScanned() end
 
 local function requestScan()
@@ -346,8 +337,8 @@ local TYPE_DE = { TRAINER_SHOW = "maîtres de métier", TRAINER_UPDATE = "maîtr
 
 f:SetScript("OnEvent", function(_, event)
   -- diagnostic : la dernière fois que chaque événement est arrivé (pour savoir si une fenêtre a bien été vue)
-  GameDataDB.events = GameDataDB.events or {}
-  GameDataDB.events[event] = ns.now()
+  AzerothCommuneDB.events = AzerothCommuneDB.events or {}
+  AzerothCommuneDB.events[event] = ns.now()
   if TYPE_DE[event] and not ns.souscrit(TYPE_DE[event]) then return end
   if event == "PLAYER_LOGIN" then
     C_Timer.After(5, function() safe("recipes_login", scanKnownRecipes) end)
@@ -378,8 +369,8 @@ end)
 
 function ns.commerceStatus()
   local function count(t) local n = 0 for _ in pairs(t or {}) do n = n + 1 end return n end
-  local m = GameDataMarket[house()]
+  local m = AzerothCommuneMarket[house()]
   return ("Recettes : %d. Maîtres : %d. Marchands : %d. Hôtel des ventes : %s."):format(
-    count(GameDataDB.recipes), count(GameDataDB.trainers), count(GameDataDB.vendors),
+    count(AzerothCommuneDB.recipes), count(AzerothCommuneDB.trainers), count(AzerothCommuneDB.vendors),
     m and (count(m.items) .. " objets, scan du " .. m.scanned) or "pas encore scanné (ouvre l'HV)")
 end

@@ -1,6 +1,47 @@
--- Vérification hors jeu (non chargée par le TOC) : luajit LibCommune/check.lua (depuis le dossier parent)
--- Juste assez de l'API WoW pour l'accès aux données relevées : avec GameData, sans GameData (relevé de repli),
--- et deux copies de la lib de mineures différentes.
+-- Vérification hors jeu (non chargée par le TOC) : luajit AzerothCommune/check.lua, depuis le dossier des add-ons.
+-- Juste assez de l'API WoW pour le socle. Deux parties : l'API publique (AzerothCommune.lua, Fournisseurs.lua, Interface.lua,
+-- Capture.lua, Regroupement.lua), puis la base (Base.lua, Commerce.lua, Souscriptions.lua : l'ex-GameData).
+-- Avec des dossiers en arguments (luajit AzerothCommune/check.lua Handshake Negoce BeAGoodPal/BeAGoodPal …), vérifie aussi
+-- que leurs fichiers chargés n'appellent plus LibStub("LibCommune-1.0") ni GameDataAPI (ADR 0002).
+
+-- Les fichiers .lua que charge la TOC d'un add-on (dossier/dossier.toc, la règle du jeu).
+-- ponytail: lignes de la TOC seulement ; un .lua inclus par un .xml n'est pas vu (aucun de nos add-ons n'en a).
+local function fichiersCharges(dossier)
+  local toc = assert(io.open(dossier .. "/" .. dossier:match("[^/]+$") .. ".toc"), "pas de TOC : " .. dossier)
+  local t = {}
+  for ligne in toc:lines() do
+    ligne = ligne:gsub("\r$", ""):match("^%s*(.-)%s*$")
+    if ligne:match("%.lua$") and not ligne:match("^#") then t[#t + 1] = dossier .. "/" .. ligne:gsub("\\", "/") end
+  end
+  toc:close()
+  return t
+end
+-- Rend la liste des « fichier : texte » trouvés tels quels dans le code (commentaires ôtés) des fichiers chargés de dossier (un
+-- fichier absent est sauté : VendorData.lua, généré, peut manquer).
+local function appelsInterdits(dossier, textes)
+  local trouves = {}
+  for _, f in ipairs(fichiersCharges(dossier)) do
+    local h = io.open(f)
+    if h then
+      local code = h:read("*a"):gsub("%-%-[^\n]*", "")
+      h:close()
+      for _, m in ipairs(textes) do if code:find(m, 1, true) then trouves[#trouves + 1] = f .. " : " .. m end end
+    end
+  end
+  return trouves
+end
+-- Le socle : ni LibStub, ni GameDataAPI, ni MINOR ou VERSION par fichier, ni les emplacements que Handshake remplissait.
+local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", "MINOR", "local VERSION", "lib.versions",
+  "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket" })
+assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
+assert(#fichiersCharges("AzerothCommune") == 9, "les fichiers des deux, dans une seule TOC")
+local nos = {}
+for _, dossier in ipairs(arg or {}) do
+  for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
+end
+assert(#nos == 0, "encore la lib ou GameData dans nos add-ons : " .. table.concat(nos, ", "))
+print("Azeroth Commune : ni LibStub ni GameDataAPI dans les fichiers chargés" .. (#(arg or {}) > 0 and (" (socle et " .. table.concat(arg, ", ") .. ")") or "") .. " OK")
+
 local noop = function() end
 local cadres = {}
 CreateFrame = function()
@@ -11,7 +52,7 @@ CreateFrame = function()
 end
 C_Timer = { After = function(_, fn) fn() end } -- le relevé différé part tout de suite dans le test
 UnitName = function() return "Belegard", "Marteaudefer" end
-GetRealmName, GetNormalizedRealmName = nil, nil -- le build 71037 les rend vides : la lib ne s'en sert plus (#35)
+GetRealmName, GetNormalizedRealmName = nil, nil -- le build 71037 les rend vides : le socle ne s'en sert plus (#35)
 GetBuildInfo = function() return "1.16.1", "64000", "Nov 1 2026", 11601 end
 date = os.date
 -- Un personnage est identifié par son GUID (LibCommune#19) : persos est rangé par GUID.
@@ -19,10 +60,17 @@ date = os.date
 local MOI, ALT = "Player-6942-0000BE1E", "Player-6942-00000A17"
 UnitGUID = function(u) if u == "player" then return MOI end end
 
-assert(loadfile("LibCommune/LibStub.lua"))()
-assert(loadfile("LibCommune/LibCommune.lua"))()
-assert(loadfile("LibCommune/Fournisseurs.lua"))()
-local lib = LibStub("LibCommune-1.0")
+-- L'espace de noms privé de l'add-on (le 2e argument que le jeu passe à chaque fichier). Dans cette partie, la base n'est
+-- pas chargée : gamedata(t) y pose de faux accesseurs (nil : aucun, le relevé de repli).
+local ns = {}
+local function charger(f) assert(loadfile("AzerothCommune/" .. f .. ".lua"))("AzerothCommune", ns) end
+local function gamedata(t)
+  for k in pairs(ns) do ns[k] = nil end
+  for k, v in pairs(t or {}) do ns[k] = v end
+end
+charger("AzerothCommune")
+charger("Fournisseurs")
+local lib = AzerothCommune
 UnitFactionGroup = function() return "Alliance" end
 -- Sondes (#30), avant tout relevé : chacune « pas encore vue ».
 local IDENTITE = { "royaume", "maison de l'HV", "GUID", "nom", "faction", "build" }
@@ -31,7 +79,7 @@ for _, nom in ipairs({ "emplacements d'un conteneur", "objet d'un conteneur", "r
   assert(lib.Sondes()[nom] and lib.Sondes()[nom].etat == "pas encore vue", "jamais vérifiée : " .. nom)
 end
 
--- GameData présent : la lib lit sa base par GameDataAPI.recettesConnues, recettes connues de tous les personnages.
+-- Base présente : AC:Lire passe par son accesseur privé ns.recettesConnues, recettes connues de tous les personnages.
 local base = {
   recettes = { [3307] = { profession = "Minage", name = "Fondre le fer", output = 3575 },
     [2662] = { profession = "Forge", name = "Cuirasse en cuivre", output = 2852 } },
@@ -40,7 +88,7 @@ local base = {
     [ALT] = { Forge = { rank = 50, max = 75, known = { [2662] = "easy" } } },
   },
 }
-GameDataAPI = { recettesConnues = function() return base end }
+gamedata({ recettesConnues = function() return base end })
 local tous = assert(lib:Lire("recettes connues", "tous"))
 assert(tous.persos[MOI].Minage.known[3307] and tous.persos[ALT].Forge.known[2662], "tous les personnages")
 assert(tous.recettes[2662].output == 2852, "et les recettes vues")
@@ -51,19 +99,19 @@ assert(alt.persos[ALT].Forge.rank == 50 and not alt.persos[MOI], "un personnage 
 local d, raison = lib:Lire("recettes connues", "Player-1-0000DEAD")
 assert(d == nil and raison == "pas encore relevé", "personnage jamais connecté : " .. tostring(raison))
 local seules = { recettes = base.recettes, persos = {} } -- recettes vues, aucun perso relevé (perso supprimé…)
-GameDataAPI.recettesConnues = function() return seules end
+ns.recettesConnues = function() return seules end
 assert(lib:Lire("recettes connues", "tous").recettes[3307], "« tous » rend les recettes vues même sans perso")
-GameDataAPI.recettesConnues = function() return { recettes = {}, persos = {} } end
+ns.recettesConnues = function() return { recettes = {}, persos = {} } end
 d, raison = lib:Lire("recettes connues", "tous")
 assert(d == nil and raison == "pas encore relevé", "base vide : " .. tostring(raison))
-print("LibCommune : GameData présent OK")
+print("Azeroth Commune : base présente OK")
 
 -- Type absent du catalogue : indisponible, avec sa raison.
 d, raison = lib:Lire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 d, raison = lib:Souscrire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
-print("LibCommune : type inconnu OK")
+print("Azeroth Commune : type inconnu OK")
 
 -- Personnage : GUID et nom « Prénom Nom », plus d'adresse (#35 : le jeu ne donne plus le royaume). Un chuchotement part
 -- vers « Prénom Nom », la forme que le serveur accepte (au prénom seul : « Aucun joueur nommé 'Belegard' », 21/11/2026).
@@ -75,13 +123,13 @@ local moiP = lib.Personnage()
 assert(moiP.guid == MOI and moiP.nom == "Belegard Marteaudefer" and moiP.adresse == nil, "personnage connecté : GUID et nom")
 assert(lib.Adresse == nil, "plus d'adresse « Prénom-Royaume » (dernier appelant parti avec Handshake#29)")
 assert(lib.Personnage(MOI).nom == "Belegard Marteaudefer", "par son GUID")
-local gdAvant = GameDataAPI
-GameDataAPI = nil
-assert(lib.Personnage(ALT) == nil, "autre GUID sans GameData : inconnu")
-GameDataAPI = { personnage = function(g) if g == ALT then return { guid = ALT, nom = "Alt Dupont" } end end }
-assert(lib.Personnage(ALT).nom == "Alt Dupont" and lib.Personnage("Player-6942-0000DEAD") == nil, "un personnage du joueur : la fiche de GameData")
-GameDataAPI = gdAvant
-print("LibCommune : personnage OK")
+local gdAvant = ns.recettesConnues
+gamedata()
+assert(lib.Personnage(ALT) == nil, "autre GUID sans la base : inconnu")
+gamedata({ personnage = function(g) if g == ALT then return { guid = ALT, nom = "Alt Dupont" } end end })
+assert(lib.Personnage(ALT).nom == "Alt Dupont" and lib.Personnage("Player-6942-0000DEAD") == nil, "un personnage du joueur : la fiche de la base")
+gamedata({ recettesConnues = gdAvant })
+print("Azeroth Commune : personnage OK")
 
 -- Royaume (#35) : le numéro de serveur du GUID du personnage, « 6942 » ; maison de l'HV « 6942-Alliance ». Rien n'est
 -- deviné : GetRealmName et GetNormalizedRealmName (vides depuis le build 71037) ne sont plus appelés.
@@ -125,9 +173,9 @@ assert(#dits == 4, "un avertissement par sonde rouge (royaume, maison, faction, 
 print = vraiPrint
 GetBuildInfo = buildAvant
 lib.buildLu = nil
-print("LibCommune : sondes, royaume vide OK")
+print("Azeroth Commune : sondes, royaume vide OK")
 
--- Catalogue : les types que GameData relève, chacun léger ou lourd, avec son accesseur dans GameDataAPI.
+-- Catalogue : les types que la base relève, chacun léger ou lourd, avec son accesseur privé (ns).
 local attendus = { "inventaires", "réputations", "métiers et compétences", "quêtes terminées", "recettes connues",
   "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
 local nTypes = 0
@@ -135,48 +183,47 @@ for _ in pairs(lib.types) do nTypes = nTypes + 1 end
 assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
 for _, nom in ipairs(attendus) do assert(lib.types[nom] and type(lib.types[nom].gamedata) == "string", "au catalogue : " .. nom) end
 assert(not lib.types.objets.leger and not lib.types["cours de l'HV"].leger and lib.types.inventaires.leger, "lourds : HV et objets")
--- Souscription avec GameData : transmise à GameDataAPI.souscrire (qui la retient pour le joueur), et gardée pour la session.
+-- Souscription avec la base : transmise à ns.souscrire (qui la retient pour le joueur), et gardée pour la session.
 local transmis = {}
-GameDataAPI.souscrire = function(t) transmis[#transmis + 1] = t end
+ns.souscrire = function(t) transmis[#transmis + 1] = t end
 for _, nom in ipairs(attendus) do assert(lib:Souscrire(nom), "souscription : " .. nom) end
 assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscription transmise à GameData")
 assert(lib.souscriptions.objets and lib.souscriptions["recettes connues"], "et retenue pour la session")
-assert(lib.Demander == lib.Souscrire, "ancien nom gardé")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.
-GameDataAPI.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, [ALT] = { bank = {} } } } end
+ns.inventaires = function() return { persos = { [MOI] = { bags = { Backpack = { size = 16 } } }, [ALT] = { bank = {} } } } end
 local inv = assert(lib:Lire("inventaires"))
 assert(inv.persos[MOI].bags.Backpack.size == 16 and not inv.persos[ALT], "inventaires du personnage connecté")
 assert(lib:Lire("inventaires", "tous").persos[ALT], "inventaires de tous")
-GameDataAPI.marchands = function() return { [1234] = { name = "Marchand", items = {} } } end
+ns.marchands = function() return { [1234] = { name = "Marchand", items = {} } } end
 assert(assert(lib:Lire("marchands", ALT))[1234].name == "Marchand", "marchands : une table pour le joueur")
-GameDataAPI.marchands = function() return {} end
+ns.marchands = function() return {} end
 d, raison = lib:Lire("marchands")
 assert(d == nil and raison == "pas encore relevé", "aucun marchand : " .. tostring(raison))
-GameDataAPI.objets = function() return nil end
+ns.objets = function() return nil end
 d, raison = lib:Lire("objets")
 assert(d == nil and raison == "pas encore relevé", "objets absents : " .. tostring(raison))
 lib.souscriptions = {}
-print("LibCommune : catalogue et souscriptions avec GameData OK")
+print("Azeroth Commune : catalogue et souscriptions avec la base OK")
 
 -- Provenance (GameData#5) : lire un type rend son lot, provenance, build et date ; par personnage pour un type par perso.
 local lotM = { provenance = "relevé direct", build = 64000, version = "1.16.1", date = "2026-11-19 10:00:00" }
-GameDataAPI.marchands = function() return { [1234] = { items = {} } }, lotM end
+ns.marchands = function() return { [1234] = { items = {} } }, lotM end
 local _, lot = lib:Lire("marchands")
 assert(lot == lotM and lot.provenance == "relevé direct" and lot.build == 64000 and lot.date, "lot d'un type pour le joueur")
 local lotA, lotB = { provenance = "relevé direct", build = 63000, perime = true }, { provenance = "relevé direct", build = 64000 }
-GameDataAPI.inventaires = function()
+ns.inventaires = function()
   return { persos = { [MOI] = { bags = {} }, [ALT] = { bags = {} } } }, { persos = { [MOI] = lotB, [ALT] = lotA } }
 end
 _, lot = lib:Lire("inventaires")
 assert(lot.persos[MOI] == lotB and lot.persos[ALT] == nil, "lot du personnage lu seulement")
 _, lot = lib:Lire("inventaires", "tous")
 assert(lot.persos[ALT].perime and lot.persos[ALT].build == 63000, "lots de tous, figé sous un autre build : peut-être périmé")
-GameDataAPI.inventaires = function() return { persos = { [MOI] = {} } } end -- un GameData d'avant les lots
+ns.inventaires = function() return { persos = { [MOI] = {} } } end -- un GameData d'avant les lots
 d, lot = lib:Lire("inventaires")
 assert(d and lot.persos[MOI] == nil, "sans lot fourni : les données quand même")
 _, lot = lib:Lire("inventaires", "tous")
 assert(type(lot.persos) == "table", "sans lot fourni, « tous » : lot.persos lisible quand même")
-GameDataAPI.marchands = function() return { [1234] = { items = {} } } end
+ns.marchands = function() return { [1234] = { items = {} } } end
 _, lot = lib:Lire("marchands")
 assert(type(lot) == "table" and lot.provenance == nil, "sans lot fourni, type du joueur : un lot vide, pas nil")
 -- Lot mixte : pour chaque clé, la provenance la plus fiable gagne ; une ligne d'une autre provenance porte la sienne.
@@ -197,10 +244,10 @@ assert(sources[1].provenance == "rumeur" and sources[3].provenance == "relevé d
 assert(tete == "relevé direct" and mixte[1] == vu[1], "provenance inconnue : classée en dernier, sans erreur")
 mixte, tete = lib.Fusionner({ { donnees = { [9] = { x = 1 } }, provenance = "rumeur" } })
 assert(tete == "rumeur" and mixte[9].x == 1, "seule source, provenance inconnue")
-print("LibCommune : provenance, build et date des lots OK")
+print("Azeroth Commune : provenance, build et date des lots OK")
 
 -- GameData absent : relevé de repli du personnage connecté, en mémoire ; rien n'est écrit chez l'hôte.
-GameDataAPI = nil
+gamedata()
 HoteDB = { reglages = { x = 1 } } -- les SavedVariables de l'add-on hôte
 local avant = {}
 for k in pairs(_G) do avant[k] = true end
@@ -269,7 +316,7 @@ d, raison = lib:Lire("inventaires", ALT)
 assert(d == nil and raison == "pas de GameData", "inventaires d'un autre personnage sans GameData : " .. tostring(raison))
 for k in pairs(_G) do assert(avant[k] or k == "Enum" or k == "C_TradeSkillUI" or k == "C_Container", "global écrit par la lib : " .. k) end
 assert(HoteDB.reglages.x == 1 and next(HoteDB, next(HoteDB)) == nil, "SavedVariables de l'hôte intactes")
-print("LibCommune : GameData absent, relevé de repli OK")
+print("Azeroth Commune : base absente, relevé de repli OK")
 
 -- Fournisseurs des cours de l'HV (GameData#6, option B). Sans GameData, la lib passe directement par un fournisseur : une
 -- fausse API d'Auctionator donne les prix, provenance « autre add-on ». Son âge 0 veut dire « vu aujourd'hui ».
@@ -284,7 +331,7 @@ end
 Auctionator = fausseAPI()
 local hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv and hv.objet(2772).min == 95 and hv.objet(2772).age == 0 and hv.objet(2772).sources.min == "Auctionator", "prix venus d'Auctionator")
-assert(appels[1] == "LibCommune", "l'API d'Auctionator reçoit le nom de l'appelant")
+assert(appels[1] == "AzerothCommune", "l'API d'Auctionator reçoit le nom de l'appelant")
 local vieux = hv.objet(2841)
 assert(vieux and vieux.min == nil and vieux.age == 3, "pas vu aujourd'hui (âge 3 j) : plus en vente, l'âge reste")
 assert(hv.objet(1) == nil and hv.hv == nil and hv.depot == nil, "objet inconnu d'Auctionator ; rien de GameData")
@@ -346,7 +393,7 @@ assert(lotHV.fournisseur == "Auctionator" and lotHV.champs.qty == "AuctionDB" an
 local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19 10:00:00" }
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
   hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
-GameDataAPI = { coursHV = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end }
+gamedata({ coursHV = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end })
 lib.sondes["maison de l'HV"].valeur = nil
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(lib.Sondes()["maison de l'HV"].valeur == "6942-Alliance", "la maison de l'HV des fournisseurs : celle de la lib, sondée")
@@ -371,7 +418,7 @@ marche.hist[2772] = nil
 assert(lotHV.champs.hist == "AuctionDB", "lot : historique d'AuctionDB")
 -- GameData sans scan de cet HV : les fournisseurs seuls.
 marche = nil
-GameDataAPI.coursHV = function() return { hv = { ["6942-Horde"] = {} } }, lotGD end
+ns.coursHV = function() return { hv = { ["6942-Horde"] = {} } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2772).min == 95 and lotHV.fournisseur == "Auctionator" and lotHV.scan == nil, "pas de scan de cet HV : fournisseurs")
 -- HV neutre ou faction inconnue : rien ne plante.
@@ -381,16 +428,16 @@ assert(pcall(lib.Lire, lib, "cours de l'HV") and pcall(lib.ChampsARelever, lib, 
 UnitFactionGroup = faction
 -- Sans fournisseur, avec GameData : son relevé ; rien de relevé : « pas encore relevé ».
 Auctionator, AuctionDBForeverSaved = nil, nil
-GameDataAPI.coursHV = function() return { hv = { ["6942-Alliance"] = { items = { [2841] = { min = 500, qty = 4 } } } } }, lotGD end
+ns.coursHV = function() return { hv = { ["6942-Alliance"] = { items = { [2841] = { min = 500, qty = 4 } } } } }, lotGD end
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(hv.objet(2841).min == 500 and lotHV.provenance == "relevé direct" and lotHV.champs.min == "GameData", "GameData seul")
 reste = lib:ChampsARelever("cours de l'HV")
 assert(reste.min and reste.qty and reste.auctions and reste.tiers and reste.hist, "sans fournisseur : GameData relève tout")
-GameDataAPI.coursHV = function() end
+ns.coursHV = function() end
 local d, raison = lib:Lire("cours de l'HV")
 assert(d == nil and raison == "pas encore relevé", "GameData sans relevé, sans fournisseur : " .. tostring(raison))
-GameDataAPI = nil
-print("LibCommune : fournisseurs des cours de l'HV OK")
+gamedata()
+print("Azeroth Commune : fournisseurs des cours de l'HV OK")
 
 -- Signal « type relevé à nouveau » (#14) : rappels par type ; avec GameData, son scan de l'HV (marketScanned), accroché
 -- une seule fois, à l'enregistrement ou à la connexion s'il est chargé après ; un rappel qui plante ne prive pas les autres.
@@ -401,41 +448,18 @@ assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type
 assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
 assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
 assert(not lib.accrocheGameData, "sans GameData : rien à accrocher")
-GameDataAPI = { marketScanned = noop, recettesConnues = function() return base end } -- GameData chargé après
+gamedata({ marketScanned = noop, recettesConnues = function() return base end })
 lib.sondes.build.etat = nil
 lib.cadre.onEvent(lib.cadre, "PLAYER_LOGIN")
 assert(lib.Sondes().build.etat == "vert", "sondes relancées à la connexion")
-GameDataAPI.marketScanned()
+ns.marketScanned()
 assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "scan de l'HV : rappels appelés, erreur rendue au jeu")
 lib:QuandReleve("cours de l'HV", noop) -- accroché une seule fois
-GameDataAPI.marketScanned()
+ns.marketScanned()
 assert(#recus == 2, "un seul crochet : " .. #recus)
-lib.rappels["cours de l'HV"], GameDataAPI = nil, nil
-print("LibCommune : signal « type relevé à nouveau » OK")
-
--- Deux copies de la lib (deux add-ons qui l'embarquent), mineures différentes : la plus récente sert, quel que soit
--- l'ordre de chargement, et elle reprend le relevé de repli de la précédente.
-local source = assert(io.open("LibCommune/LibCommune.lua")):read("*a")
-local mineure = tonumber(source:match('local MAJOR, MINOR = "LibCommune%-1%.0", (%d+)'))
-local function copie(m, marque)
-  local s = source:gsub('(local MAJOR, MINOR = "LibCommune%-1%.0", )%d+', "%1" .. m) .. ("\nlib.marque = %q\n"):format(marque)
-  assert(loadstring(s))()
-end
-local premier = cadre.onEvent
-copie(mineure + 1, "récente")
-local recent = cadre.onEvent
-copie(mineure - 1, "ancienne") -- chargée après, mais plus vieille : ignorée
-local servie, m = LibStub("LibCommune-1.0")
-assert(servie == lib and m == mineure + 1 and servie.marque == "récente", "la plus récente sert : " .. tostring(servie.marque))
-assert(servie:Lire("recettes connues").persos[MOI].Minage.known[3307], "le relevé de repli survit à la mise à niveau")
-assert(servie.Sondes().royaume.etat == "vert" and servie.Sondes().royaume.valeur == "6942", "les sondes de la session survivent aussi")
-assert(servie.Sondes()["prix AuctionDB"] and servie.Sondes()[#servie.Sondes()].nom == "prix AuctionDB",
-  "les sondes des autres fichiers (pas rechargés) restent déclarées, à leur place")
-local noms = {}
-for _, x in ipairs(servie.Sondes()) do assert(not noms[x.nom], "sonde en double : " .. x.nom); noms[x.nom] = true end
-local nouveau = cadres[#cadres]
-assert(nouveau == cadre and recent ~= premier and cadre.onEvent == recent, "un seul cadre d'événements, mené par la copie récente")
-print("LibCommune : deux copies, la plus récente sert OK")
+lib.rappels["cours de l'HV"] = nil
+gamedata()
+print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell, interrogé à la connexion), sans GameData : un personnage
 -- jamais passé par sa fenêtre. Candidates : les recettes déjà relevées (3307, 3308) et la réserve Classic de Handshake.
@@ -479,7 +503,7 @@ local n = 0 for _ in pairs(sans.known) do n = n + 1 end
 assert(sans.known[3307] and sans.known[9001] and sans.known[10100] and n == 3, "recettes connues relevées sans fenêtre : " .. n)
 assert(not lib:Lire("recettes connues").persos[MOI]["Pêche"], "aucune recette connue trouvée : métier pas inventé")
 assert(signaux == 1, "relevé de repli sans fenêtre fini : signalé une fois")
-print("LibCommune : recettes connues sans fenêtre OK")
+print("Azeroth Commune : recettes connues sans fenêtre OK")
 
 -- Puis la fenêtre de métier s'ouvre (3307 apprise, 3308 non) : sa liste prime, sans doublon ni perte.
 C_Timer.After = function(_, fn) fn() end
@@ -494,21 +518,12 @@ lib.rappels["recettes connues"] = nil
 lib:ReleverRecettesSansFenetre(lib.repli.metiers, lib.repli.recettes)
 assert(lib.repli.metiers.Minage.known[3307] == "optimal", "la difficulté lue en fenêtre reste")
 HandshakeClassicRecipes = nil
-print("LibCommune : fenêtre après le relevé sans fenêtre OK")
+print("Azeroth Commune : fenêtre après le relevé sans fenêtre OK")
 
 ---------------------------------------------------------------------------------------------------
 -- Outils communs (Interface.lua, Capture.lua) : tri des tableaux, montants, noms d'objets, pages et grilles d'export.
-assert(loadfile("LibCommune/Interface.lua"))()
-assert(loadfile("LibCommune/Capture.lua"))()
-local versions = { interface = lib.versions.interface, capture = lib.versions.capture }
-lib.Argent = "marque"
-assert(loadfile("LibCommune/Interface.lua"))() -- une 2e copie de même version (un autre add-on) : ignorée
-assert(lib.Argent == "marque" and lib.versions.interface == versions.interface, "une copie pas plus récente n'écrase rien")
-assert(loadfile("LibCommune/Interface.lua"))()
-lib.versions.interface = 0
-assert(loadfile("LibCommune/Interface.lua"))() -- la version chargée était plus vieille : la nouvelle la remplace
-assert(type(lib.Argent) == "function" and lib.versions.interface == versions.interface, "une copie plus récente remplace")
-print("LibCommune : outils, la plus récente sert OK")
+charger("Interface")
+charger("Capture")
 
 -- Tri : par colonne, cases vides toujours en bas, égalités dans l'ordre d'arrivée.
 local cols = { { key = "h", get = function(r) return r.h end }, { key = "n", get = function(r) return r.n end } }
@@ -520,7 +535,7 @@ assert(rows[1].n == "b" and rows[2].n == "d" and rows[3].n == "c" and rows[4].n 
 lib.TrierLignes(rows, cols, { key = "n", desc = false })
 assert(rows[1].n == "a" and rows[4].n == "d")
 assert(lib.TrierLignes(rows, cols, { key = "inconnue" })[1].n == "a", "colonne inconnue : ordre gardé")
-print("LibCommune : tri des tableaux OK")
+print("Azeroth Commune : tri des tableaux OK")
 
 -- Montants : arrondis, version courte (pc oubliés au-delà d'1 po, pa au-delà de 100 po), signée.
 GetCoinTextureString = function(c, taille) return c .. (taille and ("@" .. taille) or "") end
@@ -531,7 +546,7 @@ assert(lib.ArgentSigne(150) == "|cff59cc73+150@10|r" and lib.ArgentSigne(-150) =
 C_CurrencyInfo = { GetCoinTextureString = function(c) return "moderne " .. c end }
 assert(lib.Argent(5) == "moderne 5", "l'API moderne d'abord")
 C_CurrencyInfo = nil
-print("LibCommune : montants OK")
+print("Azeroth Commune : montants OK")
 
 -- Noms d'objets : base de l'add-on, puis client, sinon demandé au serveur et retenu (dans garde) à son arrivée.
 local client, demandesServeur = { [3] = { "Cuivre", "|lien3|" } }, {}
@@ -553,7 +568,7 @@ local recettes = { [7] = { name = "Fonte du cuivre", output = 2840 } }
 assert(lib.TrouverObjet("|Hitem:2589:0|h", objets) == 2589 and lib.TrouverObjet("42") == 42, "lien, ID")
 assert(lib.TrouverObjet("barre DE fer", objets, recettes) == 1 and lib.TrouverObjet("fonte du cuivre", objets, recettes) == 2840)
 assert(lib.TrouverObjet("rien", objets, recettes) == nil and lib.TrouverObjet("rien") == nil)
-print("LibCommune : noms d'objets OK")
+print("Azeroth Commune : noms d'objets OK")
 
 -- Export : pages (en-tête + morceau), grille de couleurs, et retour grille -> octets -> donnée, comme le décodeur.
 local N = lib.EXPORT_N
@@ -589,7 +604,7 @@ assert(trou["0"] == "a" and trou["5"][2] == 2 and trou.liste[2] == "y", "clés n
 local boucle = {}
 boucle.moi = boucle
 assert(lib.JsonSur(boucle).moi == nil, "boucle coupée")
-print("LibCommune : pages et grilles d'export OK")
+print("Azeroth Commune : pages et grilles d'export OK")
 
 ---------------------------------------------------------------------------------------------------
 -- Regroupement (Regroupement.lua, LibCommune#3) : un seul bouton de minicarte, une seule entrée des options, une
@@ -637,9 +652,8 @@ local function regroupement()
     gen(nil, menu)
     etat.menus[#etat.menus + 1] = m
   end }
-  for _, k in ipairs({ "regroupes", "boutonCommun", "categorie", "cadreRegroupement" }) do lib[k] = nil end
-  lib.versions.regroupement = nil
-  assert(loadfile("LibCommune/Regroupement.lua"))()
+  lib.boutonCommun, lib.categorie = nil, nil
+  charger("Regroupement")
   local function connexion()
     connecte = true
     lib.cadreRegroupement.scripts.OnEvent(lib.cadreRegroupement, "PLAYER_LOGIN")
@@ -647,39 +661,44 @@ local function regroupement()
   return etat, connexion
 end
 
--- Deux add-ons (GameData puis Handshake, dans l'ordre de chargement) : rien avant l'entrée en jeu, puis un bouton,
--- une entrée « Azeroth Commune », deux sous-pages dans l'ordre d'arrivée.
-GameDataDB, HandshakeDB = { minimap_angle = 90 }, {}
+-- Deux add-ons (Compagnie puis Handshake, dans l'ordre de chargement) : rien avant l'entrée en jeu, puis un bouton,
+-- une entrée « Azeroth Commune » (la page du socle), deux sous-pages dans l'ordre d'arrivée.
+CompagnieDB, HandshakeDB = { minimap_angle = 90 }, {}
 local ouverts = {}
+ns.lignesSouscriptions = function() return { "inventaires : souscrit le 2026-11-21, relevé", "objets : aucune souscription" } end
 local etat, connexion = regroupement()
-local gd = { nom = "GameData", dossier = "GameData", icone = "icone-gd", ouvrir = function() ouverts[#ouverts + 1] = "gd" end,
-  store = function() return GameDataDB end }
+local cp = { nom = "Compagnie", dossier = "Compagnie", icone = "icone-cp", ouvrir = function() ouverts[#ouverts + 1] = "cp" end,
+  store = function() return CompagnieDB end }
 local reglagesFaits = 0
 local hs = { nom = "Handshake", dossier = "Handshake", icone = "icone-hs", ouvrir = function() ouverts[#ouverts + 1] = "hs" end,
   store = function() return HandshakeDB end, reglages = function(page, ancre) reglagesFaits = reglagesFaits + 1; assert(page and ancre) end }
-lib.Regrouper(gd)
+lib.Regrouper(cp)
 lib.Regrouper(hs)
 assert(#etat.boutons == 0 and #etat.categories == 0, "rien de construit avant l'entrée en jeu")
 connexion()
 assert(#etat.boutons == 1 and #etat.categories == 1 and etat.inscrites == 1, "un bouton, une entrée")
 assert(etat.categories[1].nom == "Azeroth Commune", etat.categories[1].nom)
-assert(#etat.sous == 2 and etat.sous[1].nom == "GameData" and etat.sous[2].nom == "Handshake", "une sous-page par add-on, dans l'ordre")
-assert(etat.sous[1].parent == etat.categories[1] and gd.categorie == etat.sous[1], "sous Azeroth Commune")
+assert(#etat.sous == 2 and etat.sous[1].nom == "Compagnie" and etat.sous[2].nom == "Handshake", "une sous-page par add-on, dans l'ordre")
+assert(etat.sous[1].parent == etat.categories[1] and cp.categorie == etat.sous[1], "sous Azeroth Commune")
 assert(reglagesFaits == 1, "les réglages de l'add-on posés une fois sur sa page")
+-- La page du socle : les souscriptions et l'état des données relevées (ce que dit /ac souscriptions).
+local texteSouscriptions = etat.categories[1].page.souscriptions.texte
+assert(texteSouscriptions == "inventaires : souscrit le 2026-11-21, relevé\nobjets : aucune souscription", tostring(texteSouscriptions))
 local bouton = etat.boutons[1]
-assert(bouton.icone.texture ~= "icone-gd", "plusieurs add-ons : l'icône commune")
--- Position : l'angle d'avant (GameDataDB.minimap_angle = 90°) est gardé ; glisser l'écrit chez chaque add-on.
+assert(bouton.icone.texture ~= "icone-cp", "plusieurs add-ons : l'icône commune")
+-- Position : l'angle d'avant (CompagnieDB.minimap_angle = 90°) est gardé ; glisser l'écrit chez chaque add-on.
 assert(math.abs(bouton.points[4]) < 1e-6 and math.abs(bouton.points[5] - 76) < 1e-6, "angle gardé : en haut de la carte")
 GetCursorPosition = function() return 400, 500 end -- à gauche du centre : 180°
 bouton.scripts.OnDragStart(bouton)
 bouton.scripts.OnUpdate(bouton)
 bouton.scripts.OnDragStop(bouton)
-assert(GameDataDB.minimap_angle == 180 and HandshakeDB.minimap_angle == 180, "nouvel angle écrit chez chaque add-on")
+assert(CompagnieDB.minimap_angle == 180 and HandshakeDB.minimap_angle == 180, "nouvel angle écrit chez chaque add-on")
 assert(math.abs(bouton.points[4] + 76) < 1e-6, "bouton déplacé")
--- Clic : la liste des add-ons ; chaque ligne ouvre le sien ; clic droit : les réglages.
+-- Clic : la liste des add-ons, sans ligne pour le socle ; chaque ligne ouvre le sien ; clic droit : les réglages.
 bouton.scripts.OnClick(bouton, "LeftButton")
 local m = etat.menus[1]
-assert(m and m[1].titre == "Azeroth Commune" and m[2][1]:find("GameData") and m[3][1]:find("Handshake") and m[4][1] == "Réglages", "menu")
+assert(m and m[1].titre == "Azeroth Commune" and m[2][1]:find("Compagnie") and m[3][1]:find("Handshake") and m[4][1] == "Réglages" and #m == 4,
+  "menu : les deux add-ons et les réglages, pas de ligne du socle")
 m[3][2]()
 assert(ouverts[1] == "hs", "la ligne Handshake ouvre Handshake")
 bouton.scripts.OnClick(bouton, "RightButton")
@@ -688,37 +707,38 @@ assert(etat.ouvertes[1] == etat.categories[1]:GetID(), "clic droit : l'entrée A
 connexion()
 lib.Regrouper({ nom = "Négoce", ouvrir = noop })
 assert(#etat.boutons == 1 and #etat.categories == 1 and etat.inscrites == 1 and #etat.sous == 3 and etat.sous[3].nom == "Négoce", "tard")
--- Une 2e copie du fichier, même version (un autre add-on qui embarque la lib) : ignorée.
-local avantCopie = lib.Regrouper
-assert(loadfile("LibCommune/Regroupement.lua"))()
-assert(lib.Regrouper == avantCopie, "copie pas plus récente ignorée")
-lib.versions.regroupement = 0 -- la copie chargée était plus vieille : la nouvelle la remplace et reprend bouton et entrée
-assert(loadfile("LibCommune/Regroupement.lua"))()
-connexion()
-assert(lib.Regrouper ~= avantCopie and #lib.regroupes == 3 and #etat.boutons == 1 and #etat.categories == 1 and #etat.sous == 3, "reprise")
-print("LibCommune : regroupement de plusieurs add-ons OK")
+print("Azeroth Commune : regroupement de plusieurs add-ons OK")
 
--- Un seul add-on : un bouton (son icône, le clic l'ouvre), une entrée qui est sa page, aucune sous-page.
+-- Un seul add-on à côté du socle : un bouton (son icône, le clic l'ouvre), l'entrée du socle et sa sous-page.
 etat, connexion = regroupement()
 ouverts = {}
-GameDataDB, gd.categorie = { minimap_angle = 90 }, nil
-lib.Regrouper(gd)
+CompagnieDB, cp.categorie = { minimap_angle = 90 }, nil
+lib.Regrouper(cp)
 connexion()
-assert(#etat.boutons == 1 and #etat.categories == 1 and #etat.sous == 0, "un bouton, une entrée, rien de plus")
-assert(etat.categories[1].nom == "Azeroth Commune" and gd.categorie == etat.categories[1], "l'entrée est la page de l'add-on")
+assert(#etat.boutons == 1 and #etat.categories == 1 and #etat.sous == 1, "un bouton, l'entrée du socle, une sous-page")
+assert(etat.categories[1].nom == "Azeroth Commune" and etat.categories[1].page.souscriptions and cp.categorie == etat.sous[1],
+  "l'entrée est la page du socle, l'add-on a la sienne dessous")
 bouton = etat.boutons[1]
-assert(bouton.icone.texture == "icone-gd", "seul : son icône")
+assert(bouton.icone.texture == "icone-cp", "seul : son icône")
 bouton.scripts.OnClick(bouton, "LeftButton")
-assert(ouverts[1] == "gd" and #etat.menus == 0, "seul : le clic l'ouvre, sans menu")
-print("LibCommune : un seul add-on OK")
+assert(ouverts[1] == "cp" and #etat.menus == 0, "seul : le clic l'ouvre, sans menu")
+print("Azeroth Commune : un seul add-on OK")
+
+-- Le socle seul : pas de bouton (rien à ouvrir), mais sa page des options, avec les souscriptions.
+etat, connexion = regroupement()
+connexion()
+assert(#etat.boutons == 0 and #etat.categories == 1 and etat.categories[1].page.souscriptions, "socle seul : sa page, pas de bouton")
+ns.lignesSouscriptions = nil
+print("Azeroth Commune : le socle seul OK")
 
 -- Outils et exports déclarés par chaque add-on (LibCommune#21) : les outils sous la ligne de leur add-on dans le menu,
--- les exports de tous les add-ons regroupés par lib.Exports(), un retardataire compris.
+-- les exports du socle puis ceux de tous les add-ons regroupés par lib.Exports(), un retardataire compris.
 etat, connexion = regroupement()
+ns.exportsSocle = { { cle = "hv", libelle = "Hôtel des ventes", donnees = function() return { c = 3 } end } }
 local ouvertsOutils, devant = {}, 0
 local fenetreJournal = { shown = false, IsShown = function(s) return s.shown end, Raise = function() devant = devant + 1 end }
 NegoceLedgerFrame = fenetreJournal
-local gdx = { nom = "GameData", ouvrir = noop,
+local gdx = { nom = "Compagnie", ouvrir = noop,
   exports = { { cle = "perso", libelle = "Mon perso", description = "fiche", donnees = function() return { a = 1 } end } } }
 local neg = { nom = "Négoce", ouvrir = noop,
   outils = { { libelle = "Mécréant", ouvrir = function() ouvertsOutils[#ouvertsOutils + 1] = "mecreant" end },
@@ -732,7 +752,7 @@ etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
 m = etat.menus[1]
 local lignes = {}
 for i = 2, #m do lignes[#lignes + 1] = (m[i][1]:gsub("|T.-|t ", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-assert(table.concat(lignes, ",") == "GameData,Négoce,        Mécréant,        Journal,Handshake,Réglages", table.concat(lignes, ","))
+assert(table.concat(lignes, ",") == "Compagnie,Négoce,        Mécréant,        Journal,Handshake,Réglages", table.concat(lignes, ","))
 m[4][2]()
 assert(ouvertsOutils[1] == "mecreant", "la ligne Mécréant ouvre Mécréant")
 m[5][2]()
@@ -741,15 +761,16 @@ fenetreJournal.shown = true
 m[5][2]()
 assert(#ouvertsOutils == 2 and devant == 1, "fenêtre déjà ouverte : elle passe devant, sans se refermer")
 local ex = lib.Exports()
-assert(#ex == 2 and ex[1].cle == "perso" and ex[1].addon == "GameData" and ex[1].libelle == "Mon perso" and ex[1].description == "fiche"
-  and ex[1].donnees().a == 1, "export de GameData")
-assert(ex[2].cle == "journal" and ex[2].addon == "Négoce" and ex[2].donnees().b == 2, "export du Négoce, après")
+assert(#ex == 3 and ex[1].cle == "hv" and ex[1].addon == "Azeroth Commune" and ex[1].donnees().c == 3, "les exports du socle d'abord")
+assert(ex[2].cle == "perso" and ex[2].addon == "Compagnie" and ex[2].libelle == "Mon perso" and ex[2].description == "fiche"
+  and ex[2].donnees().a == 1, "export d'un add-on regroupé")
+assert(ex[3].cle == "journal" and ex[3].addon == "Négoce" and ex[3].donnees().b == 2, "export du Négoce, après")
 -- Regroupé après l'entrée en jeu : ses outils au prochain clic, ses exports dans la liste.
 lib.Regrouper({ nom = "Tard", ouvrir = noop, outils = { { libelle = "Outil tardif", ouvrir = noop } },
   exports = { { cle = "tard", libelle = "Tard", donnees = function() return {} end } } })
 etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
 assert(etat.menus[2][#etat.menus[2] - 1][1]:find("Outil tardif", 1, true), "outil du retardataire dans le menu")
-assert(lib.Exports()[3].cle == "tard", "export du retardataire")
+assert(lib.Exports()[4].cle == "tard", "export du retardataire")
 -- Déclarations incomplètes : refusées tout de suite, pas au clic.
 assert(not pcall(lib.Regrouper, { nom = "X", ouvrir = noop, outils = { { libelle = "sans ouvrir" } } }), "outil sans ouvrir")
 assert(not pcall(lib.Regrouper, { nom = "X", ouvrir = noop, exports = { { cle = "x", libelle = "x" } } }), "export sans donnees")
@@ -760,8 +781,8 @@ lib.Regrouper({ nom = "Seul", ouvrir = function() ouverts[#ouverts + 1] = "seul"
 connexion()
 etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
 assert(ouverts[1] == "seul" and #etat.menus == 0, "seul avec des outils : le clic l'ouvre")
-NegoceLedgerFrame = nil
-print("LibCommune : outils et exports des add-ons regroupés OK")
+NegoceLedgerFrame, ns.exportsSocle = nil, nil
+print("Azeroth Commune : outils et exports des add-ons regroupés OK")
 
 -- Prix d'achat (Negoce#14, LibCommune#27) : le moins cher entre marchand et HV, palier par palier ; règle reprise de Handshake.
 local hvTest = {
@@ -782,18 +803,18 @@ assert(c == 140 and src == "HV" and partiel == false, "fournisseur sans paliers 
 assert(lib:PrixAchat(1, 3, hvTest, marchandsTest) == nil, "ni marchand ni HV : rien")
 assert(lib:PrixAchat(9, 1, { [9] = { tiers = {} } }, {}) == nil, "paliers vides : rien, sans erreur")
 -- Marchands lus par la lib : le moins cher à l'unité, hors stock limité et monnaies spéciales.
-GameDataAPI = { marchands = function() return {
+gamedata({ marchands = function() return {
   [1] = { items = { { id = 2880, price = 600, stack = 5 }, { id = 159, price = 25 } } },
   [2] = { items = { { id = 2880, price = 100, limited = true }, { id = 159, price = 30 }, { id = 17, price = 10, cost_items = { 1 } } } },
-} end }
+} end })
 local pm = lib:PrixMarchands()
 assert(pm[2880] == 120 and pm[159] == 25 and pm[17] == nil, "prix marchands à l'unité")
 -- Sans hv ni marchands passés : la lib lit elle-même (ici sans GameData, par Auctionator).
-GameDataAPI = nil
+gamedata()
 Auctionator = fausseAPI()
 c, src = lib:PrixAchat(2772, 3)
 assert(c == 3 * 95 and src == "HV", "lu par la lib : " .. tostring(c))
-print("LibCommune : prix d'achat OK")
+print("Azeroth Commune : prix d'achat OK")
 
 -- Sondes des autres relevés (LibCommune#31) : sacs, recettes, noms d'objets, fournisseurs de prix. Une réponse de forme
 -- inattendue met la sonde au rouge avec un seul avertissement, sans changer la valeur rendue ; un relevé en masse ne vérifie
@@ -877,7 +898,8 @@ do
   assert(etat("nom d'objet") == "pas encore vue", "chargement refusé : pas vérifié")
 
   -- Fournisseurs de prix, quand ils sont présents : leur API rend un prix numérique ou rien ; la première ligne seulement.
-  GameDataAPI, AuctionDBForeverSaved, TSM_API = nil, nil, nil
+  gamedata()
+  AuctionDBForeverSaved, TSM_API = nil, nil
   for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do lib.sondes[nom] = nil end
   local avant = #dits
   Auctionator = fausseAPI()
@@ -907,4 +929,450 @@ do
 
   print = vraiPrint
 end
-print("LibCommune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")
+print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")
+
+---------------------------------------------------------------------------------------------------
+-- La base (l'ex-GameData : Base.lua, Commerce.lua, Souscriptions.lua), chargée avec le reste du socle dans un espace de
+-- noms neuf. Simule juste ce qu'il faut de l'API WoW pour le filtre des conteneurs, le scan des objets, le commerce.
+do
+AzerothCommune = nil
+Auctionator, TSM_API, AuctionDBForeverSaved, HandshakeClassicRecipes, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil, nil
+hooksecurefunc = function(t, nom, fn) local avant = t[nom]; t[nom] = function(...) avant(...); fn(...) end end
+local ns = {}
+local noop = function() end
+CreateFrame = function() return { RegisterEvent = noop, SetScript = noop } end
+SlashCmdList = {}
+C_Timer = { After = noop, NewTicker = noop }
+InCombatLockdown = function() return false end
+GetTime = function() return 100 end
+date = os.date
+local BUILD = "64000"
+GetBuildInfo = function() return "1.16.1", BUILD, "Nov 1 2026", 11601 end
+
+-- Conteneurs : deux noms pour le même sac (Characterbanktab = CharacterBankTab_1), un sac vide.
+Enum = { BagIndex = { Backpack = 0, Bag_1 = 1, Bag_2 = 2, Keyring = -2, ReagentBag = 5,
+  Bank = -1, CharacterBankTab_1 = 6, Characterbanktab = 6, Reagentbank = -3 } }
+C_Container = {
+  GetContainerNumSlots = function(bag) return bag == 2 and 0 or 2 end,
+  GetContainerItemInfo = function(bag, slot) if slot == 1 then return { itemID = 100 + bag, stackCount = 3, hyperlink = "l" } end end,
+}
+
+-- Objets : le client connaît 1, 2 et 5 ; le serveur a 1 en cache, ne connaît pas 5.
+local requested = {}
+C_Item = {
+  DoesItemExistByID = function(id) return id == 1 or id == 2 or id == 5 end,
+  GetItemInfoInstant = function(id) if id == 1 or id == 2 or id == 5 then return id, "t", "s", "INVTYPE_HEAD", 1234, 4, 1 end end,
+  GetItemInfo = function(id) if id == 1 then return "Casque", "lien", 2, 10, 5, nil, nil, 1, nil, nil, 50, nil, nil, 1 end end,
+  RequestLoadItemDataByID = function(id) requested[#requested + 1] = id end,
+}
+
+-- Le socle dans l'ordre de sa TOC, jusqu'à Base.lua ; Commerce.lua et Souscriptions.lua plus bas.
+local function charger(f, gns) assert(loadfile("AzerothCommune/" .. f .. ".lua"))("AzerothCommune", gns or ns) end
+for _, f in ipairs({ "AzerothCommune", "Interface", "Capture", "Regroupement", "Fournisseurs", "Base" }) do charger(f) end
+-- Un export du socle (AzerothCommune.Exports), par sa clé.
+local function export(cle)
+  for _, e in ipairs(AzerothCommune.Exports()) do if e.cle == cle then return e end end
+end
+
+AzerothCommuneItems, AzerothCommuneDB = {}, { lots = {} }
+ns.itemsReady()
+ns.itemTick()
+local items = AzerothCommuneItems.items
+assert(items[1] and items[2] and items[5] and not items[3], "catalogue local")
+assert(items[1].name == "Casque" and items[1].price == 50, "objet en cache enregistré tout de suite")
+assert(items[1].slot == "INVTYPE_HEAD" and items[1].class == 4)
+assert(#requested == 2 and requested[1] == 2 and requested[2] == 5, "seuls les objets hors cache sont demandés")
+assert(AzerothCommuneItems.next_id == 2001)
+
+ns.itemLoaded(5, false)
+assert(items[5].unknown, "inconnu du serveur : marqué pour ne pas redemander")
+ns.itemTick() -- rien de neuf à demander
+assert(#requested == 2)
+
+-- Commerce : clés de recettes, et agrégation des enchères en prix unitaires et paliers.
+charger("Commerce")
+assert(ns.itemIDOf("|cff|Hitem:3575::::|h[Barre de fer]|h|r") == 3575)
+assert(ns.recipeKey("|Henchant:3307|h[Fondre le fer]|h", "Minage", "Fondre le fer") == 3307)
+assert(ns.recipeKey(nil, "Minage", "Fondre le fer") == "Minage:Fondre le fer")
+local m = ns.aggregate({
+  { id = 2772, count = 20, buyout = 2000 },  -- 100 l'unité
+  { id = 2772, count = 5, buyout = 400 },    -- 80 l'unité : le moins cher
+  { id = 2772, count = 10, buyout = 1000 },  -- 100 : même palier que le premier
+  { id = 2772, count = 1, buyout = 0 },      -- enchère sans achat immédiat : ignorée
+  { id = 3575, count = 0, buyout = 150 },    -- quantité 0 lue comme 1
+})
+assert(m[2772].min == 80 and m[2772].qty == 35 and m[2772].auctions == 3)
+assert(#m[2772].tiers == 2 and m[2772].tiers[1].price == 80 and m[2772].tiers[2].qty == 30)
+assert(m[3575].min == 150)
+
+-- Fenêtre de métier simulée (API moderne de Forever) : recette apprise et recette pas encore apprise.
+AzerothCommuneDB = { recipes = {}, errors = {}, chars = {}, lots = {} }
+C_Timer.After = function(_, fn) fn() end -- le scan différé part tout de suite dans le test
+C_TradeSkillUI = {
+  GetBaseProfessionInfo = function() return { professionName = "Minage", skillLevel = 140, maxSkillLevel = 225 } end,
+  GetAllRecipeIDs = function() return { 3307, 3308 } end,
+  GetRecipeInfo = function(id) return { name = id == 3307 and "Fondre le fer" or "Fondre l'or", learned = id == 3307, relativeDifficulty = 0 } end,
+  GetRecipeSchematic = function(id) return { outputItemID = id == 3307 and 3575 or 3577, quantityMin = 1, quantityMax = 1,
+    reagentSlotSchematics = { { reagents = { { itemID = id == 3307 and 2772 or 2776 } }, quantityRequired = 1, required = true } } } end,
+}
+local c = { errors = {}, lots = {} }
+ns.run = function(_, fn) fn(c) end
+local frames = {}
+CreateFrame = function() local fr = { RegisterEvent = noop }; fr.SetScript = function(self, _, fn) self.fn = fn end; frames[#frames + 1] = fr; return fr end
+charger("Commerce")
+local commerce = frames[#frames]
+-- Rien n'est relevé sans souscription (Souscriptions.lua, testé plus bas) : ici, souscription à tous les types.
+time = os.time
+charger("Souscriptions")
+for nom in pairs(ns.rangement) do ns.souscrire(nom) end
+commerce.fn(commerce, "TRADE_SKILL_LIST_UPDATE")
+local r = AzerothCommuneDB.recipes[3307]
+assert(r and r.output == 3575 and r.reagents[1].id == 2772 and r.reagents[1].qty == 1, "recette lue")
+assert(AzerothCommuneDB.recipes[3308] and AzerothCommuneDB.recipes[3308].output == 3577, "recette pas encore apprise : lue aussi")
+assert(c.recipes.Minage.rank == 140 and c.recipes.Minage.known[3307] == "optimal" and not c.recipes.Minage.known[3308])
+-- Ce que lit LibCommune (type « recettes connues ») : les recettes vues et, par perso, ses métiers.
+AzerothCommuneDB.chars["Belegard-Test"], AzerothCommuneDB.chars["Sans-Metier"] = c, { errors = {} }
+local rc = ns.recettesConnues()
+assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
+assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
+assert(AzerothCommune:Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
+-- Connexion : recettes connues relevées sans fenêtre (IsPlayerSpell, recettes déjà vues), pour un perso jamais passé par
+-- sa fenêtre de métier, et sauvegardées dans son perso. Puis la fenêtre s'ouvre : elle prime, sans rien perdre.
+local neuf, char0, run0 = { errors = {}, lots = {} }, ns.char, ns.run
+ns.char, ns.run = function() return neuf end, function(_, fn) fn(neuf) end
+AzerothCommuneDB.recipes[3310] = { profession = "Minage", name = "Fondre le thorium" } -- vue chez un autre perso
+GetProfessions = function() return 1 end
+GetProfessionInfo = function() return "Minage", "icône", 150, 225 end
+IsPlayerSpell = function(id) return id == 3307 or id == 3310 end
+commerce.fn(commerce, "PLAYER_LOGIN")
+local mn = neuf.recipes and neuf.recipes.Minage
+assert(mn and mn.rank == 150 and mn.known[3307] == true and mn.known[3310] and not mn.known[3308], "relevé sans fenêtre sauvegardé")
+commerce.fn(commerce, "TRADE_SKILL_LIST_UPDATE")
+mn = neuf.recipes.Minage
+assert(mn.known[3307] == "optimal" and mn.rank == 140 and mn.scanned and not mn.known[3308], "la fenêtre prime")
+assert(mn.known[3310], "connue mais absente de la liste de la fenêtre : gardée")
+ns.char, ns.run = char0, run0
+-- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
+C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
+  GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
+-- La maison de l'HV vient de la lib (lib.MaisonHV, GameData#24) : « n° de serveur-faction », le numéro tiré du GUID
+-- (LibCommune#35 : le jeu ne donne plus le royaume).
+local MAISON = "6942-Alliance"
+UnitGUID = function(u) if u == "player" then return "Player-6942-014B6DDC" end end
+UnitFactionGroup, time, AzerothCommuneMarket = function() return "Alliance" end, os.time, {}
+local scanned, realPrint = 0, print
+ns.marketScanned = function() scanned = scanned + 1 end
+print = noop
+commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
+commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
+print = realPrint
+assert(AzerothCommuneMarket[MAISON].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
+-- Sans fournisseur, le scan de l'HV marche comme avant : GameData relève tout (prix, quantité, paliers, historique).
+local hvR = AzerothCommuneMarket[MAISON]
+assert(hvR.items[2772].qty == 5 and hvR.items[2772].auctions == 1 and hvR.items[2772].tiers[1].price == 100, "tout relevé")
+assert(#hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100 and hvR.hist[2772][1][3] == 5, "historique relevé")
+local hvLib, lotLib = AzerothCommune:Lire("cours de l'HV")
+assert(hvLib.objet(2772).min == 100 and hvLib.objet(2772).sources.min == "GameData" and lotLib.provenance == "relevé direct", "lu par la lib")
+
+-- Fournisseurs (GameData#6, option B). Un nouveau scan, 15 min plus tard, avec Auctionator et AuctionDB frais : GameData
+-- garde ce que son scan vient de voir (prix, quantité, annonces, paliers : comme avant, ils font foi en relevé direct),
+-- mais pas de copie de l'historique, qu'AuctionDB tient.
+local horloge = 100
+GetTime = function() return horloge end
+local function scanHV()
+  horloge = horloge + 1000
+  print = noop
+  commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
+  commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
+  print = realPrint
+end
+Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function(_, id) return ({ [2772] = 95, [9999] = 70 })[id] end,
+  GetAuctionAgeByItemID = function(_, id) if id == 2772 or id == 9999 then return 0 end end } } } -- 9999 vu aujourd'hui
+local T = os.time() - 600
+AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { T } }, items = { [2772] = ("%d,90,95,300"):format(T) } } } }
+scanHV()
+hvR = AzerothCommuneMarket[MAISON]
+assert(scanned == 2 and hvR.items[2772].min == 100 and hvR.items[2772].qty == 5 and hvR.items[2772].tiers[1].price == 100, "prix, quantité, paliers gardés comme avant")
+assert(hvR.hist == nil, "AuctionDB frais : pas de copie de l'historique")
+hvLib, lotLib = AzerothCommune:Lire("cours de l'HV")
+local l = hvLib.objet(2772)
+assert(l.min == 100 and l.sources.min == "GameData" and l.qty == 5 and l.hist[1][1] == T and l.sources.hist == "AuctionDB", "lu : scan de GameData, historique d'AuctionDB")
+assert(lotLib.provenance == "relevé direct" and lotLib.champs.hist == "AuctionDB", "relevé direct")
+local retire = hvLib.objet(9999)
+assert(retire.min == nil and retire.qty == 0, "absent du scan de GameData : plus en vente, même vu aujourd'hui par Auctionator")
+assert(export("hv").donnees().items == "2772,100,5,1,100:5", "export comme avant")
+-- AuctionDB plus frais (son dernier scan il y a 7 h) : GameData garde son historique, comme avant ; à la lecture,
+-- celui d'AuctionDB (plusieurs jours) passe quand même avant le point unique de GameData (relecture de Negoce#1).
+AuctionDBForeverSaved.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
+scanHV()
+hvR = AzerothCommuneMarket[MAISON]
+assert(scanned == 3 and #hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100, "historique gardé par GameData")
+assert(AzerothCommune:Lire("cours de l'HV").objet(2772).sources.hist == "AuctionDB", "lu : l'historique d'AuctionDB d'abord")
+Auctionator, AuctionDBForeverSaved = nil, nil
+print("Azeroth Commune : fournisseurs des cours de l'HV OK")
+-- Royaume et faction relevés par la lib, qui les sonde (GameData#24) : plus d'appel direct dans le code chargé.
+for _, f in ipairs({ "Base.lua", "Commerce.lua", "Souscriptions.lua" }) do
+  local code = io.open("AzerothCommune/" .. f):read("*a")
+  for _, appel in ipairs({ "GetRealmName", "GetNormalizedRealmName", "UnitFactionGroup" }) do
+    local n = select(2, code:gsub(appel .. "%(", ""))
+    assert(n == 0, f .. " : appel direct à " .. appel)
+  end
+end
+print("Azeroth Commune : royaume et faction par AzerothCommune.lua OK")
+-- Le socle ne se regroupe pas lui-même (pas de ligne dans son menu) ; /ac remplace /gdata, sans « cout » (le socle
+-- n'appelle aucun add-on) ; ses exports sont rendus par AzerothCommune.Exports(), sous son nom.
+assert(#AzerothCommune.regroupes == 0, "le socle n'est pas dans le menu de son bouton")
+assert(SlashCmdList.GAMEDATA == nil and SLASH_GAMEDATA1 == nil and SLASH_AZEROTHCOMMUNE1 == "/ac", "/ac, plus de /gdata")
+AzerothCommuneDB = AzerothCommuneDB or {}
+local dits, exporte = {}, nil
+local garde, exporter = print, AzerothCommune.Exporter
+print = function(m) dits[#dits + 1] = m end
+AzerothCommune.Exporter = function(v, nom) exporte = nom end
+SlashCmdList.AZEROTHCOMMUNE("export")
+SlashCmdList.AZEROTHCOMMUNE("export addons")
+print, AzerothCommune.Exporter = garde, exporter
+assert(dits[1]:find("/ac export addons | erreurs | hv", 1, true), tostring(dits[1]))
+assert(exporte == "ac-addons", "/ac export addons : l'image s'appelle ac-addons")
+local cles = {}
+for _, e in ipairs(AzerothCommune.Exports()) do
+  assert(e.addon == "Azeroth Commune" and e.libelle and e.description and type(e.donnees) == "function", e.cle)
+  cles[#cles + 1] = e.cle
+end
+assert(table.concat(cles, ",") == "perso,persos,recettes,marchands,maitres,hv,addons,erreurs", table.concat(cles, ","))
+assert(ns.costCommand == nil and ns.openCraftWindow == nil, "plus d'emplacement pour Handshake")
+-- La TOC : une seule, « Azeroth Commune », catégorie Données, des SavedVariables neuves.
+local toc = io.open("AzerothCommune/AzerothCommune.toc"):read("*a")
+assert(toc:find("## Title: Azeroth Commune\n", 1, true) and toc:find("## Category: Data\n", 1, true)
+  and toc:find("## Category-frFR: Données\n", 1, true), "titre et catégorie")
+assert(toc:find("## SavedVariables: AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket\n", 1, true), "SavedVariables neuves")
+assert(not toc:find("LibStub", 1, true) and not toc:find("Deps", 1, true), "ni LibStub ni dépendance")
+print("Azeroth Commune : /ac, exports du socle, TOC OK")
+
+-- Souscriptions (GameData#4), sur plusieurs sessions qui partagent les SavedVariables : une souscription faite sur le
+-- personnage A fait relever le type sur le personnage B à sa connexion, même sans l'add-on qui a souscrit ; un type sans
+-- souscription n'est pas relevé ; après 30 jours sans souscription il ne l'est plus, ses données restent ;
+-- /ac effacer <type> les efface.
+AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = nil, nil, nil
+time = os.time
+local tickers
+C_Timer = { After = function(_, fn) fn() end, NewTicker = function(t) tickers[#tickers + 1] = t return { Cancel = noop } end }
+local sortie = {}
+local GUID = { Alice = "Player-6942-0000A11C", Bob = "Player-6942-00000B0B", Carl = "Player-6942-0000CA71" }
+local NOM_DE_FAMILLE = {} -- 2e retour de UnitName sur Forever
+local function session(nom, souscriptions)
+  UnitName = function() return nom, NOM_DE_FAMILLE[nom] end
+  UnitGUID = function(u) if u == "player" then return GUID[nom] end end
+  tickers, sortie = {}, {}
+  AzerothCommune = nil -- nouvelle session : le socle repart de zéro, seules les SavedVariables restent
+  frames = {} -- [fichier] = son dernier cadre, et dans l'ordre de création
+  local gns = {}
+  for _, f in ipairs({ "AzerothCommune", "Interface", "Capture", "Regroupement", "Fournisseurs", "Base", "Commerce", "Souscriptions" }) do
+    local n = #frames
+    charger(f, gns)
+    if #frames > n then frames[f] = frames[#frames] end
+  end
+  frames.Base.fn(frames.Base, "ADDON_LOADED", "AzerothCommune")
+  local lib = AzerothCommune
+  for _, t in ipairs(souscriptions or {}) do assert(lib:Souscrire(t)) end -- l'add-on qui souscrit, chargé après le socle
+  print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end
+  for _, fr in ipairs(frames) do if fr.fn then fr.fn(fr, "PLAYER_LOGIN") end end
+  print = realPrint
+  return gns, lib
+end
+local function ac(cmd) print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end; SlashCmdList.AZEROTHCOMMUNE(cmd); print = realPrint end
+local function objetsScannes() for _, t in ipairs(tickers) do if t == 0.5 then return true end end return false end
+local A, B, C = GUID.Alice, GUID.Bob, GUID.Carl -- les fiches sont rangées par GUID (LibCommune#19)
+
+local gns, glib = session("Alice", { "inventaires" })
+assert(type(AzerothCommuneDB.souscriptions.inventaires) == "number", "souscription retenue avec sa date")
+assert(AzerothCommuneDB.chars[A].bags.Backpack, "A : inventaires relevés")
+
+-- Sacs et banque relevés par lib.Conteneurs (LibCommune#20) : exactement ce que rendait la copie de GameData d'avant,
+-- gardée ici comme référence.
+local function avant(keep)
+  local out, seen = {}, {}
+  for name, bag in pairs(Enum.BagIndex) do
+    if keep(name) and not seen[bag] then
+      seen[bag] = true
+      local size = C_Container.GetContainerNumSlots(bag)
+      if size and size > 0 then
+        local items = {}
+        for slot = 1, size do
+          local it = C_Container.GetContainerItemInfo(bag, slot)
+          if it then items[#items + 1] = { id = it.itemID, count = it.stackCount, link = it.hyperlink } end
+        end
+        out[name] = { size = size, items = items }
+      end
+    end
+  end
+  return out
+end
+local function isBag(n) return n == "Backpack" or n == "Keyring" or n == "ReagentBag" or n:find("^Bag_") ~= nil end
+local function isBank(n) return n:find("[Bb]ank") ~= nil end
+local function pareil(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+  for k, v in pairs(a) do if not pareil(v, b[k]) then return false end end
+  for k in pairs(b) do if a[k] == nil then return false end end
+  return true
+end
+local bags = AzerothCommuneDB.chars[A].bags
+assert(bags.Backpack and bags.Bag_1 and bags.Keyring and bags.ReagentBag, "sacs manquants")
+assert(not bags.Bag_2, "un sac de 0 place ne doit pas apparaître")
+assert(not bags.Bank and not bags.Reagentbank, "la banque n'est pas un sac")
+assert(bags.Backpack.items[1].id == 100 and bags.Backpack.items[1].count == 3 and bags.Backpack.items[1].link == "l")
+assert(pareil(bags, avant(isBag)), "sacs : le même relevé qu'avant")
+frames.Base.fn(frames.Base, "BANKFRAME_OPENED")
+local bank, n = AzerothCommuneDB.chars[A].bank, 0
+for _ in pairs(bank) do n = n + 1 end
+assert(n == 3, "banque : Bank, Reagentbank et un seul des deux noms de l'onglet 1, trouvé " .. n)
+assert(pareil(bank, avant(isBank)), "banque : le même relevé qu'avant")
+frames.Base.fn(frames.Base, "BANKFRAME_CLOSED")
+print("Azeroth Commune : sacs et banque par lib.Conteneurs, comme avant OK")
+assert(not objetsScannes(), "objets sans souscription : pas de scan des objets")
+for _, t in pairs(glib.types) do assert(type(gns[t.gamedata]) == "function", "accesseur de GameData : " .. t.gamedata) end
+for nom in pairs(gns.rangement) do assert(glib.types[nom], "rangé mais pas au catalogue : " .. nom) end
+
+session("Bob") -- l'add-on qui a souscrit n'est pas activé sur B
+local b = AzerothCommuneDB.chars[B]
+assert(b and b.bags.Backpack.items[1].id == 100, "B : inventaires relevés à sa connexion, souscrits sur A")
+assert(b.reputations == nil and b.errors.reputations == nil and b.quests_done == nil, "B : un type sans souscription n'est pas relevé")
+assert(glib.types and AzerothCommune:Lire("inventaires", B).persos[B].bags, "lu par la lib")
+ac("souscriptions")
+local liste = table.concat(sortie, "\n")
+assert(liste:find("inventaires : souscrit le", 1, true) and liste:find("objets : aucune souscription", 1, true), liste)
+
+AzerothCommuneDB.souscriptions.inventaires = os.time() - 31 * 24 * 3600
+session("Carl")
+assert(not (AzerothCommuneDB.chars[C] and AzerothCommuneDB.chars[C].bags), "C : plus de souscription depuis 31 jours, plus relevé")
+assert(AzerothCommuneDB.chars[B].bags.Backpack and AzerothCommuneDB.chars[A].bags, "les données relevées restent")
+ac("souscriptions")
+assert(table.concat(sortie, "\n"):find("plus relevé", 1, true), "la liste dit qu'il n'est plus relevé")
+
+ac("effacer inventaires")
+assert(AzerothCommuneDB.chars[A].bags == nil and AzerothCommuneDB.chars[B].bags == nil and AzerothCommuneDB.chars[B].lots.bags == nil, "inventaires effacés")
+ac("effacer pas un type")
+assert(table.concat(sortie, "\n"):find("inconnu", 1, true), "type inconnu refusé")
+
+-- Types globaux : recettes, maîtres, marchands, HV, objets. Le joueur souscrit lui-même aux objets (/ac souscrire).
+ac("souscrire objets")
+ac("souscrire cours de l'HV")
+assert(gns.souscrit("cours de l'HV"), "/ac souscrire cours de l'HV : le nom tapé tel quel")
+session("Bob")
+assert(objetsScannes(), "objets souscrits : scan des objets lancé")
+AzerothCommuneDB.vendors[42] = { items = {} }
+AzerothCommuneItems.items[7] = { name = "x" }
+ac("effacer objets")
+assert(next(AzerothCommuneItems.items) == nil and AzerothCommuneItems.next_id == 1, "objets effacés, le balayage repart de 1")
+gns.itemTick() -- un ID encore en file d'attente, effacé entre-temps : ignoré sans erreur
+ac("effacer marchands")
+assert(next(AzerothCommuneDB.vendors) == nil, "marchands effacés")
+print("Azeroth Commune : souscriptions OK")
+
+-- Provenance (GameData#5) : chaque lot porte sa provenance, son build et sa date. Une base d'avant les lots est migrée
+-- (relevé direct, build inconnu donc peut-être périmé) ; un build différent marque les lots figés peut-être périmés ;
+-- dans le lot mixte des marchands, la provenance la plus fiable gagne.
+AzerothCommuneDB = { souscriptions = { inventaires = os.time(), marchands = os.time() },
+  chars = { [A] = { errors = {}, scanned = { bags = "2026-11-01 12:00:00" }, bags = { Backpack = { size = 16, items = {} } } } },
+  vendors = { [42] = { name = "Vu en jeu", items = { { id = 159, price = 30, stack = 5 } } } } }
+AzerothCommuneItems, AzerothCommuneMarket = nil, nil
+gns, glib = session("Carl")
+local la = AzerothCommuneDB.chars[A].lots.bags
+assert(la.provenance == "relevé direct" and la.date == "2026-11-01 12:00:00" and la.perime and la.build == nil, "migration d'un champ de perso")
+assert(AzerothCommuneDB.chars[A].scanned == nil, "la date du relevé est passée dans le lot")
+assert(AzerothCommuneDB.lots.marchands.provenance == "relevé direct" and AzerothCommuneDB.lots.marchands.perime, "migration d'un type du joueur")
+local _, lot = glib:Lire("inventaires")
+lot = lot.persos[C]
+assert(lot.provenance == "relevé direct" and lot.build == 64000 and lot.version == "1.16.1" and lot.date and not lot.perime, "lire un type rend provenance, build et date")
+_, lot = glib:Lire("inventaires", "tous")
+assert(lot.persos[A].perime and lot.persos[C].build == 64000, "lots de chaque perso")
+
+-- Lot mixte : le marchand 42 vu en jeu garde sa liste, le 7 (seulement dans VendorData) vient de la base, marqué.
+-- Le 8 n'est amical que pour la Horde : absent pour un personnage de l'Alliance ; le 9 (Alliance) reste.
+gns.VENDOR_DB = { [159] = { 25, 5, "42,7,8H,9A", 1, 20 } }
+local m7
+m, lot = glib:Lire("marchands")
+m7 = m[7]
+assert(m[42].items[1].price == 30 and m[42].provenance == nil and lot == AzerothCommuneDB.lots.marchands, "vu en jeu > VendorData")
+assert(m7.provenance == "source externe" and m7.items[1].price == 25 and AzerothCommuneDB.vendors[7] == nil, "marchand pas vu : la base, sans rien sauvegarder")
+assert(m7.items[1].sell == 1 and m7.items[1].maxStack == 20, "ligne de la base : revente et taille de pile")
+assert(m[8] == nil and m[9].items[1].id == 159, "base : pas de PNJ amical pour la seule faction adverse")
+ac("effacer marchands")
+m, lot = glib:Lire("marchands")
+assert(m[42].provenance == nil and m[42].items[1].price == 25 and lot.provenance == "source externe" and lot.perime, "seule la base : lot source externe, build inconnu")
+
+-- Nouveau build du client : les lots figés sous l'ancien sont marqués peut-être périmés, rien n'est effacé.
+gns.noterLot("marchands") -- un marchand vu sous le build 64000
+assert(AzerothCommuneDB.lots.marchands.build == 64000 and not AzerothCommuneDB.lots.marchands.perime)
+BUILD = "64100"
+gns, glib = session("Alice")
+local lm = AzerothCommuneDB.lots.marchands
+assert(lm.perime and lm.build == 64000, "lot du joueur figé sous l'ancien build : peut-être périmé")
+assert(AzerothCommuneDB.chars[C].lots.bags.perime and AzerothCommuneDB.chars[C].bags, "lot d'un perso pas connecté : marqué, gardé")
+assert(AzerothCommuneDB.chars[A].lots.bags.build == 64100 and not AzerothCommuneDB.chars[A].lots.bags.perime, "perso connecté : relevé à nouveau, plus périmé")
+local figeLe = lm.date
+lm.date = "2026-11-01 12:00:00"
+gns.noterLot("marchands") -- un autre marchand vu : les autres restent d'avant
+assert(lm.perime and lm.build == 64000 and AzerothCommuneDB.lots.marchands == lm, "relevé partiel : le lot reste peut-être périmé")
+assert(lm.date == "2026-11-01 12:00:00" and figeLe, "relevé partiel d'un lot périmé : sa date reste celle où il a été figé")
+gns.noterLot("marchands", true)
+assert(AzerothCommuneDB.lots.marchands.build == 64100 and not AzerothCommuneDB.lots.marchands.perime, "relevé entier : plus périmé")
+print("Azeroth Commune : provenance, build et date des lots OK")
+
+-- Recettes connues sous un nouveau build (64100) : la fenêtre d'un métier ne relève que ce métier. Une fenêtre qui ne
+-- relève rien (liste pas à jour, métier d'un autre) ne touche pas au lot ; le lot n'est plus périmé que quand chaque
+-- métier a été relevé sous ce build. Le relevé sans fenêtre note son lot à la fin.
+AzerothCommuneDB.souscriptions["recettes connues"] = os.time()
+local ca = AzerothCommuneDB.chars[A]
+ca.recipes = { Minage = { rank = 100, max = 150, known = {} }, Couture = { rank = 50, max = 75, known = {} } }
+ca.lots.recipes = { provenance = "relevé direct", build = 64000, date = "2026-11-01 12:00:00", perime = true }
+local lr = ca.lots.recipes
+local commerceS = frames.Commerce
+local function fenetre() commerceS.fn(commerceS, "TRADE_SKILL_LIST_UPDATE") end
+local function inchange(quoi)
+  assert(ca.lots.recipes == lr and lr.perime and lr.build == 64000 and lr.date == "2026-11-01 12:00:00", quoi)
+  assert(ca.errors.recipes == nil, tostring(ca.errors.recipes))
+end
+C_TradeSkillUI.GetProfessionInfoByRecipeID = function() return { professionName = "Forge" } end
+fenetre()
+inchange("liste pas à jour : rien de relevé, lot inchangé")
+C_TradeSkillUI.GetProfessionInfoByRecipeID, C_TradeSkillUI.IsTradeSkillLinked = nil, function() return true end
+fenetre()
+inchange("métier d'un autre : rien de relevé, lot inchangé")
+C_TradeSkillUI.IsTradeSkillLinked = nil
+fenetre()
+assert(ca.recipes.Minage.known[3307] and ca.recipes.Minage.build == 64100, "Minage relevé sous le nouveau build")
+inchange("un métier relevé, Couture encore d'avant : relevé partiel, lot toujours peut-être périmé")
+local base0 = C_TradeSkillUI.GetBaseProfessionInfo
+C_TradeSkillUI.GetBaseProfessionInfo = function() return { professionName = "Couture", skillLevel = 60, maxSkillLevel = 75 } end
+fenetre()
+C_TradeSkillUI.GetBaseProfessionInfo = base0
+assert(ca.lots.recipes.build == 64100 and not ca.lots.recipes.perime, "chaque métier relevé sous ce build : lot entier, plus périmé")
+local fini
+glib.ReleverRecettesSansFenetre = function(_, _, _, f) fini = f return true end
+ca.lots.recipes = nil
+commerceS.fn(commerceS, "PLAYER_LOGIN")
+assert(fini and ca.lots.recipes == nil, "relevé sans fenêtre en cours : lot pas encore noté")
+fini()
+assert(ca.lots.recipes and ca.lots.recipes.build == 64100, "relevé sans fenêtre fini : lot noté")
+print("Azeroth Commune : lot des recettes connues, par métier OK")
+
+-- Fiches par GUID (LibCommune#19), avec le nom « Prénom Nom » ; un autre perso du joueur se lit par sa fiche.
+-- (SavedVariables neuves : plus de reprise des fiches d'avant le GUID.)
+NOM_DE_FAMILLE.Alice = "Dupont"
+AzerothCommuneDB = { souscriptions = { inventaires = os.time() } }
+AzerothCommuneItems, AzerothCommuneMarket = nil, nil
+gns, glib = session("Alice")
+local fa = AzerothCommuneDB.chars[A]
+assert(fa and fa.nom == "Alice Dupont" and fa.adresse == nil and fa.bags, "fiche sous le GUID, avec le nom")
+local pa = glib.Personnage(A)
+assert(pa.guid == A and pa.adresse == nil and pa.nom == "Alice Dupont", "AzerothCommune.Personnage : le perso connecté")
+assert(gns.personnage(A).nom == "Alice Dupont" and gns.personnage("Player-6942-0000DEAD") == nil, "accesseur privé personnage")
+gns, glib = session("Bob")
+assert(glib.Personnage(A).nom == "Alice Dupont" and glib.Personnage(A).adresse == nil, "un autre perso du joueur : sa fiche dans la base")
+for k in pairs(glib:Lire("inventaires", "tous").persos) do assert(k:find("^Player%-"), "lu : seulement des GUID, pas " .. k) end
+local exportPerso
+for _, e in ipairs(glib.Exports()) do if e.cle == "perso" then exportPerso = e end end
+assert(next(exportPerso.donnees()) == B, "export perso : sous le GUID")
+NOM_DE_FAMILLE.Alice = nil
+print("Azeroth Commune : fiches par GUID OK")
+end

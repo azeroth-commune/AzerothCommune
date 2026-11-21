@@ -1,13 +1,8 @@
--- LibCommune : fenêtres, tableaux triables, montants et noms d'objets, une seule copie pour tous les add-ons.
--- Appel avec un point (lib.Argent(c), pas lib:Argent) : ces fonctions servent aussi telles quelles de fmt à un tableau.
--- Rien n'est sauvegardé ici : ce qui doit durer (tri d'un tableau, base des objets) est une table de l'add-on, passée
--- en paramètre (opts.store, objets, garde).
-local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
--- Ce fichier a sa propre version : de deux copies de la lib (deux add-ons qui l'embarquent), la plus récente sert.
-local VERSION = 2 -- 2 : sonde des noms d'objets
-lib.versions = lib.versions or {}
-if (lib.versions.interface or 0) >= VERSION then return end
-lib.versions.interface = VERSION
+-- Azeroth Commune : fenêtres, tableaux triables, montants et noms d'objets, pour tous les add-ons.
+-- Appel avec un point (AzerothCommune.Argent(c), pas :Argent) : ces fonctions servent aussi telles quelles de fmt à un
+-- tableau. Rien n'est sauvegardé ici : ce qui doit durer (tri d'un tableau, base des objets) est une table de l'add-on,
+-- passée en paramètre (opts.store, objets, garde).
+local lib = AzerothCommune
 
 ---------------------------------------------------------------------------------------------------
 -- Une fenêtre sombre, bord lavande, déplaçable, fermée par Échap, avec titre, croix et bouton capture.
@@ -60,22 +55,17 @@ function lib.ArgentSigne(c)
 end
 
 ---------------------------------------------------------------------------------------------------
--- Noms d'objets. objets = { [id] = { name, link } } : la base de l'add-on (GameDataItems.items, HandshakeDB.items…).
+-- Noms d'objets. objets = { [id] = { name, link } } : la base de l'add-on (HandshakeDB.items…).
 -- garde : la table où retenir le nom d'un objet quand le serveur l'envoie (nil : ne rien retenir, un autre s'en charge).
--- Dans la lib et pas dans ce fichier : le cadre d'écoute (lib.cadreObjets) d'une copie plus ancienne le lit aussi.
-local demandes = lib.demandesObjets or {} -- [id] = garde (ou false) : déjà demandé au serveur cette session
-lib.demandesObjets = demandes
+local demandes = {} -- [id] = garde (ou false) : déjà demandé au serveur cette session
 
 -- Sonde : un objet en cache rend son nom. Vérifiée quand le client rend quelque chose de l'objet, ou quand le serveur
 -- vient de l'envoyer (charge) ; un objet pas encore en cache n'est pas vérifié. Sans relevé sans contexte : il faut un objet.
--- Chargé seul (outils, tests), sans LibCommune.lua : pas de sonde.
-if lib.DeclarerSonde then
-  lib.DeclarerSonde("nom d'objet", "C_Item.GetItemInfo(id) rend le nom d'un objet en cache, non vide",
-    function(nom) return type(nom) == "string" and nom ~= "" end)
-end
+lib.DeclarerSonde("nom d'objet", "C_Item.GetItemInfo(id) rend le nom d'un objet en cache, non vide",
+  function(nom) return type(nom) == "string" and nom ~= "" end)
 local function infoObjet(id, charge)
   local name, link = C_Item.GetItemInfo(id)
-  if lib.Sonder and (name ~= nil or link ~= nil or charge) then lib.Sonder("nom d'objet", name) end
+  if name ~= nil or link ~= nil or charge then lib.Sonder("nom d'objet", name) end
   return name, link
 end
 
