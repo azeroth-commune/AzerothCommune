@@ -5,8 +5,9 @@ add-on (ADR 0002 de l'atelier), API publique sur le global `AzerothCommune`, int
 `README.md`. Repo `azeroth-commune/AzerothCommune` (privé pour l'instant ; les issues et l'historique de LibCommune, et
 l'historique de GameData). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
 Déploiement : lien symbolique depuis le dossier AddOns du jeu, `/reload` suffit. Vérifier : `luajit AzerothCommune/check.lua`
-depuis le dossier des add-ons, puis `tools/sim.sh test AzerothCommune` dans l'atelier. `VendorData.lua` et `RecettesClassic.lua`
-sont générés (`tools/build_vendor_data.py`, `tools/build_recipe_data.py`) et ignorés par git : les copier dans un worktree.
+depuis le dossier des add-ons, puis `tools/sim.sh test AzerothCommune` dans l'atelier. `VendorData.lua`, `RecettesClassic.lua`
+et `CatalogueObjets.lua` sont générés (`tools/build_vendor_data.py`, `tools/build_recipe_data.py`, `tools/build_item_catalog.py`)
+et ignorés par git : les copier dans un worktree.
 
 ## Agent skills
 

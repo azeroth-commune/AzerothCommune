@@ -108,7 +108,33 @@ lire["add-ons installés"] = function() return AzerothCommuneDB.addons, AzerothC
 lire["cours de l'HV"] = function()
   if next(AzerothCommuneMarket) then return { hv = AzerothCommuneMarket, depot = AzerothCommuneDB.deposit }, AzerothCommuneDB.lots["cours de l'HV"] end
 end
-lire.objets = function() return AzerothCommuneItems.items, AzerothCommuneDB.lots.objets end
+-- Objets (#52) : les objets relevés en jeu, puis le catalogue des objets (CatalogueObjets.lua, généré par
+-- tools/build_item_catalog.py de l'atelier depuis la table ItemSparse du client, hors du repo tant que la licence n'est pas
+-- choisie : absent d'un repo cloné tel quel) pour les autres, chaque ligne marquée « extrait du client ». Un objet relevé
+-- l'emporte dès qu'il a son nom, ou que le serveur ne le connaît pas (unknown) ; vu par le balayage mais pas encore demandé
+-- au serveur, il prend la ligne du catalogue. Lot : celui du relevé dès qu'un objet relevé a son nom, sinon celui du
+-- catalogue (extrait du client, peut-être périmé sous un autre build). Sans catalogue : les objets relevés, comme avant.
+-- ponytail: fusion gardée 5 s (les add-ons lisent « objets » objet par objet) ; un objet relevé entre-temps attend la
+-- suivante, le catalogue a déjà son nom.
+local fusion = {}
+lire.objets = function()
+  local vus, cat = AzerothCommuneItems.items, ns.catalogueObjets
+  if not cat then return vus, AzerothCommuneDB.lots.objets end
+  if fusion.vus ~= vus or fusion.cat ~= cat or GetTime() - fusion.quand >= 5 then
+    local d, releve = {}, false
+    for id, it in pairs(cat) do d[id] = it end
+    for id, it in pairs(vus or {}) do
+      if it.name or it.unknown or not cat[id] then d[id], releve = it, releve or it.name ~= nil end
+    end
+    fusion = { vus = vus, cat = cat, quand = GetTime(), d = d, releve = releve }
+  end
+  if fusion.releve then return fusion.d, AzerothCommuneDB.lots.objets end
+  local lot = {}
+  for k, v in pairs(ns.catalogueObjetsLot or {}) do lot[k] = v end
+  -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
+  lot.provenance, lot.perime = "extrait du client", GetBuildInfo and lot.build ~= lib.Build() or nil
+  return fusion.d, lot
+end
 -- Lu par AzerothCommune.Personnage(guid) : le nom d'un perso du joueur, gardé dans sa fiche à chaque connexion.
 function ns.personnage(guid)
   local c = AzerothCommuneDB and AzerothCommuneDB.chars[guid]

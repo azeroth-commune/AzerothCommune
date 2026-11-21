@@ -12,6 +12,7 @@ Regroupement.lua
 Fournisseurs.lua
 Base.lua
 RecettesClassic.lua
+CatalogueObjets.lua
 Commerce.lua
 Souscriptions.lua
 VendorData.lua

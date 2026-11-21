@@ -22,6 +22,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (données cMaNGOS GPL-3.0) : hors du repo, ignoré par git |
+| `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, hors du repo, ignoré par git ; sans lui, le type « objets » rend les seuls objets relevés |
 | `RecettesClassic.lua` | la réserve Classic de la base des recettes, privée au socle : générée par `tools/build_recipe_data.py` de l'atelier (données cMaNGOS GPL-3.0), hors du repo, ignorée par git ; sans elle, la base des recettes rend les seules recettes vues |
 
 ## Accès aux données relevées
@@ -47,7 +48,8 @@ local d, lot = AC:Lire("marchands")
 -- jamais nil quand d est là : {} (ou { persos = {} }) si la base n'en a pas
 -- provenance (AC.provenances) : « relevé direct » > « extrait du client » > « autre add-on » > « source externe »
 -- perime = true : figé sous un autre build du client, peut-être périmé (marqué au chargement)
--- lot mixte (marchands : vus en jeu et base VendorData) : une ligne d'une autre provenance porte la sienne
+-- lot mixte (marchands : vus en jeu et base VendorData ; objets : relevés et catalogue extrait du client) : une ligne
+-- d'une autre provenance porte la sienne
 local lignes, provenance = AC.Fusionner({ { donnees = a, provenance = "relevé direct" }, { donnees = b, provenance = "autre add-on" } })
 -- pour chaque clé, la ligne de la provenance la plus fiable gagne ; une provenance inconnue passe en dernier ; sources intactes
 local hv, lot = AC:Lire("cours de l'HV")           -- type lourd : scan du socle et fournisseurs (Fournisseurs.lua)
@@ -64,6 +66,8 @@ AC:PrixMarchands()                                  -- { [itemID] = prix unitair
 
 Types de données (`AC.types`) : inventaires, réputations, métiers et compétences, quêtes terminées, recettes connues
 (par personnage) ; base des recettes, maîtres de métier, marchands, prix des vols, add-ons installés, cours de l'HV, objets (pour le joueur).
+« objets » : les objets relevés en jeu, puis, pour les autres, le catalogue des objets livré avec le socle (provenance
+« extrait du client » sur chaque ligne : `name`, `quality`) ; un objet relevé l'emporte dès qu'il a son nom.
 
 ### Personnage
 
@@ -162,8 +166,9 @@ AC.Argent(c), AC.ArgentCourt(c), AC.ArgentSigne(c)           -- montants (court 
 AC.NomObjet(id, objets, garde)       -- lien ou nom ; inconnu : demandé au serveur, retenu dans garde à l'arrivée
 AC.RetenirObjet(id, garde), AC.TrouverObjet(texte, objets, recettes) -- d'après un lien, un ID, un nom d'objet ou de recette
 AC.ChercherObjets(texte, max)        -- { { id, name, fabricable }, … } : les objets dont le nom contient texte (2 lettres
-                                     -- au moins, 8 par défaut), vus ou fabriqués par la base des recettes (jamais vus : par
-                                     -- le nom de leur recette) ; fabricables d'abord, puis ceux qui commencent par texte.
+                                     -- au moins, 8 par défaut), parmi les objets (vus, et tout le catalogue extrait du client
+                                     -- s'il est là) et ceux que fabrique la base des recettes (jamais vus : par le nom de leur
+                                     -- recette) ; fabricables d'abord, puis ceux qui commencent par texte.
                                      -- Lit « objets » et « base des recettes » : l'add-on qui cherche y souscrit.
 AC.Capturer(cadre, libellé), AC.BoutonCapture(cadre, libellé, x, y) -- photo de l'écran avec repères magenta
 AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs (tools/crop_captures.py)
