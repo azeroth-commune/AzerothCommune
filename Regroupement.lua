@@ -9,7 +9,7 @@
 --   outils : facultatif, une ligne par outil sous celle de l'add-on dans le menu du bouton ; fenetre (facultatif) : le
 --   nom de sa fenêtre, qui passe devant si elle est déjà ouverte au lieu d'être rouverte.
 --   exports : facultatif, ce que l'add-on sait photographier en grilles (export de Capture.lua) ; lib.Exports() rend
---   ceux de tous les add-ons regroupés, que la fenêtre de GameData affiche en attendant un module de debug de la lib.
+--   ceux de tous les add-ons regroupés, que l'add-on d'atelier Diagnostic liste et lance (LibCommune#33).
 -- Bouton : clic = l'add-on s'il est seul, sinon la liste des add-ons et de leurs outils ; clic droit = les réglages ;
 -- glisser = le déplacer.
 -- Seul, un add-on garde son icône sur le bouton et sa page est l'entrée elle-même : un bouton, une entrée, rien de plus
