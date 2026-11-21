@@ -99,7 +99,7 @@ gardé et fait foi.
   `hist` : AuctionDB dès qu'il en a un, même ancien (un historique de plusieurs jours reste juste), sinon celui du
   socle ; le socle n'en garde pas de copie quand AuctionDB a scanné l'HV il y a moins de 6 h
   (`AC:ChampsARelever("cours de l'HV")`).
-- **Sans** (pas encore de scan de cet HV) : les fournisseurs seuls, jamais de relevé de repli.
+- **Sans** (pas encore de scan de cet HV) : les fournisseurs seuls ; ni scan ni fournisseur : « pas encore relevé ».
 
 | Champ | Fournisseurs, dans l'ordre (sans scan du socle) |
 |---|---|
