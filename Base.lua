@@ -193,10 +193,11 @@ end
 --      jamais en combat, ni pendant 5 s autour d'un écran de chargement ou d'une fenêtre de quête,
 --      de PNJ ou de marchand, pour que leurs propres objets passent d'abord.
 -- La progression est sauvée : le scan reprend où il en était à la session suivante.
--- ponytail: borne fixe de 260 000 IDs ; à remonter si le catalogue trouve des objets jusqu'au bout.
-local MAX_ITEM_ID, LOCAL_PER_TICK, ASK_PER_TICK, TICK = 260000, 2000, 5, 0.5
+-- Borne (#56) : le plus grand ID du catalogue des objets extrait du client (CatalogueObjets.lua) et une marge, posée à la
+-- connexion (itemsReady : la TOC charge le catalogue après Base.lua) ; sans catalogue (repo cloné tel quel), 300 000.
+-- ponytail: marge fixe de 5 000 IDs pour les objets ajoutés depuis l'extraction ; régénérer le catalogue la fait suivre.
+local MAX_ITEM_ID, LOCAL_PER_TICK, ASK_PER_TICK, TICK = 300000, 2000, 5, 0.5
 local todo, pos, quietUntil = {}, 1, 0
-ns.MAX_ITEM_ID = MAX_ITEM_ID
 
 local function record(id)
   local it = AzerothCommuneItems.items[id]
@@ -252,6 +253,12 @@ ns.itemLoaded = itemLoaded
 local function itemsReady() -- à la connexion : reprendre les objets encore sans détails
   AzerothCommuneItems.items = AzerothCommuneItems.items or {}
   AzerothCommuneItems.next_id = AzerothCommuneItems.next_id or 1
+  MAX_ITEM_ID = 300000
+  if ns.catalogueObjets then
+    MAX_ITEM_ID = 0
+    for id in pairs(ns.catalogueObjets) do if id > MAX_ITEM_ID then MAX_ITEM_ID = id end end
+    MAX_ITEM_ID = MAX_ITEM_ID + 5000
+  end
   for id, it in pairs(AzerothCommuneItems.items) do
     if not it.name and not it.unknown then todo[#todo + 1] = id end
   end
