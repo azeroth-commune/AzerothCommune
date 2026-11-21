@@ -23,6 +23,10 @@ assert(loadfile("LibCommune/LibCommune.lua"))()
 assert(loadfile("LibCommune/Fournisseurs.lua"))()
 local lib = LibStub("LibCommune-1.0")
 UnitFactionGroup = function() return "Alliance" end
+-- Sondes (#30), avant tout relevé : chacune « pas encore vue ».
+for _, nom in ipairs({ "royaume", "royaume normalisé", "maison de l'HV", "GUID", "nom", "faction", "build" }) do
+  assert(lib.Sondes()[nom] and lib.Sondes()[nom].etat == "pas encore vue", "jamais vérifiée : " .. nom)
+end
 
 -- GameData présent : la lib lit sa base par GameDataAPI.recettesConnues, recettes connues de tous les personnages.
 local base = {
