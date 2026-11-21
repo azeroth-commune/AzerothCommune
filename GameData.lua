@@ -53,8 +53,8 @@ function scan.character()
   local _, class = UnitClass("player")
   local _, race = UnitRace("player")
   return {
-    name = lib.Personnage().nom, realm = GetRealmName(), class = class, race = race, level = UnitLevel("player"),
-    faction = UnitFactionGroup("player"), guild = GetGuildInfo("player"), money = GetMoney(),
+    name = lib.Personnage().nom, realm = lib.Royaume(), class = class, race = race, level = UnitLevel("player"),
+    faction = lib.Faction(), guild = GetGuildInfo("player"), money = GetMoney(),
     xp = UnitXP("player"), xp_max = UnitXPMax("player"), zone = GetZoneText(),
   }
 end
@@ -156,8 +156,11 @@ local function char()
   local c = GameDataDB.chars[p.guid]
   if not c then
     local anciens = GameDataDB.anciensPersos or {}
-    local ancienne = p.nom .. "-" .. GetRealmName() -- la clé d'avant
-    c, anciens[ancienne] = anciens[ancienne] or { errors = {}, lots = {} }, nil
+    -- la clé d'avant, au royaume affiché d'alors : comparée sous forme normalisée, quelle que soit celle de lib.Royaume()
+    local ancienne, cible = nil, (p.nom .. lib.RoyaumeNormalise()):gsub("[%s%-]", "")
+    for k in pairs(anciens) do if k:gsub("[%s%-]", "") == cible then ancienne = k end end
+    c = ancienne and anciens[ancienne] or { errors = {}, lots = {} }
+    if ancienne then anciens[ancienne] = nil end
     if not next(anciens) then GameDataDB.anciensPersos = nil end
     ns.verifierFiche(c) -- reprise : ses lots figés sous un autre build sont peut-être périmés, comme au chargement
     GameDataDB.chars[p.guid] = c
@@ -349,7 +352,7 @@ end)
 -- HV en lignes compactes (65 pages en JSON complet avec l'historique, le 18/11/2026) : le dernier scan de ton HV,
 -- une ligne par objet « id,min,quantité,enchères,prix:qté prix:qté prix:qté » (3 premiers paliers).
 local function exportHV()
-  local h = GetRealmName() .. "-" .. UnitFactionGroup("player")
+  local h = lib.MaisonHV()
   local m = GameDataMarket[h]
   if not m then return { hv = h, absent = true } end
   local lines = {}

@@ -12,6 +12,7 @@
 -- Rien ne se lit sans la fenêtre ouverte (sauf les recettes connues, relevées aussi à la connexion parmi celles déjà
 -- vues) : ouvre tes métiers, parle aux maîtres et aux marchands, ouvre l'HV.
 local _, ns = ...
+local lib = LibStub("LibCommune-1.0") -- royaume, faction, maison de l'HV : relevés et sondés par la lib (GameData#24)
 
 local function itemIDOf(link) return tonumber(link and link:match("item:(%d+)")) end
 
@@ -38,7 +39,7 @@ local function npc()
   return id or UnitName("npc"), {
     name = UnitName("npc"), zone = GetZoneText(), subzone = GetSubZoneText(), map = map,
     x = x and math.floor(x * 1000) / 10, y = y and math.floor(y * 1000) / 10,
-    faction = UnitFactionGroup("player"), seen = ns.now(),
+    faction = lib.Faction(), seen = ns.now(),
   }
 end
 
@@ -203,7 +204,7 @@ end
 local SCAN_COOLDOWN, BATCH, TIERS = 15 * 60, 2000, 60
 local ahOpen, reading, lastRequest, readAt = false, false, 0, nil
 
-local function house() return GetRealmName() .. "-" .. UnitFactionGroup("player") end
+local function house() return lib.MaisonHV() end
 -- ponytail: un HV par royaume et faction ; les HV neutres (gobelins) se mélangent à celui de la faction.
 
 -- rows : { {id, count, buyout}, … } -> { [itemID] = { min, qty, auctions, tiers = { {price, qty}, … } } }

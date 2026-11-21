@@ -120,16 +120,18 @@ ns.char, ns.run = char0, run0
 -- Lecture de l'HV : GameData appelle ns.marketScanned ensuite, où un consommateur (le Négoce) s'accroche.
 C_AuctionHouse = { ReplicateItems = noop, GetNumReplicateItems = function() return 1 end,
   GetReplicateItemInfo = function() return nil, nil, 5, nil, nil, nil, nil, nil, nil, 500, nil, nil, nil, nil, nil, nil, 2772 end }
-GetRealmName, UnitFactionGroup, time, GameDataMarket = function() return "R" end, function() return "Alliance" end, os.time, {}
+-- La maison de l'HV vient de la lib (lib.MaisonHV) : la même qu'avant, « royaume-faction » au royaume rendu (GameData#24).
+local MAISON = "CAMWOW EU4 Realm 8 PvP-Alliance"
+GetRealmName, UnitFactionGroup, time, GameDataMarket = function() return "CAMWOW EU4 Realm 8 PvP" end, function() return "Alliance" end, os.time, {}
 local scanned, realPrint = 0, print
 ns.marketScanned = function() scanned = scanned + 1 end
 print = noop
 commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
 commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
 print = realPrint
-assert(GameDataMarket["R-Alliance"].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
+assert(GameDataMarket[MAISON].items[2772].min == 100 and scanned == 1, "HV lu, puis marketScanned appelé une fois")
 -- Sans fournisseur, le scan de l'HV marche comme avant : GameData relève tout (prix, quantité, paliers, historique).
-local hvR = GameDataMarket["R-Alliance"]
+local hvR = GameDataMarket[MAISON]
 assert(hvR.items[2772].qty == 5 and hvR.items[2772].auctions == 1 and hvR.items[2772].tiers[1].price == 100, "tout relevé")
 assert(#hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100 and hvR.hist[2772][1][3] == 5, "historique relevé")
 local hvLib, lotLib = LibStub("LibCommune-1.0"):Lire("cours de l'HV")
@@ -152,7 +154,7 @@ Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function(_, id) return 
 local T = os.time() - 600
 AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { T } }, items = { [2772] = ("%d,90,95,300"):format(T) } } } }
 scanHV()
-hvR = GameDataMarket["R-Alliance"]
+hvR = GameDataMarket[MAISON]
 assert(scanned == 2 and hvR.items[2772].min == 100 and hvR.items[2772].qty == 5 and hvR.items[2772].tiers[1].price == 100, "prix, quantité, paliers gardés comme avant")
 assert(hvR.hist == nil, "AuctionDB frais : pas de copie de l'historique")
 hvLib, lotLib = LibStub("LibCommune-1.0"):Lire("cours de l'HV")
@@ -166,11 +168,20 @@ assert(export("hv").donnees().items == "2772,100,5,1,100:5", "export comme avant
 -- celui d'AuctionDB (plusieurs jours) passe quand même avant le point unique de GameData (relecture de Negoce#1).
 AuctionDBForeverSaved.houses["na-forever-rp Alliance"].scans = { { os.time() - 7 * 3600 } }
 scanHV()
-hvR = GameDataMarket["R-Alliance"]
+hvR = GameDataMarket[MAISON]
 assert(scanned == 3 and #hvR.hist[2772] == 1 and hvR.hist[2772][1][2] == 100, "historique gardé par GameData")
 assert(LibStub("LibCommune-1.0"):Lire("cours de l'HV").objet(2772).sources.hist == "AuctionDB", "lu : l'historique d'AuctionDB d'abord")
 Auctionator, AuctionDBForeverSaved = nil, nil
 print("GameData : fournisseurs des cours de l'HV OK")
+-- Royaume et faction relevés par la lib, qui les sonde (GameData#24) : plus d'appel direct dans le code chargé.
+for _, f in ipairs({ "GameData.lua", "Commerce.lua", "Souscriptions.lua", "Window.lua" }) do
+  local code = io.open("GameData/" .. f):read("*a")
+  for _, appel in ipairs({ "GetRealmName", "GetNormalizedRealmName", "UnitFactionGroup" }) do
+    local n = select(2, code:gsub(appel .. "%(", ""))
+    assert(n == 0, f .. " : appel direct à " .. appel)
+  end
+end
+print("GameData : royaume et faction par la lib OK")
 print("GameData : vérifications OK")
 -- Fenêtre, tableaux, montants, noms d'objets : dans LibCommune (testés par LibCommune/check.lua), plus de copie ici.
 assert(loadfile("GameData/Window.lua"))("GameData", ns)
@@ -430,10 +441,12 @@ print("GameData : lot des recettes connues, par métier OK")
 -- nom de famille), sort de chars au chargement ; la fiche du perso connecté est reprise sous son GUID à sa connexion,
 -- avec son adresse et son nom, et ses lots figés sous un autre build sont marqués peut-être périmés ; celle d'un perso
 -- pas encore connecté attend dans anciensPersos, sans être lue par la lib, et /gdata effacer la touche aussi.
+-- La clé d'Alice porte le royaume affiché d'alors (« Ker ys ») : la reprise compare les formes normalisées, et tient quand
+-- lib.Royaume() passe au normalisé (LibCommune#35).
 GetNormalizedRealmName = function() return "Kerys" end
 NOM_DE_FAMILLE.Alice = "Dupont"
 GameDataDB = { souscriptions = { inventaires = os.time() }, chars = {
-  ["Alice Dupont-Kerys"] = { errors = {}, mail = { { subject = "d'Alice" } },
+  ["Alice Dupont-Ker ys"] = { errors = {}, mail = { { subject = "d'Alice" } },
     lots = { mail = { provenance = "relevé direct", build = 64000, date = "2026-11-01 12:00:00" } } },
   ["Bob-Kerys"] = { errors = {}, lots = {}, mail = { { subject = "gardé" } }, quests_done = { 1 } } } }
 GameDataItems, GameDataMarket = nil, nil
@@ -442,8 +455,8 @@ local fa = GameDataDB.chars[A]
 assert(fa and fa.mail[1].subject == "d'Alice", "fiche « Prénom Nom-Royaume » reprise sous le GUID")
 assert(fa.adresse == "Alice-Kerys" and fa.nom == "Alice Dupont", "adresse sans le nom de famille, nom avec : " .. tostring(fa.adresse))
 assert(fa.lots.mail.perime and fa.lots.mail.build == 64000, "reprise sous un nouveau build (64100) : lot peut-être périmé")
-assert(GameDataDB.chars["Alice Dupont-Kerys"] == nil and GameDataDB.chars["Bob-Kerys"] == nil, "plus d'ancienne clé dans chars")
-assert(GameDataDB.anciensPersos["Bob-Kerys"] and not GameDataDB.anciensPersos["Alice Dupont-Kerys"], "Bob attend sa connexion")
+assert(GameDataDB.chars["Alice Dupont-Ker ys"] == nil and GameDataDB.chars["Bob-Kerys"] == nil, "plus d'ancienne clé dans chars")
+assert(GameDataDB.anciensPersos["Bob-Kerys"] and not GameDataDB.anciensPersos["Alice Dupont-Ker ys"], "Bob attend sa connexion")
 for k in pairs(GameDataDB.chars) do assert(k:find("^Player%-"), "chars : seulement des GUID, pas " .. k) end
 local tousInv = glib:Lire("inventaires", "tous")
 for k in pairs(tousInv.persos) do assert(k:find("^Player%-"), "lu par la lib : seulement des GUID, pas " .. k) end

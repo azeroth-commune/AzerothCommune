@@ -125,7 +125,7 @@ end
 -- seule faction adverse du personnage connecté n'en fait pas partie.
 local parPNJ, pourFaction -- ponytail: VendorData ne change pas en jeu, regroupée par PNJ une fois par faction
 local function vendorDataParPNJ()
-  local faction = (UnitFactionGroup("player") or ""):sub(1, 1) -- "A", "H", ou "" (pas encore connue : pas de filtre)
+  local faction = (LibStub("LibCommune-1.0").Faction() or ""):sub(1, 1) -- "A", "H", ou "" (inconnue : sa sonde prévient)
   if pourFaction ~= faction then
     parPNJ, pourFaction = {}, faction
     for id, d in pairs(ns.VENDOR_DB or {}) do
