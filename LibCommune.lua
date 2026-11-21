@@ -20,6 +20,10 @@
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
 -- Personnage : lib.Personnage(guid) = { guid, adresse, nom } ; lib.Adresse(nom, royaume), lib.Destinataire(nom).
 -- Prix d'achat : lib:PrixAchat(id, qty, hv, marchands), lib:PrixMarchands() (en fin de fichier).
+-- Identité, chaque relevé sondé : lib.Royaume() (affiché), lib.RoyaumeNormalise() (sans espace ni tiret, celui des
+-- adresses), lib.MaisonHV() (« royaume-faction », clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
+-- Sondes : lib.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
+-- lib.RelancerSondes() refait les relevés sans contexte. Une sonde rouge prévient dans le chat, ne corrige rien.
 local MAJOR, MINOR = "LibCommune-1.0", 10
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert

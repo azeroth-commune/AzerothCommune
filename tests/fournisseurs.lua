@@ -2,7 +2,7 @@
 -- avec GameData, et une fausse API d'Auctionator le temps d'un test (si le vrai Auctionator est chargé, il est remis après).
 test("Fournisseurs.lua est chargé avec la lib", function()
     local lib = LibStub("LibCommune-1.0")
-    assertEquals(2, lib.versions.fournisseurs)
+    assertEquals(3, lib.versions.fournisseurs)
     assertType("function", lib.ChampsARelever)
     assertType("table", lib.fournisseurs["cours de l'HV"])
 end)

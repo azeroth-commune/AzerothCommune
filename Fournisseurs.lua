@@ -17,7 +17,7 @@
 -- seulement ; AuctionDB (GPL v3 dans son LICENSE, LGPLv3 dans son TOC) n'a pas d'API publique : ses SavedVariables, au
 -- format décrit dans son History.lua. Sa qty compte aussi les enchères sans achat immédiat.
 local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
-local VERSION = 2
+local VERSION = 3
 lib.versions = lib.versions or {}
 if (lib.versions.fournisseurs or 0) >= VERSION then return end
 lib.versions.fournisseurs = VERSION
@@ -27,17 +27,14 @@ local CHAMPS = { [HV] = { "min", "qty", "auctions", "tiers", "hist" } }
 local APPELANT = "LibCommune" -- l'API d'Auctionator demande le nom de l'add-on qui l'appelle
 local AUCTIONDB_RECENT = 6 * 3600 -- un scan d'AuctionDB plus vieux : son historique n'est plus frais pour ton HV
 
-local function maison() -- même clé que GameDataMarket ; nil si la faction est inconnue
-  local faction = UnitFactionGroup("player")
-  return faction and (GetRealmName() .. "-" .. faction)
-end
+local function maison() return lib.MaisonHV() end -- même clé que GameDataMarket, sondée ; nil si la faction est inconnue
 
 -- AuctionDB v2.8.1 : AuctionDBForeverSaved.houses["<région-règles> <Faction>"] = { items = { [itemID] = "heure,min,médiane,
 -- qté heure,…" (du plus ancien au plus récent ; min 0 : seulement des enchères sans achat immédiat) }, scans = { {heure, …} } }.
 -- Sa maison de la faction du personnage, la plus récemment scannée (la clé dit la région, pas le royaume), et l'heure de
 -- ce dernier scan.
 local function maisonAuctionDB()
-  local sv, faction = AuctionDBForeverSaved, UnitFactionGroup("player")
+  local sv, faction = AuctionDBForeverSaved, lib.Faction()
   if type(sv) ~= "table" or type(sv.houses) ~= "table" or not faction then return nil end
   faction = " " .. faction
   local meilleure, quand = nil, -1
