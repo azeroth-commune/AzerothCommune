@@ -73,6 +73,7 @@ assert(lib.Destinataire("Belegard Marteaudefer-CAMWOWEU4Realm8PvP") == "Belegard
 assert(lib.Destinataire("Bob|cff") == "Bob|cff" and lib.Destinataire(nil) == nil, "illisible : tel quel")
 local moiP = lib.Personnage()
 assert(moiP.guid == MOI and moiP.nom == "Belegard Marteaudefer" and moiP.adresse == nil, "personnage connecté : GUID et nom")
+assert(lib.Adresse == nil, "plus d'adresse « Prénom-Royaume » (dernier appelant parti avec Handshake#29)")
 assert(lib.Personnage(MOI).nom == "Belegard Marteaudefer", "par son GUID")
 local gdAvant = GameDataAPI
 GameDataAPI = nil

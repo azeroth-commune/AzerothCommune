@@ -18,8 +18,7 @@
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   lib:QuandReleve(type, fn)    : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Le consommateur ne teste jamais lui-même la présence de GameData.
--- Personnage : lib.Personnage(guid) = { guid, nom } ; lib.Destinataire(nom) (« Prénom Nom », pour un chuchotement) ;
--- lib.Adresse(nom, royaume) reste tant que Handshake s'en sert.
+-- Personnage : lib.Personnage(guid) = { guid, nom } ; lib.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : lib:PrixAchat(id, qty, hv, marchands), lib:PrixMarchands() (en fin de fichier).
 -- Identité, chaque relevé sondé : lib.Royaume() (le numéro de serveur du GUID, « 6942 »), lib.MaisonHV() (« 6942-Alliance »,
 -- clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
@@ -210,19 +209,6 @@ end
 -- un renommage ; son nom, « Prénom Nom » sur Forever, sert à l'afficher et à lui chuchoter (LibCommune#35).
 -- Sur Forever, le 2e retour de UnitName, UnitFullName et GetUnitName(unité, true) est le NOM DE FAMILLE, pas le royaume
 -- (/handshake noms en jeu, 20/11/2026).
-
--- ponytail: l'adresse « Prénom-Royaume » de Handshake, au royaume de la lib ; retirée avec la signature par GUID (Handshake#29).
-function lib.Adresse(nom, royaume)
-  if type(nom) ~= "string" or nom == "" then return nil end
-  if not royaume then
-    local avant, apres = nom:match("^(.+)%-([^%-]+)$")
-    if apres then nom, royaume = avant, apres end
-  end
-  local prenom = nom:match("^[^%s%-]+")
-  royaume = (royaume and royaume ~= "") and royaume:gsub("[%s%-]", "") or lib.Royaume()
-  local adresse = prenom and royaume and (prenom .. "-" .. royaume)
-  return adresse and adresse:match("^[^%-|,:%s%c]+%-[^%-|,:%s%c]+$") and adresse or nil
-end
 
 -- À qui adresser un chuchotement : « Prénom Nom », la forme que le serveur accepte et qu'il donne comme expéditeur d'un
 -- message d'add-on (au prénom seul : « Aucun joueur nommé 'Belegard' », 21/11/2026). Un « -Royaume » est retiré : Forever
