@@ -108,7 +108,8 @@ local function sonder(nom, ...)
   lib.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
   r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }
-  r.heure, r.build = date("%H:%M:%S"), select(2, GetBuildInfo())
+  -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
+  r.heure, r.build = date("%H:%M:%S"), GetBuildInfo and select(2, GetBuildInfo())
   if r.etat == "rouge" and not r.prevenu then
     r.prevenu = true
     print(("Azeroth Commune : le jeu ne rend pas ce que nous attendons (%s : %s ; reçu %s), build %s. À signaler."):format(
