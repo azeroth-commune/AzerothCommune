@@ -115,6 +115,20 @@ d, raison = lib:Souscrire("cours de la bourse")
 assert(d == nil and raison == "type inconnu", tostring(raison))
 print("Azeroth Commune : type inconnu OK")
 
+-- Souscription avant le chargement de la base (un add-on sans « ## Dependencies: AzerothCommune », #45) : refusée, pas
+-- perdue en silence ; un seul avertissement par session, qui nomme l'add-on (sa pile) et rappelle la dépendance.
+do
+  local dits, vraiPrint = {}, print
+  print = function(m) dits[#dits + 1] = m end
+  debugstack = function() return '[string "@Interface/AddOns/Essai/Essai.lua"]:3: in main chunk\n' end
+  d, raison = lib:Souscrire("inventaires")
+  assert(d == nil and raison == "socle pas chargé", "trop tôt : " .. tostring(raison))
+  assert(lib:Souscrire("objets") == nil and #dits == 1, "un seul avertissement par session : " .. #dits)
+  assert(dits[1]:find("Essai", 1, true) and dits[1]:find("## Dependencies: AzerothCommune", 1, true), dits[1])
+  print, debugstack = vraiPrint, nil
+end
+print("Azeroth Commune : souscription avant la base OK")
+
 -- Personnage : GUID et nom « Prénom Nom », plus d'adresse (#35 : le jeu ne donne plus le royaume). Un chuchotement part
 -- vers « Prénom Nom », la forme que le serveur accepte (au prénom seul : « Aucun joueur nommé 'Belegard' », 21/11/2026).
 assert(lib.Destinataire("Belegard Marteaudefer") == "Belegard Marteaudefer", "chuchotement : le nom complet")
@@ -185,7 +199,9 @@ for _, nom in ipairs(attendus) do assert(lib.types[nom], "au catalogue : " .. no
 -- Souscription : transmise à ns.souscrire, qui la retient dans la base pour le joueur ; rien de gardé à côté (#41).
 local transmis = {}
 ns.souscrire = function(t) transmis[#transmis + 1] = t end
+AzerothCommuneDB = {} -- la base chargée (ses SavedVariables lues)
 for _, nom in ipairs(attendus) do assert(lib:Souscrire(nom), "souscription : " .. nom) end
+AzerothCommuneDB = nil
 assert(#transmis == #attendus and transmis[1] == "inventaires", "chaque souscription transmise à GameData")
 assert(lib.souscriptions == nil, "pas de copie des souscriptions pour la session")
 -- Lecture d'un type par personnage autre que les recettes, et d'un type pour tout le joueur.

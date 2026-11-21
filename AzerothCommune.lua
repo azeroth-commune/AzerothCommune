@@ -407,9 +407,20 @@ function lib:Signaler(typeDeDonnees)
   end
 end
 
--- La souscription est tenue par la base seule (Souscriptions.lua : AzerothCommuneDB.souscriptions, avec sa date).
+-- La souscription est tenue par la base seule (Souscriptions.lua : AzerothCommuneDB.souscriptions, avec sa date). Avant
+-- que la base soit chargée (un add-on sans « ## Dependencies: AzerothCommune ») : refusée, un avertissement par session.
+local prevenuTropTot = false
 function lib:Souscrire(typeDeDonnees)
   if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
+  if not AzerothCommuneDB then
+    if not prevenuTropTot then
+      prevenuTropTot = true
+      local addon = debugstack and debugstack(2, 1, 0):match("[Aa]dd[Oo]ns[/\\]([^/\\]+)[/\\]")
+      print(("Azeroth Commune : %s a souscrit à « %s » avant le chargement du socle ; souscription perdue. Son TOC doit déclarer « ## Dependencies: AzerothCommune »."):format(
+        addon and ("l'add-on " .. addon) or "un add-on", typeDeDonnees))
+    end
+    return nil, "socle pas chargé"
+  end
   ns.souscrire(typeDeDonnees)
   return true
 end
