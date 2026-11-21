@@ -347,7 +347,7 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
   end
 end)
 
--- Les exports de GameData (/gdata export <clé>, la fenêtre GameData) : chacun photographie une partie de la base en
+-- Les exports de GameData (/gdata export <clé>, ou la liste de Diagnostic) : chacun photographie une partie de la base en
 -- grilles (export de LibCommune), sans /reload. Déclarés à LibCommune comme ceux de tout add-on regroupé.
 -- HV en lignes compactes (65 pages en JSON complet avec l'historique, le 18/11/2026) : le dernier scan de ton HV,
 -- une ligne par objet « id,min,quantité,enchères,prix:qté prix:qté prix:qté » (3 premiers paliers).
@@ -383,12 +383,11 @@ local EXPORTS = {
     donnees = function() return { base = GameDataDB.errors, perso = char().errors, events = GameDataDB.events } end },
 }
 
--- /gdata export <clé> : l'export déclaré sous cette clé par n'importe quel add-on regroupé (lib.Exports) ; sans clé, la
--- fenêtre GameData.
+-- /gdata export <clé> : l'export déclaré sous cette clé par n'importe quel add-on regroupé (lib.Exports) ; sans clé (ou
+-- une clé inconnue), la liste des clés. La liste à cliquer est dans Diagnostic, l'add-on de debug de l'atelier.
 function ns.exportCommand(what)
   local lib = LibStub and LibStub("LibCommune-1.0", true)
   if not (lib and lib.Exporter and lib.Exports) then return print("GameData : l'export par image demande LibCommune.") end
-  if what == "" and ns.toggleExportWindow then return ns.toggleExportWindow() end
   local e, cles = nil, {}
   for _, x in ipairs(lib.Exports()) do
     cles[#cles + 1] = x.cle
@@ -407,11 +406,11 @@ function ns.exportCommand(what)
 end
 
 -- Bouton de la minicarte et entrée des options : ceux d'Azeroth Commune, communs aux add-ons présents (LibCommune#3).
--- Clic (GameData seul) ou sa ligne du menu = la fenêtre GameData (Window.lua). L'angle reste dans GameDataDB.minimap_angle.
+-- Clic (GameData seul) ou sa ligne du menu = le résumé de /gdata dans le chat. L'angle reste dans GameDataDB.minimap_angle.
 local lib = LibStub and LibStub("LibCommune-1.0", true)
 if lib and lib.Regrouper then
   lib.Regrouper({ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
-    ouvrir = function() ns.toggleExportWindow() end, store = function() return GameDataDB end, exports = EXPORTS })
+    ouvrir = function() SlashCmdList.GAMEDATA("") end, store = function() return GameDataDB end, exports = EXPORTS })
 end
 
 SLASH_GAMEDATA1 = "/gdata"
@@ -437,5 +436,5 @@ SlashCmdList.GAMEDATA = function(msg)
   print("  " .. (ns.commerceStatus and ns.commerceStatus() or "Commerce.lua n'est pas chargé : recettes, marchands et HV ne sont pas lus."))
   for name, err in pairs(char().errors) do print("  erreur", name, err) end
   for name, err in pairs(GameDataDB.errors) do print("  erreur", name, err) end
-  print("  /reload pour écrire la base sur le disque. /gdata export : la fenêtre des exports.")
+  print("  /reload pour écrire la base sur le disque. /gdata export <clé> : photographier un export (sans clé : la liste).")
 end

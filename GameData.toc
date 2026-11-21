@@ -8,5 +8,4 @@
 GameData.lua
 Commerce.lua
 Souscriptions.lua
-Window.lua
 VendorData.lua
