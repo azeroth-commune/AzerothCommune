@@ -1,4 +1,4 @@
--- Sondes d'identité dans wow-ui-sim (tools/sim.sh test LibCommune, LibCommune#30) : relancées après le chargement,
+-- Sondes d'identité dans wow-ui-sim (tools/sim.sh test AzerothCommune, LibCommune#30) : relancées après le chargement,
 -- vertes. Une sonde rouge fait échouer le test en disant ce que le simulateur a rendu (rien n'est masqué).
 -- Exceptions, chacune dite par son propre test (lacunes du simulateur, pas de la lib) :
 --   * le simulateur ne donne pas de nom de famille au personnage par défaut (« Uther », il n'en donne qu'avec
@@ -19,7 +19,7 @@ local function montrer(v)
 end
 
 test("sondes d'identité : vertes après le chargement (relancées)", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local etat, rouges = lib.RelancerSondes(), {}
     for _, nom in ipairs(IDENTITE) do
         local s = etat[nom]
@@ -33,7 +33,7 @@ test("sondes d'identité : vertes après le chargement (relancées)", function()
 end)
 
 test("royaume = numéro de serveur du GUID, maison de l'HV « n°-faction » ; numéro 0 du simulateur dit, pas masqué", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local guid = UnitGUID("player")
     assertType("string", guid)
     assertNotNil(NUMERO, "le simulateur rend un GUID d'une autre forme que Player-<n°>-… : " .. guid)
@@ -53,7 +53,7 @@ test("royaume = numéro de serveur du GUID, maison de l'HV « n°-faction » ; n
 end)
 
 test("nom : vert avec un nom de famille ; rouge si le simulateur n'en donne pas (lacune du simulateur, pas de la lib)", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local s = lib.RelancerSondes().nom
     local prenom, nomDeFamille = UnitName("player")
     assertType("string", prenom)
@@ -71,7 +71,7 @@ end)
 local AUTRES = { "emplacements d'un conteneur", "objet d'un conteneur", "recettes", "nom d'objet", "prix Auctionator", "prix TSM", "prix AuctionDB" }
 
 test("sondes des sacs, recettes, noms d'objets et fournisseurs : déclarées, aucune rouge après relance", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local etat, rouges = lib.RelancerSondes(), {}
     for _, nom in ipairs(AUTRES) do
         local s = etat[nom]
@@ -85,7 +85,7 @@ test("sondes des sacs, recettes, noms d'objets et fournisseurs : déclarées, au
 end)
 
 test("sacs lus par la lib : la sonde de l'objet suit le premier objet vu", function()
-    local lib = LibStub("LibCommune-1.0")
+    local lib = AzerothCommune
     local sacs = lib.Conteneurs(lib.EstSac)
     assertType("table", sacs)
     local premier

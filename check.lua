@@ -1090,7 +1090,10 @@ Auctionator = { API = { v1 = { GetAuctionPriceByItemID = function(_, id) return 
   GetAuctionAgeByItemID = function(_, id) if id == 2772 or id == 9999 then return 0 end end } } } -- 9999 vu aujourd'hui
 local T = os.time() - 600
 AuctionDBForeverSaved = { houses = { ["na-forever-rp Alliance"] = { scans = { { T } }, items = { [2772] = ("%d,90,95,300"):format(T) } } } }
+local signale = 0 -- un add-on prévenu de chaque scan de l'HV par le signal « type relevé à nouveau »
+assert(AzerothCommune:QuandReleve("cours de l'HV", function() signale = signale + 1 end))
 scanHV()
+assert(signale == 1, "scan de l'HV : signal « type relevé à nouveau » aux abonnés")
 hvR = AzerothCommuneMarket[MAISON]
 assert(scanned == 2 and hvR.items[2772].min == 100 and hvR.items[2772].qty == 5 and hvR.items[2772].tiers[1].price == 100, "prix, quantité, paliers gardés comme avant")
 assert(hvR.hist == nil, "AuctionDB frais : pas de copie de l'historique")
