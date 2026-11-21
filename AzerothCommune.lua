@@ -48,8 +48,9 @@ local TYPES = {
   --   persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
   ["recettes connues"] = { parPerso = true },
   -- Tout ce que fabrique une recette, connue ou non : { [clé] = { profession, name, output, reagents, made_min, made_max,
-  --   level (compétence requise, de la réserve), provenance } }. Les recettes vues sur tous les persos (relevé direct),
-  --   la réserve Classic (source externe, champ provenance) pour les objets qu'aucune recette vue ne fabrique (Commerce.lua).
+  --   level (compétence requise, de la réserve), yellow, grey (seuils du client, réserve seule), provenance } }. Les
+  --   recettes vues sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets
+  --   qu'aucune recette vue ne fabrique (Commerce.lua).
   ["base des recettes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
   marchands = {}, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
@@ -311,7 +312,7 @@ end
 ---------------------------------------------------------------------------------------------------
 -- Relevé des recettes connues sans la fenêtre : sur Forever, IsPlayerSpell(ID du sort de la recette) dit vrai pour une
 -- recette connue (idée vue dans Mastercraft, dont le code n'est pas repris). Pour chaque métier du personnage, interroge
--- les recettes candidates (recettes = { [ID] = { profession, … } } : la base passe les recettes vues et la réserve Classic,
+-- les recettes candidates (recettes = { [ID] = { profession, … } } : la base passe les recettes vues et la réserve,
 -- Commerce.lua). PAR_IMAGE par image, jamais en combat (reprise à la fin du combat). Fusionne dans
 -- metiers = { [métier] = { rank, max, known } } : ajoute les connues qui manquent (true), ne retire rien, garde la
 -- difficulté lue en fenêtre. fini() une fois tout interrogé.

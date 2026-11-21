@@ -49,8 +49,9 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     assertNil(lib.RemettreRecettes) -- plus de remise par un add-on (#48)
 end)
 
--- #48 : la réserve Classic (RecettesClassic.lua, générée, hors du repo : à copier dans un worktree) est chargée par la TOC
--- du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance.
+-- #48, #54 : la réserve extraite du client (RecettesClassic.lua, générée, hors du repo : à copier dans un worktree) est
+-- chargée par la TOC du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance, sa
+-- compétence requise et ses seuils jaune et gris.
 test("base des recettes : la réserve du socle chargée, chaque recette avec sa provenance", function()
     local lib = AzerothCommune
     assertTrue(lib:Souscrire("base des recettes"))
@@ -60,16 +61,21 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
     assertType("table", lot)
     local reserve, vues = 0, 0
     for _, r in pairs(data) do
-        if r.provenance == "source externe" then
+        if r.provenance == "extrait du client" then
             reserve = reserve + 1
             assertType("number", r.output)
             assertType("string", r.profession)
             assertType("table", r.reagents)
+            assertType("number", r.level) -- 0 : inconnue (Bottes d'hiver 44953 : absente de Classic, sans seuils dans le client)
+            assertTrue(r.grey >= r.yellow, "seuils : " .. tostring(r.name))
         else
             vues = vues + 1
         end
     end
-    assertTrue(reserve > 500, "réserve chargée : " .. reserve .. " recettes")
+    assertTrue(reserve > 1000, "réserve chargée : " .. reserve .. " recettes")
+    -- Une recette propre à Forever (potion de soins inférieure, passée au secourisme), absente de Classic.
+    local potion = data[1244432]
+    assertTrue(potion ~= nil and potion.profession == "Secourisme" and potion.output == 858, "recette de Forever")
     print("base des recettes : " .. vues .. " vue(s), " .. reserve .. " de la réserve")
 end)
 
