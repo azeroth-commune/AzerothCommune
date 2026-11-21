@@ -683,6 +683,7 @@ assert(etat.sous[1].parent == etat.categories[1] and cp.categorie == etat.sous[1
 assert(reglagesFaits == 1, "les réglages de l'add-on posés une fois sur sa page")
 -- La page du socle : les souscriptions et l'état des données relevées (ce que dit /ac souscriptions).
 local texteSouscriptions = etat.categories[1].page.souscriptions.texte
+assert(next(etat.categories[1].page.scripts) == nil, "page du socle : ni OnShow ni OnRefresh, aucun code à l'ouverture")
 assert(texteSouscriptions == "inventaires : souscrit le 2026-11-21, relevé\nobjets : aucune souscription", tostring(texteSouscriptions))
 local bouton = etat.boutons[1]
 assert(bouton.icone.texture ~= "icone-cp", "plusieurs add-ons : l'icône commune")
