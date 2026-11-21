@@ -1046,6 +1046,8 @@ end
 assert(balayerDepuis(299001) == 300001, "sans catalogue : jusqu'à 300 000, pas plus loin")
 ns.catalogueObjets = { [7] = {}, [291005] = {} }
 assert(balayerDepuis(295001) == 296006, "avec le catalogue : son plus grand ID (291 005) et 5 000 de marge")
+ns.catalogueObjets = {}
+assert(balayerDepuis(299001) == 300001, "catalogue vide : comme sans catalogue")
 ns.catalogueObjets = nil
 balayerDepuis(1)
 AzerothCommuneItems = avant

@@ -254,7 +254,7 @@ local function itemsReady() -- à la connexion : reprendre les objets encore san
   AzerothCommuneItems.items = AzerothCommuneItems.items or {}
   AzerothCommuneItems.next_id = AzerothCommuneItems.next_id or 1
   MAX_ITEM_ID = 300000
-  if ns.catalogueObjets then
+  if ns.catalogueObjets and next(ns.catalogueObjets) then -- un catalogue vide ne raccourcit pas le balayage
     MAX_ITEM_ID = 0
     for id in pairs(ns.catalogueObjets) do if id > MAX_ITEM_ID then MAX_ITEM_ID = id end end
     MAX_ITEM_ID = MAX_ITEM_ID + 5000
