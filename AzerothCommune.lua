@@ -26,6 +26,11 @@
 -- Sondés aussi : sacs (AC.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
 -- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
 -- Pour les autres fichiers du socle : AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...).
+-- Le global ne porte rien d'autre que l'API publique et des champs documentés à côté de leur code : les relevés de
+-- recettes (AC:ReleverRecettes, AC:RangerRecettes, AC:ReleverRecettesSansFenetre, ci-dessous), AC:Signaler, les
+-- fournisseurs (AC.fournisseurs, AC:LireParFournisseurs, AC:ChampsARelever : Fournisseurs.lua), AC.regroupes
+-- (Regroupement.lua), AC.captureDansLesFenetres (posé par un add-on : Interface.lua). Cadres et états de session (état des
+-- sondes, rappels, bouton de minicarte, entrée des options) sont privés : ns ou locaux (#45).
 local _, ns = ...
 AzerothCommune = {}
 local lib = AzerothCommune
@@ -92,7 +97,7 @@ end
 -- attente en une phrase, une vérification qui compare seulement la valeur reçue, sans rappeler le jeu) ; elle est
 -- vérifiée à chaque relevé. Une sonde rouge prévient dans le chat une fois par session et ne change rien à la valeur
 -- rendue (pas de mode dégradé : on débugge). Rien n'est sauvegardé : le dernier résultat de chacune, le temps de la session.
-lib.sondes = {} -- [nom] = { etat, valeur, heure, build, prevenu }
+ns.sondes = {} -- [nom] = { etat, valeur, heure, build, prevenu } ; privé (lu par lib.Sondes)
 local SONDES = {} -- { { nom, attente, verifier, relever }, … } dans l'ordre de déclaration, et [nom] = la même
 
 local function montrer(v)
@@ -103,20 +108,20 @@ local function montrer(v)
   return table.concat(t, ", ")
 end
 
--- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (lib.buildLu ;
+-- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (ns.buildLu ;
 -- check.lua le remet à nil pour simuler une mise à jour du jeu).
 -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
 local function buildDeSession()
-  if lib.buildLu == nil and GetBuildInfo then lib.buildLu = select(2, GetBuildInfo()) end
-  return lib.buildLu
+  if ns.buildLu == nil and GetBuildInfo then ns.buildLu = select(2, GetBuildInfo()) end
+  return ns.buildLu
 end
 
 -- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
 local function sonder(nom, ...)
   local s = SONDES[nom]
   if not s then return ... end -- pas déclarée : jamais d'erreur dans un relevé
-  local r = lib.sondes[nom] or {}
-  lib.sondes[nom] = r
+  local r = ns.sondes[nom] or {}
+  ns.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
   r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }
   r.heure, r.build = date("%H:%M:%S"), buildDeSession()
@@ -149,7 +154,7 @@ end
 function lib.Sondes()
   local out = {}
   for i, s in ipairs(SONDES) do
-    local r = lib.sondes[s.nom] or {}
+    local r = ns.sondes[s.nom] or {}
     out[i] = { nom = s.nom, attente = s.attente, etat = r.etat or "pas encore vue", valeur = r.valeur, heure = r.heure, build = r.build }
     out[s.nom] = out[i]
   end
@@ -391,17 +396,17 @@ function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 -- Signal « type relevé à nouveau », appelé par le relevé lui-même (Commerce.lua, après chaque scan de l'HV). Un rappel
 -- qui plante ne prive pas les autres ni le relevé (erreur rendue au gestionnaire du jeu).
 -- ponytail: seul l'HV signale ; un autre type appellera lib:Signaler au bout de son relevé quand un add-on en aura besoin.
-lib.rappels = {}
+ns.rappels = {} -- [type] = { fn, … }
 
 function lib:QuandReleve(typeDeDonnees, fn)
   if not TYPES[typeDeDonnees] then return nil, "type inconnu" end
-  self.rappels[typeDeDonnees] = self.rappels[typeDeDonnees] or {}
-  table.insert(self.rappels[typeDeDonnees], fn)
+  ns.rappels[typeDeDonnees] = ns.rappels[typeDeDonnees] or {}
+  table.insert(ns.rappels[typeDeDonnees], fn)
   return true
 end
 
 function lib:Signaler(typeDeDonnees)
-  for _, fn in ipairs(self.rappels[typeDeDonnees] or {}) do
+  for _, fn in ipairs(ns.rappels[typeDeDonnees] or {}) do
     local ok, err = pcall(fn, typeDeDonnees)
     if not ok and geterrorhandler then geterrorhandler()(err) end
   end

@@ -101,13 +101,13 @@ test("signal « type relevé à nouveau » : les rappels appelés, sans crochet 
     local lib = AzerothCommune
     local _, raison = lib:QuandReleve("pas un type", print)
     assertEquals("type inconnu", raison)
-    local recus = {}
-    local function rappel(t) recus[#recus + 1] = t end
+    local recus, actif = {}, true
+    local function rappel(t) if actif then recus[#recus + 1] = t end end -- les rappels sont privés (#45) : il se tait
     assertTrue(lib:QuandReleve("cours de l'HV", rappel))
     assertNil(lib.AccrocherGameData)
+    assertNil(lib.rappels)
     lib:Signaler("cours de l'HV")
-    local l = lib.rappels["cours de l'HV"]
-    for i = #l, 1, -1 do if l[i] == rappel then table.remove(l, i) end end
+    actif = false
     assertEquals(1, #recus)
     assertEquals("cours de l'HV", recus[1])
 end)

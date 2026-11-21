@@ -14,13 +14,13 @@ end
 test("une seule entrée Azeroth Commune, la page du socle, une sous-page par add-on", function()
     local lib = AzerothCommune
     essai()
-    local n = 0
+    local n, categorie = 0, nil -- l'entrée du socle est privée : trouvée par son nom
     for _, g in ipairs(SettingsPanel:GetCategoryList().groups) do
-        for _, c in ipairs(g.categories) do if c:GetName() == "Azeroth Commune" then n = n + 1 end end
+        for _, c in ipairs(g.categories) do if c:GetName() == "Azeroth Commune" then n, categorie = n + 1, c end end
     end
     assertEquals(1, n)
-    assertEquals(lib.categorie, Settings.GetCategory(lib.categorie:GetID()))
-    local sous = lib.categorie:GetSubcategories()
+    assertEquals(categorie, Settings.GetCategory(categorie:GetID()))
+    local sous = categorie:GetSubcategories()
     assertEquals(#lib.regroupes, #sous)
     for i, r in ipairs(lib.regroupes) do assertEquals(r.nom, sous[i]:GetName()) end
 end)
@@ -29,7 +29,7 @@ test("un seul bouton de minicarte ; le socle n'a pas de ligne dans son menu", fu
     local lib = AzerothCommune
     essai()
     assertNotNil(_G.AzerothCommuneMinimapButton)
-    assertEquals(lib.boutonCommun, _G.AzerothCommuneMinimapButton)
+    assertNil(lib.boutonCommun) -- privé (#45) : le bouton n'est connu que par son nom de cadre
     assertTrue(_G.GameDataMinimapButton == nil)
     local noms = {}
     for _, r in ipairs(lib.regroupes) do

@@ -156,7 +156,7 @@ local dits, vraiPrint = {}, print
 print = function(m) dits[#dits + 1] = m end
 local buildAvant = GetBuildInfo
 GetBuildInfo = function() return "1.16.1", "71037", "Nov 21 2026", 11601 end
-lib.buildLu = nil -- une mise à jour du jeu : le build de la session est relu
+ns.buildLu = nil -- une mise à jour du jeu : le build de la session est relu
 UnitGUID = function(u) if u == "player" then return "Player-0-0000BE1E" end end
 assert(lib.Royaume() == "0", "valeur rendue inchangée : 0")
 local s = lib.Sondes().royaume
@@ -186,7 +186,7 @@ for _, nom in ipairs(IDENTITE) do assert(etat[nom].etat == "vert", "relancée ve
 assert(#dits == 4, "un avertissement par sonde rouge (royaume, maison, faction, nom) : " .. #dits)
 print = vraiPrint
 GetBuildInfo = buildAvant
-lib.buildLu = nil
+ns.buildLu = nil
 print("Azeroth Commune : sondes, royaume vide OK")
 
 -- Catalogue : les types que la base relève (leur accesseur privé : plus bas, avec la base).
@@ -353,7 +353,7 @@ local lotGD = { provenance = "relevé direct", build = 64000, date = "2026-11-19
 local marche = { items = { [2772] = { min = 100, qty = 5, auctions = 1, tiers = { { price = 100, qty = 5 } } } },
   hist = { [2840] = { { 1, 40, 3 } } }, time = T, scanned = "2026-11-19 10:00:00" }
 fausseBase({ ["cours de l'HV"] = function() return { hv = { ["6942-Alliance"] = marche }, depot = { rate24 = 0.3 } }, lotGD end })
-lib.sondes["maison de l'HV"].valeur = nil
+ns.sondes["maison de l'HV"].valeur = nil
 hv, lotHV = lib:Lire("cours de l'HV")
 assert(lib.Sondes()["maison de l'HV"].valeur == "6942-Alliance", "la maison de l'HV des fournisseurs : celle de la lib, sondée")
 cuivre = hv.objet(2772)
@@ -405,12 +405,12 @@ geterrorhandler = function() return function(e) erreurs[#erreurs + 1] = e end en
 assert(select(2, lib:QuandReleve("pas un type", print)) == "type inconnu", "type inconnu")
 assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
 assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
-lib.sondes.build.etat = nil
+ns.sondes.build.etat = nil
 cadre.onEvent(cadre, "PLAYER_LOGIN")
 assert(lib.Sondes().build.etat == "vert", "sondes relancées à la connexion")
 lib:Signaler("cours de l'HV")
 assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "rappels appelés, erreur rendue au jeu")
-lib.rappels["cours de l'HV"] = nil
+ns.rappels["cours de l'HV"] = nil
 print("Azeroth Commune : signal « type relevé à nouveau » OK")
 
 -- Recettes connues sans fenêtre de métier (IsPlayerSpell ; la base le lance à la connexion) : un personnage jamais passé
@@ -516,8 +516,7 @@ local garde = {}
 assert(lib.NomObjet(4, objets, garde) == "objet 4" and lib.NomObjet(4, objets, garde) == "objet 4")
 assert(#demandesServeur == 1 and demandesServeur[1] == 4, "demandé une seule fois au serveur")
 client[4] = { "Épice", "|lien4|" }
-local cadreObjets = cadres[#cadres]
-assert(cadreObjets == lib.cadreObjets, "écoute ITEM_DATA_LOAD_RESULT")
+local cadreObjets = cadres[#cadres] -- le cadre privé d'Interface.lua, créé à la première demande au serveur
 cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 4, true)
 assert(garde[4] and garde[4].link == "|lien4|" and lib.NomObjet(4, objets) == "|lien4|", "nom arrivé : retenu dans garde")
 assert(select(2, lib.RetenirObjet(3, garde)) == "|lien3|" and garde[3].name == "Cuivre", "connu du client : retenu tout de suite")
@@ -568,6 +567,7 @@ print("Azeroth Commune : pages et grilles d'export OK")
 -- sous-page par add-on ; seul, un add-on n'a qu'un bouton et une entrée. Cadres factices : toute méthode existe.
 local function regroupement()
   local etat = { boutons = {}, categories = {}, sous = {}, inscrites = 0, ouvertes = {}, menus = {} }
+  local cadresR = {}
   local function cadre(nom)
     local f = { scripts = {}, points = {} }
     setmetatable(f, { __index = function() return noop end })
@@ -581,6 +581,7 @@ local function regroupement()
   end
   CreateFrame = function(_, nom)
     local f = cadre(nom)
+    cadresR[#cadresR + 1] = f
     if nom == "AzerothCommuneMinimapButton" then etat.boutons[#etat.boutons + 1] = f end
     return f
   end
@@ -609,11 +610,12 @@ local function regroupement()
     gen(nil, menu)
     etat.menus[#etat.menus + 1] = m
   end }
-  lib.boutonCommun, lib.categorie = nil, nil
+  local n = #cadresR
   charger("Regroupement")
+  local cadreR = cadresR[n + 1] -- le cadre de Regroupement.lua, privé : le seul créé à son chargement
   local function connexion()
     connecte = true
-    lib.cadreRegroupement.scripts.OnEvent(lib.cadreRegroupement, "PLAYER_LOGIN")
+    cadreR.scripts.OnEvent(cadreR, "PLAYER_LOGIN")
   end
   return etat, connexion
 end
@@ -783,7 +785,7 @@ do
   local function etat(nom) return lib.Sondes()[nom].etat end
   -- Rouge après deux relevés, avec un seul avertissement qui la nomme ; réarmée pour le cas suivant.
   local function rougeUneFois(nom, relever)
-    lib.sondes[nom] = nil
+    ns.sondes[nom] = nil
     local avant = #dits
     relever(); relever()
     assert(etat(nom) == "rouge", nom .. " : rouge, " .. etat(nom))
@@ -796,7 +798,7 @@ do
   local sac = { [0] = { false, { itemID = 2772, stackCount = 5, hyperlink = LIEN } }, [1] = {} }
   local taille = function(b) return #sac[b] end
   C_Container = { GetContainerNumSlots = function(b) return taille(b) end, GetContainerItemInfo = function(b, s) return sac[b][s] or nil end }
-  lib.sondes["emplacements d'un conteneur"], lib.sondes["objet d'un conteneur"] = nil, nil
+  ns.sondes["emplacements d'un conteneur"], ns.sondes["objet d'un conteneur"] = nil, nil
   local relance = lib.RelancerSondes()
   assert(relance["emplacements d'un conteneur"].etat == "vert" and relance["objet d'un conteneur"].etat == "vert", "sacs relancés : verts")
   assert(relance["objet d'un conteneur"].valeur[1] == 2772 and relance["objet d'un conteneur"].valeur[2] == LIEN, "valeur : ID et lien")
@@ -824,7 +826,7 @@ do
     GetRecipeInfo = function(id) return { name = "Recette " .. id, learned = true, relativeDifficulty = 0, isEnchantingRecipe = id == 7 } end,
     GetRecipeSchematic = function(id) return fiches[id] end,
   }
-  lib.sondes.recettes = nil
+  ns.sondes.recettes = nil
   assert(lib.RelancerSondes().recettes.etat == "pas encore vue", "recettes sans fenêtre : pas relancées, pas encore vues")
   assert(lib:ReleverRecettes() and etat("recettes") == "vert", "recettes : verte")
   fiches[3308] = { reagentSlotSchematics = {} } -- 2e ligne cassée : pas vérifiée
@@ -841,7 +843,7 @@ do
   -- Noms d'objets (un objet en cache : pas relancés) : le client rend son nom ; un objet pas encore en cache n'est pas vérifié.
   local client = { [3] = { "Cuivre", "|lien3|" } }
   C_Item = { GetItemInfo = function(id) local i = client[id]; if i then return i[1], i[2] end end, RequestLoadItemDataByID = noop }
-  lib.sondes["nom d'objet"] = nil
+  ns.sondes["nom d'objet"] = nil
   assert(lib.NomObjet(99) == "objet 99" and etat("nom d'objet") == "pas encore vue", "pas en cache : pas vérifié")
   assert(lib.NomObjet(3) == "|lien3|" and etat("nom d'objet") == "vert", "en cache : verte")
   client[5] = { "", "|lien5|" }
@@ -849,16 +851,16 @@ do
   assert(lib.NomObjet(5) == "|lien5|" and select(2, lib.RetenirObjet(5)) == "|lien5|", "nom vide : lien rendu tel quel")
   -- Le serveur dit l'avoir envoyé (ITEM_DATA_LOAD_RESULT réussi) et le client ne rend rien : rouge aussi.
   lib.RetenirObjet(6)
-  rougeUneFois("nom d'objet", function() lib.cadreObjets.onEvent(lib.cadreObjets, "ITEM_DATA_LOAD_RESULT", 6, true) end)
-  lib.sondes["nom d'objet"] = nil
+  rougeUneFois("nom d'objet", function() cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 6, true) end)
+  ns.sondes["nom d'objet"] = nil
   lib.RetenirObjet(8)
-  lib.cadreObjets.onEvent(lib.cadreObjets, "ITEM_DATA_LOAD_RESULT", 8, false) -- objet inexistant : le serveur dit non
+  cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 8, false) -- objet inexistant : le serveur dit non
   assert(etat("nom d'objet") == "pas encore vue", "chargement refusé : pas vérifié")
 
   -- Fournisseurs de prix, quand ils sont présents : leur API rend un prix numérique ou rien ; la première ligne seulement.
   fausseBase()
   AuctionDBForeverSaved, TSM_API = nil, nil
-  for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do lib.sondes[nom] = nil end
+  for _, nom in ipairs({ "prix Auctionator", "prix TSM", "prix AuctionDB" }) do ns.sondes[nom] = nil end
   local avant = #dits
   Auctionator = fausseAPI()
   local hv = lib:Lire("cours de l'HV")
@@ -902,7 +904,7 @@ do
     local nom, poser, oter = f[1], f[2], f[3]
     PRIX[2840] = "40" -- mal formé
     poser()
-    lib.sondes[nom] = nil
+    ns.sondes[nom] = nil
     lecture(1, 2)
     assert(etat(nom) == "pas encore vue", nom .. " : deux lignes sans prix, pas encore vue")
     lecture(1, 2840)
@@ -914,6 +916,21 @@ do
   print = vraiPrint
 end
 print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")
+
+-- Le global ne porte que l'API publique et les champs documentés (#45) : cadres et états de session sont privés (ns ou
+-- locaux), après un regroupement, des noms d'objets demandés au serveur, des sondes vérifiées et des rappels posés.
+do
+  local documentes = {}
+  for nom in ([[Argent ArgentCourt ArgentSigne BoutonCapture Build Capturer ChampsARelever Conteneurs DeclarerSonde
+    Destinataire EXPORT_N EXPORT_PAGE_BYTES EstBanque EstSac Exporter Exports Faction Fenetre Fusionner GrilleExport JsonSur
+    Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
+    Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
+    Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
+    documentes[nom] = true
+  end
+  for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
+end
+print("Azeroth Commune : le global ne porte que l'API publique OK")
 
 ---------------------------------------------------------------------------------------------------
 -- La base (l'ex-GameData : Base.lua, Commerce.lua, Souscriptions.lua), chargée avec le reste du socle dans un espace de
