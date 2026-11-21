@@ -1,72 +1,107 @@
-# LibCommune
+# Azeroth Commune
 
-Lib embarquée des add-ons Azeroth Commune (WoW Forever) : accès aux données relevées, fenêtres, réglages.
-Du code seulement, jamais de données sauvegardées — les données relevées ne sont sauvegardées que dans GameData.
+Le socle des add-ons Azeroth Commune (WoW Forever), requis par chacun (`## Dependencies: AzerothCommune`) : il fait
+tout le relevé des données du jeu, tient la base des données relevées, et offre son API sur un seul global,
+`AzerothCommune` (fenêtres et tableaux, montants, noms d'objets, capture et export, accès aux données relevées, sondes),
+les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de GameData et de la lib commune LibCommune
+(ADR 0002 de l'atelier, 21/11/2026) ; les historiques des deux sont dans ce repo.
+
+- **Pour le joueur** : une entrée « Azeroth Commune » (catégorie Données) dans la liste des add-ons, la commande `/ac`,
+  le bouton de minicarte et l'entrée « Azeroth Commune » des options.
+- **Pour un add-on** : `local AC = AzerothCommune`, disponible dès son chargement (le jeu charge le socle avant lui).
+  Seule l'API publique est sur le global ; l'intérieur de la base (scans, rangement) est privé et peut changer.
+
+## Fichiers
+
+| Fichier | Rôle |
+|---|---|
+| `AzerothCommune.lua` | crée le global ; catalogue des types de données, `Souscrire`, `Lire`, `QuandReleve`, sondes, identité (personnage, royaume, faction, maison de l'HV, build), sacs, relevé des recettes, prix d'achat |
+| `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets |
+| `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
+| `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
+| `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
+| `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
+| `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (données cMaNGOS GPL-3.0) : hors du repo, ignoré par git |
 
 ## Accès aux données relevées
 
 ```lua
-local lib = LibStub("LibCommune-1.0")
-lib:Souscrire("recettes connues")                   -- avec GameData : relevé sur tous tes personnages ; sans lui : relevé de repli
-local d, raison = lib:Lire("recettes connues", "tous") -- nil = personnage connecté, ou son GUID
+local AC = AzerothCommune
+AC:Souscrire("recettes connues")                   -- relevé sur tous tes personnages, tant qu'un add-on y souscrit (30 jours)
+local d, raison = AC:Lire("recettes connues", "tous") -- nil = personnage connecté, ou son GUID
 -- d = { recettes = { [clé] = { profession, name, output, reagents, … } },
 --       persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true } } } } }
--- raison : « type inconnu », « pas de GameData », « pas encore relevé »
--- sans GameData, relevé de repli (personnage connecté, en mémoire) : recettes connues ; inventaires = { bags (lus à
--- l'instant), bank (vue cette session) } ; les autres types : « pas de GameData »
-lib.Conteneurs(lib.EstSac)                          -- sacs lus à l'instant : { [nom] = { size, items = { { id, count } } } }
-local d, lot = lib:Lire("marchands")
+-- raison : « type inconnu », « pas encore relevé »
+AC.Conteneurs(AC.EstSac)                           -- sacs lus à l'instant : { [nom] = { size, items = { { id, count, link } } } }
+local d, lot = AC:Lire("marchands")
 -- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [GUID] = lot } }
--- jamais nil quand d est là : {} (ou { persos = {} }) si GameData n'en donne pas (version d'avant les lots)
--- provenance (lib.provenances) : « relevé direct » > « extrait du client » > « autre add-on » > « source externe »
--- perime = true : figé sous un autre build du client, peut-être périmé (marqué par GameData au chargement)
+-- jamais nil quand d est là : {} (ou { persos = {} }) si la base n'en a pas
+-- provenance (AC.provenances) : « relevé direct » > « extrait du client » > « autre add-on » > « source externe »
+-- perime = true : figé sous un autre build du client, peut-être périmé (marqué au chargement)
 -- lot mixte (marchands : vus en jeu et base VendorData) : une ligne d'une autre provenance porte la sienne
-local lignes, provenance = lib.Fusionner({ { donnees = a, provenance = "relevé direct" }, { donnees = b, provenance = "autre add-on" } })
+local lignes, provenance = AC.Fusionner({ { donnees = a, provenance = "relevé direct" }, { donnees = b, provenance = "autre add-on" } })
 -- pour chaque clé, la ligne de la provenance la plus fiable gagne ; une provenance inconnue passe en dernier ; sources intactes
-local hv, lot = lib:Lire("cours de l'HV")           -- type lourd : scan de GameData et fournisseurs (Fournisseurs.lua)
+local hv, lot = AC:Lire("cours de l'HV")           -- type lourd : scan du socle et fournisseurs (Fournisseurs.lua)
 local l = hv and hv.objet(2772)                     -- ton HV : { min, qty, auctions, tiers, hist, age, sources = { champ = fournisseur } }
--- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du relevé de GameData, fragile,
---         scan = { time, scanned } } : scan = le dernier scan de GameData pour ton HV (time() et date lisible), absent sans
--- lui ; on ne lit pas hv.hv soi-même (forme interne de GameData)
--- raison : « pas de GameData ni de fournisseur » (jamais de relevé de repli), « pas encore relevé »
-lib:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque nouveau relevé de ce type ; nil, « type inconnu »
--- signalés : cours de l'HV (scan de GameData) ; sans GameData, le relevé de repli (recettes connues, banque des inventaires).
--- Les autres relevés de GameData ne signalent pas encore. Un rappel qui plante ne prive pas les autres (erreur au jeu).
+-- lot = { provenance, fournisseur, champs = { champ = fournisseur }, releve = lot du scan du socle, fragile,
+--         scan = { time, scanned } } : scan = le dernier scan du socle pour ton HV (time() et date lisible), absent sans
+-- lui ; on ne lit pas hv.hv soi-même (forme interne de la base)
+AC:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque nouveau relevé de ce type ; nil, « type inconnu »
+-- signalés : cours de l'HV (scan du socle). Les autres relevés ne signalent pas encore. Un rappel qui plante ne prive
+-- pas les autres (erreur au jeu).
+local cout, source, partiel = AC:PrixAchat(itemID, qty)  -- le moins cher entre marchands et HV, palier par palier
+AC:PrixMarchands()                                  -- { [itemID] = prix unitaire } du marchand le moins cher (stock illimité, or)
 ```
+
+Types de données (`AC.types`) : inventaires, réputations, métiers et compétences, quêtes terminées, recettes connues
+(par personnage) ; maîtres de métier, marchands, prix des vols, add-ons installés, cours de l'HV, objets (pour le joueur).
 
 ### Personnage
 
 Un personnage est identifié par son GUID (`UnitGUID`) : unique, fourni par le serveur, il survit à un renommage. Son nom,
 « Prénom Nom » sur Forever, sert à l'afficher et à lui chuchoter (la forme que le serveur accepte, et qu'il donne comme
-expéditeur d'un message d'add-on). Le jeu ne donne plus le royaume depuis le build 71037 : `lib.Royaume()` est le numéro
+expéditeur d'un message d'add-on). Le jeu ne donne plus le royaume depuis le build 71037 : `AC.Royaume()` est le numéro
 de serveur du GUID.
 
 ```lua
-local p = lib.Personnage()        -- le personnage connecté : { guid = "Player-6942-014B6DDC", nom = "Belegard Marteaudefer" }
-lib.Personnage(guid)              -- un personnage du joueur dont GameData a la fiche, sinon nil
-lib.Destinataire("Belegard Marteaudefer") -- pour un chuchotement : « Prénom Nom » (un « -Royaume » est retiré)
-lib.Royaume()                     -- « 6942 » : le numéro de serveur du GUID, sondé (rouge pour 0 ou sans GUID)
-lib.MaisonHV()                    -- « 6942-Alliance » : la clé des scans de l'HV, sondée
+local p = AC.Personnage()        -- le personnage connecté : { guid = "Player-6942-014B6DDC", nom = "Belegard Marteaudefer" }
+AC.Personnage(guid)              -- un personnage du joueur dont la base a la fiche, sinon nil
+AC.Destinataire("Belegard Marteaudefer") -- pour un chuchotement : « Prénom Nom » (un « -Royaume » est retiré)
+AC.Royaume()                     -- « 6942 » : le numéro de serveur du GUID, sondé (rouge pour 0 ou sans GUID)
+AC.MaisonHV()                    -- « 6942-Alliance » : la clé des scans de l'HV, sondée
+AC.Faction(), AC.Build()         -- « Alliance » ou « Horde » ; le build du client (nombre)
 ```
 
 Sur Forever, le 2e retour de `UnitName`, `UnitFullName` et `GetUnitName(unité, true)` est le nom de famille, pas le
 royaume. Au prénom seul, un chuchotement échoue (« Aucun joueur nommé 'Belegard' ») ; « Prénom-Royaume » est lu comme
 un nom de famille.
 
+### Sondes
+
+Chaque relevé déclare sa sonde et la vérifie à chaque fois ; une sonde rouge prévient dans le chat une fois par session,
+sans rien corriger (pas de mode dégradé : on débugge). Rien n'est sauvegardé.
+
+```lua
+AC.Sondes()            -- { { nom, attente, etat = "vert" | "rouge" | "pas encore vue", valeur, heure, build }, … }, aussi par nom
+AC.RelancerSondes()    -- refait les relevés sans contexte (aussi à la connexion) ; rend AC.Sondes()
+AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...) -- pour un relevé du socle
+```
+
 ### Fournisseurs (cours de l'HV)
 
 Un fournisseur tient un type de données pour le joueur : l'API publique d'un autre add-on d'abord, à défaut ses
-SavedVariables (fragile, si sa licence le permet), en dernier le relevé de GameData. On ne copie pas ce qui est lourd
-et qu'un fournisseur tient déjà ; ce que le scan de GameData vient de voir est gardé et fait foi.
+SavedVariables (fragile, si sa licence le permet), en dernier le scan du socle (nommé « GameData » dans `sources` et
+`champs`). On ne copie pas ce qui est lourd et qu'un fournisseur tient déjà ; ce que le scan du socle vient de voir est
+gardé et fait foi.
 
-- **Avec un scan de GameData pour ton HV** : `min`, `qty`, `auctions`, `tiers` de son dernier scan, « relevé direct » ;
+- **Avec un scan du socle pour ton HV** : `min`, `qty`, `auctions`, `tiers` de son dernier scan, « relevé direct » ;
   un objet absent de ce scan est plus en vente (`min` nil, `qty` 0), même si un autre add-on l'a « vu » récemment.
-  `hist` : AuctionDB dès qu'il en a un, même ancien (un historique de plusieurs jours reste juste), sinon celui de
-  GameData ; GameData n'en garde pas de copie quand AuctionDB a scanné l'HV il y a moins de 6 h
-  (`lib:ChampsARelever("cours de l'HV")`).
-- **Sans** (pas de GameData, ou pas encore de scan de cet HV) : les fournisseurs seuls, jamais de relevé de repli.
+  `hist` : AuctionDB dès qu'il en a un, même ancien (un historique de plusieurs jours reste juste), sinon celui du
+  socle ; le socle n'en garde pas de copie quand AuctionDB a scanné l'HV il y a moins de 6 h
+  (`AC:ChampsARelever("cours de l'HV")`).
+- **Sans** (pas encore de scan de cet HV) : les fournisseurs seuls, jamais de relevé de repli.
 
-| Champ | Fournisseurs, dans l'ordre (sans scan de GameData) |
+| Champ | Fournisseurs, dans l'ordre (sans scan du socle) |
 |---|---|
 | `min` (prix unitaire le plus bas) | Auctionator (`Auctionator.API.v1`, seulement si son âge est 0) > TSM (`TSM_API`, non essayé) > AuctionDB |
 | `qty` (quantité en vente), `hist` (`{ {heure, min, qté}, … }`) | AuctionDB |
@@ -76,55 +111,87 @@ et qu'un fournisseur tient déjà ; ce que le scan de GameData vient de voir est
   scan » : c'est le mieux qu'il dise ; un âge plus grand : plus en vente (`min` nil, `age` rendu).
 - AuctionDB (SavedVariables, fragile ; GPL v3 dans son LICENSE, LGPLv3 dans son TOC) : un point qui n'est pas du dernier
   scan de la maison (ou plus récent : persos de confiance) veut dire plus en vente (`min` nil, `qty` 0), l'historique
-  reste. Sa `qty` compte aussi les enchères sans achat immédiat ; celle de GameData, seulement l'achat immédiat.
+  reste. Sa `qty` compte aussi les enchères sans achat immédiat ; celle du socle, seulement l'achat immédiat.
 - Un autre add-on ne dit pas sous quel build il a relevé : son lot n'a ni build ni date.
+
+## La base (l'ex-GameData)
+
+Les données relevées, scannées en jouant, dans les SavedVariables du socle (`WTF/…/SavedVariables/AzerothCommune.lua`,
+au `/reload` ou à la déconnexion) ; seulement les types auxquels un add-on a souscrit. Neuves depuis la fusion : rien
+n'est repris de celles de GameData.
+
+- `AzerothCommuneDB.chars[GUID]` : chaque perso, avec son nom ; fiche, équipement, sacs, banque, courrier, monnaies,
+  réputations, métiers, compétences, recettes connues, quêtes. Un perso n'est lisible que connecté ; banque, courrier
+  et recettes ne se lisent que fenêtre ouverte.
+- `AzerothCommuneDB.recipes / trainers / vendors / taxi / addons`, `AzerothCommuneMarket[maison de l'HV]` (dernier scan
+  de l'HV), `AzerothCommuneItems.items[itemID]` (tous les objets du jeu, en tâche de fond).
+- Chaque lot porte sa provenance, le build du client et sa date ; un lot figé sous un autre build est marqué peut-être
+  périmé au chargement.
+
+Commande `/ac` :
+
+| Commande | Effet |
+|---|---|
+| `/ac` | le résumé : persos, objets, commerce, erreurs de relevé |
+| `/ac souscriptions` | chaque type de données : souscrit ou non, relevé ou non, données gardées (aussi sur la page « Azeroth Commune » des options) |
+| `/ac souscrire <type\|tout>` | y souscrire soi-même (pour ses exports) |
+| `/ac effacer <type>` | effacer les données d'un type |
+| `/ac objets` | scan des objets du jeu en marche ou en pause |
+| `/ac export <clé>` | photographier un export en grilles (image nommée `ac-<clé>`) ; sans clé : la liste des clés |
 
 ## Outils communs
 
 Appel avec un point (ce sont des fonctions, pas des méthodes : elles servent telles quelles de `fmt` à un tableau).
-Rien n'est gardé par la lib : ce qui doit durer est une table de l'add-on, passée en paramètre.
+Rien n'est gardé par le socle : ce qui doit durer est une table de l'add-on, passée en paramètre.
 
 ```lua
-local f = lib.Fenetre("MonAddonFrame", "Titre", 600, 400)      -- sombre, bord lavande, Échap, croix (cachée)
-local t, largeur = lib.Tableau(f, colonnes, { name = "objets", sort = "prix", store = MonAddonDB.sort })
+local f = AC.Fenetre("MonAddonFrame", "Titre", 600, 400)      -- sombre, bord lavande, Échap, croix (cachée)
+local t, largeur = AC.Tableau(f, colonnes, { name = "objets", sort = "prix", store = MonAddonDB.sort })
 t:SetData(lignes)                                              -- en-têtes cliquables, tri gardé dans store[name]
-lib.TrierLignes(lignes, colonnes, { key = "prix", desc = true }) -- vides en bas, égalités dans l'ordre d'arrivée
-lib.Argent(c), lib.ArgentCourt(c), lib.ArgentSigne(c)           -- montants (court : pour une case de tableau)
-lib.NomObjet(id, objets, garde)       -- lien ou nom ; inconnu : demandé au serveur, retenu dans garde à l'arrivée
-lib.TrouverObjet(texte, objets, recettes) -- d'après un lien, un ID, un nom d'objet ou de recette
-lib.Capturer(cadre, libellé)          -- photo de l'écran avec repères magenta (tools/crop_captures.py de l'atelier)
-lib.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs, décodée par le même outil
+AC.TrierLignes(lignes, colonnes, { key = "prix", desc = true }) -- vides en bas, égalités dans l'ordre d'arrivée
+AC.Argent(c), AC.ArgentCourt(c), AC.ArgentSigne(c)           -- montants (court : pour une case de tableau)
+AC.NomObjet(id, objets, garde)       -- lien ou nom ; inconnu : demandé au serveur, retenu dans garde à l'arrivée
+AC.RetenirObjet(id, garde), AC.TrouverObjet(texte, objets, recettes) -- d'après un lien, un ID, un nom d'objet ou de recette
+AC.Capturer(cadre, libellé), AC.BoutonCapture(cadre, libellé, x, y) -- photo de l'écran avec repères magenta
+AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs (tools/crop_captures.py)
 ```
 
-Le bouton loupe (capture) des fenêtres n'apparaît que si un add-on le demande (`lib.captureDansLesFenetres`, posé par
-Be a Good Pal). `Interface.lua`, `Capture.lua`, `Regroupement.lua` et `Fournisseurs.lua` ont chacun leur version (`lib.versions`) : de deux copies embarquées,
-la plus récente sert. `Capture.lua` se charge aussi hors du jeu après `LibStub.lua` (`lib.PagesExport`,
-`lib.GrilleExport`).
+Le bouton loupe (capture) des fenêtres n'apparaît que si un add-on le demande (`AC.captureDansLesFenetres`, posé par
+Be a Good Pal). `Capture.lua` se charge aussi seul hors du jeu (`AzerothCommune = {}` puis le fichier :
+`AC.PagesExport`, `AC.GrilleExport`).
 
 ## Regroupement en jeu
 
 Les add-ons Azeroth Commune présents se regroupent : **un seul bouton de minicarte** « Azeroth Commune » et **une seule
-entrée** dans les options du jeu (Options > Add-ons), une sous-page par add-on. Seul, un add-on garde son icône sur le
-bouton et sa page est l'entrée elle-même.
+entrée** dans les options du jeu (Options > Add-ons). L'entrée est la page du socle : les add-ons présents, les
+souscriptions et l'état des données relevées (bouton « Actualiser ») ; chaque add-on a sa sous-page. Le socle n'a pas de
+ligne dans le menu du bouton. Seul à côté du socle, un add-on garde son icône sur le bouton et le clic l'ouvre.
 
 ```lua
-lib.Regrouper{ nom = "GameData", dossier = "GameData", icone = "Interface\\Icons\\INV_Scroll_03",
+AC.Regrouper{ nom = "Négoce", dossier = "Negoce", icone = "Interface\\Icons\\INV_Misc_Coin_01",
   ouvrir = ns.ouvrir,                         -- clic sur le bouton (seul) ou sur sa ligne du menu
   reglages = function(page, ancre) end,       -- facultatif : ses réglages, posés sur sa page sous le bouton « Ouvrir »
-  store = function() return GameDataDB end,   -- facultatif : où garder l'angle du bouton (minimap_angle)
+  store = function() return NegoceDB end,     -- facultatif : où garder l'angle du bouton (minimap_angle)
   outils = {                                  -- facultatif : une ligne par outil, sous celle de l'add-on dans le menu
     { libelle = "Journal", ouvrir = fn, fenetre = "NegoceLedgerFrame" } }, -- fenetre déjà ouverte : elle passe devant
   exports = {                                 -- facultatif : ce que l'add-on sait photographier en grilles
     { cle = "journal", libelle = "Journal", description = "…", donnees = function() return {} end } } }
 ```
 
-`lib.Exports()` rend les exports de tous les add-ons regroupés, dans l'ordre d'arrivée (`cle`, `libelle`,
-`description`, `donnees`, `addon`) ; l'add-on d'atelier Diagnostic les liste et les lance, et `/gdata export <clé>`
-les photographie.
+`AC.Exports()` rend les exports du socle puis ceux de tous les add-ons regroupés, dans l'ordre d'arrivée (`cle`,
+`libelle`, `description`, `donnees`, `addon`) ; l'add-on d'atelier Diagnostic les liste et les lance, et
+`/ac export <clé>` les photographie.
 
-Bouton : clic = l'add-on seul, sinon la liste des add-ons et de leurs outils ; clic droit = les réglages ; glisser = le déplacer. L'angle est écrit
-dans le store de chaque add-on regroupé et lu dans le premier qui en a un ; la lib ne garde rien. Tout se construit à
-l'entrée en jeu, une fois ; les pages n'ont ni `OnShow` ni `OnRefresh` (rien à nous quand on ferme les options).
+Bouton : clic = l'add-on seul, sinon la liste des add-ons et de leurs outils ; clic droit = les réglages ; glisser = le
+déplacer. L'angle est écrit dans le store de chaque add-on regroupé et lu dans le premier qui en a un. Tout se construit
+à l'entrée en jeu, une fois ; les pages n'ont ni `OnShow` ni `OnRefresh` (rien à nous quand on ferme les options).
 
-Développement : lien symbolique de ce dossier dans `Interface/AddOns/` (chargée seule par `LibCommune.toc`) ; les add-ons
-la déclarent en `## OptionalDeps: LibCommune`. Test hors ligne, depuis le dossier parent : `luajit LibCommune/check.lua`.
+## Développement
+
+Lien symbolique de ce dossier dans `Interface/AddOns/` du jeu, `/reload` suffit. Vérifier, depuis le dossier des
+add-ons :
+
+- `luajit AzerothCommune/check.lua` : logique, bouchons de l'API WoW ; vérifie aussi qu'aucun fichier chargé du socle
+  n'appelle LibStub ni GameDataAPI. Avec des dossiers en arguments (`luajit AzerothCommune/check.lua Handshake Negoce
+  BeAGoodPal/BeAGoodPal`), que leurs fichiers chargés n'appellent plus `LibStub("LibCommune-1.0")` ni `GameDataAPI`.
+- `tools/sim.sh test AzerothCommune` (atelier) : les tests de `tests/` dans le simulateur (jamais dans la TOC).
