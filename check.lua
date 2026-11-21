@@ -91,6 +91,7 @@ local dits, vraiPrint = {}, print
 print = function(m) dits[#dits + 1] = m end
 local buildAvant = GetBuildInfo
 GetBuildInfo = function() return "1.16.1", "71037", "Nov 21 2026", 11601 end
+lib.buildLu = nil -- une mise à jour du jeu : le build de la session est relu
 GetNormalizedRealmName = function() return "" end
 local s = lib.Sondes()["royaume normalisé"]
 assert(s.etat == "vert" and s.valeur == R, "avant : verte, " .. tostring(s.valeur))
@@ -127,6 +128,7 @@ for _, x in ipairs(etat) do assert(x.etat == "vert", "relancée verte : " .. x.n
 assert(#dits == 5, "un avertissement par sonde rouge (royaume normalisé, royaume, maison, faction, nom) : " .. #dits)
 print = vraiPrint
 GetBuildInfo = buildAvant
+lib.buildLu = nil
 print("LibCommune : sondes, royaume vide OK")
 
 -- Catalogue : les types que GameData relève, chacun léger ou lourd, avec son accesseur dans GameDataAPI.
@@ -404,7 +406,9 @@ assert(lib:QuandReleve("cours de l'HV", function() error("rappel cassé") end))
 assert(lib:QuandReleve("cours de l'HV", function(t) recus[#recus + 1] = t end))
 assert(not lib.accrocheGameData, "sans GameData : rien à accrocher")
 GameDataAPI = { marketScanned = noop, recettesConnues = function() return base end } -- GameData chargé après
+lib.sondes.build.etat = nil
 lib.cadre.onEvent(lib.cadre, "PLAYER_LOGIN")
+assert(lib.Sondes().build.etat == "vert", "sondes relancées à la connexion")
 GameDataAPI.marketScanned()
 assert(#recus == 1 and recus[1] == "cours de l'HV" and #erreurs == 1, "scan de l'HV : rappels appelés, erreur rendue au jeu")
 lib:QuandReleve("cours de l'HV", noop) -- accroché une seule fois

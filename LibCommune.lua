@@ -23,7 +23,7 @@
 -- Identité, chaque relevé sondé : lib.Royaume() (affiché), lib.RoyaumeNormalise() (sans espace ni tiret, celui des
 -- adresses), lib.MaisonHV() (« royaume-faction », clé des scans de l'HV), lib.Faction(), lib.Build() (nombre).
 -- Sondes : lib.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
--- lib.RelancerSondes() refait les relevés sans contexte. Une sonde rouge prévient dans le chat, ne corrige rien.
+-- lib.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
 local MAJOR, MINOR = "LibCommune-1.0", 10
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end -- une copie aussi récente est déjà chargée : c'est elle qui sert
@@ -102,14 +102,21 @@ local function montrer(v)
   return table.concat(t, ", ")
 end
 
+-- Le build noté dans l'état des sondes : il ne change pas pendant une session, lu une seule fois (lib.buildLu, gardé
+-- d'une mineure à l'autre ; check.lua le remet à nil pour simuler une mise à jour du jeu).
+-- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
+local function buildDeSession()
+  if lib.buildLu == nil and GetBuildInfo then lib.buildLu = select(2, GetBuildInfo()) end
+  return lib.buildLu
+end
+
 -- Vérifie la sonde nom sur ce que le jeu vient de rendre (...) et rend ... tel quel.
 local function sonder(nom, ...)
   local s, r = SONDES[nom], lib.sondes[nom] or {}
   lib.sondes[nom] = r
   r.etat = s.verifier(...) and "vert" or "rouge"
   r.valeur = select("#", ...) > 1 and { n = select("#", ...), ... } or (...) -- plusieurs retours : { n, … }
-  -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
-  r.heure, r.build = date("%H:%M:%S"), GetBuildInfo and select(2, GetBuildInfo())
+  r.heure, r.build = date("%H:%M:%S"), buildDeSession()
   if r.etat == "rouge" and not r.prevenu then
     r.prevenu = true
     print(("Azeroth Commune : le jeu ne rend pas ce que nous attendons (%s : %s ; reçu %s), build %s. À signaler."):format(
@@ -342,6 +349,7 @@ end
 -- Gardé d'une mineure à l'autre : une copie plus récente reprend ce que la précédente a relevé.
 lib.repli = lib.repli or { recettes = {}, metiers = {} }
 lib.cadre = lib.cadre or CreateFrame("Frame")
+pcall(lib.cadre.RegisterEvent, lib.cadre, "PLAYER_LOGIN") -- les sondes sont relancées à la connexion
 -- Les événements de chaque type de repli (enregistrés à sa souscription).
 local EVENEMENTS = {
   ["recettes connues"] = { "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" },
@@ -414,6 +422,7 @@ end
 local jeton, banqueOuverte = 0, false
 lib.cadre:SetScript("OnEvent", function(_, evenement)
   if evenement == "PLAYER_LOGIN" then -- tous les add-ons sont chargés : GameData aussi, s'il est là
+    lib.RelancerSondes() -- une sonde rouge prévient dès la connexion, même si aucun add-on n'a encore rien relevé
     lib.AccrocherGameData()
     if not lib.souscriptions["recettes connues"] then return end
   end

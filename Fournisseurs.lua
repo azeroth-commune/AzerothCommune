@@ -16,7 +16,8 @@
 -- Fournisseurs lus (rien de leur code n'est repris) : Auctionator (« All Rights Reserved ») et TSM par leur API publique
 -- seulement ; AuctionDB (GPL v3 dans son LICENSE, LGPLv3 dans son TOC) n'a pas d'API publique : ses SavedVariables, au
 -- format décrit dans son History.lua. Sa qty compte aussi les enchères sans achat immédiat.
-local lib = LibStub("LibCommune-1.0", true) or LibStub:NewLibrary("LibCommune-1.0", 0) -- chargé seul : outils, tests
+-- Chargé après LibCommune.lua (le TOC, les check.lua) : la maison de l'HV et la faction viennent de ses relevés sondés.
+local lib = LibStub("LibCommune-1.0")
 local VERSION = 3
 lib.versions = lib.versions or {}
 if (lib.versions.fournisseurs or 0) >= VERSION then return end
