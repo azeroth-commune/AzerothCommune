@@ -194,7 +194,7 @@ print("Azeroth Commune : sondes, royaume vide OK")
 
 -- Catalogue : les types que la base relève (leur accesseur privé : plus bas, avec la base).
 local attendus = { "inventaires", "réputations", "métiers et compétences", "quêtes terminées", "recettes connues",
-  "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
+  "base des recettes", "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
 local nTypes = 0
 for _ in pairs(lib.types) do nTypes = nTypes + 1 end
 assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
@@ -1047,6 +1047,37 @@ local rc = ns.lire["recettes connues"]()
 assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.known[3307], "recettes connues pour la lib")
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(AzerothCommune:Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
+-- Base des recettes (#48) : les recettes vues d'abord (3307 et 3308, relevé direct), la réserve Classic (RecettesClassic.lua,
+-- générée, privée au socle : ns.recettesClassic) pour les objets qu'aucune recette vue ne fabrique, chaque ligne de la
+-- réserve marquée « source externe ». La compétence requise, que la fenêtre ne donne pas, vient de la réserve.
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125 },          -- vue aussi : la vue gagne
+  [9003] = { 3577, 1, 1, "Minage", "Barre d'or (réserve)", { 2776, 1 }, 155 },   -- même objet que la vue 3308 : écartée
+  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9, 2321, 2 }, 175 },
+}
+local br, lotBr = AzerothCommune:Lire("base des recettes")
+assert(br[3307].name == "Fondre le fer" and br[3307].provenance == nil and br[3307].level == 125, "recette vue, sa compétence requise de la réserve")
+assert(AzerothCommuneDB.recipes[3307].level == nil, "la base des recettes vues n'est pas touchée")
+assert(br[3308] and br[9003] == nil, "même objet qu'une recette vue : la réserve ne la double pas")
+local cuir = br[9002]
+assert(cuir and cuir.provenance == "source externe" and cuir.profession == "Travail du cuir" and cuir.output == 4255
+  and cuir.made_min == 1 and cuir.made_max == 2 and cuir.level == 175 and cuir.reagents[2].id == 2321
+  and cuir.reagents[2].qty == 2 and cuir.reagents[1].qty == 9, "recette de la réserve, dans la forme des recettes vues")
+assert(lotBr.provenance == "relevé direct", "lot mixte : la provenance la plus fiable")
+-- Sans fichier de réserve (repo cloné tel quel) : les seules recettes vues, sans erreur.
+ns.recettesClassic = nil
+br, lotBr = AzerothCommune:Lire("base des recettes")
+assert(br[3307] and br[3307].level == nil and br[9002] == nil and lotBr.provenance == "relevé direct", "sans réserve : les recettes vues")
+-- La réserve seule (aucune recette vue) : lot « source externe », build inconnu donc peut-être périmé ; ni l'une ni l'autre :
+-- pas encore relevé.
+local vuesAvant = AzerothCommuneDB.recipes
+AzerothCommuneDB.recipes = {}
+ns.recettesClassic = { [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175 } }
+br, lotBr = AzerothCommune:Lire("base des recettes")
+assert(br[9002] and lotBr.provenance == "source externe" and lotBr.perime, "la réserve seule")
+ns.recettesClassic = nil
+assert(select(2, AzerothCommune:Lire("base des recettes")) == "pas encore relevé", "ni recette vue ni réserve")
+AzerothCommuneDB.recipes = vuesAvant
 -- Connexion : recettes connues relevées sans fenêtre (IsPlayerSpell, recettes déjà vues), pour un perso jamais passé par
 -- sa fenêtre de métier, et sauvegardées dans son perso. Puis la fenêtre s'ouvre : elle prime, sans rien perdre.
 local neuf, char0, run0 = { errors = {}, lots = {} }, ns.char, ns.run

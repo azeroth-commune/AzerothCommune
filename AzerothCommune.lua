@@ -50,6 +50,10 @@ local TYPES = {
   -- { recettes = { [clé] = { profession, name, output, reagents, … } },
   --   persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
   ["recettes connues"] = { parPerso = true },
+  -- Tout ce que fabrique une recette, connue ou non : { [clé] = { profession, name, output, reagents, made_min, made_max,
+  --   level (compétence requise, de la réserve), provenance } }. Les recettes vues sur tous les persos (relevé direct),
+  --   la réserve Classic (source externe, champ provenance) pour les objets qu'aucune recette vue ne fabrique (Commerce.lua).
+  ["base des recettes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
   marchands = {}, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
   ["prix des vols"] = {}, -- { [départ] = { [arrivée] = prix } }

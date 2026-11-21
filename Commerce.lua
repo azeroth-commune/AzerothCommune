@@ -93,6 +93,45 @@ ns.lire["recettes connues"] = function()
   return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
 end
 
+-- La réserve Classic : RecettesClassic.lua, généré par tools/build_recipe_data.py de l'atelier (base cMaNGOS Classic
+-- 1.12, GPL-3.0), hors du repo tant que la licence n'est pas choisie : absent d'un repo cloné tel quel. Mise en forme une
+-- fois dans la forme des recettes vues, chaque ligne marquée « source externe ».
+local reserve, brute
+local function reserveRecettes()
+  if reserve == nil or brute ~= ns.recettesClassic then
+    brute, reserve = ns.recettesClassic, {}
+    for k, c in pairs(brute or {}) do -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence }
+      local reagents = {}
+      for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
+      reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
+        level = c[7], provenance = "source externe" }
+    end
+  end
+  return reserve
+end
+
+-- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
+-- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence requise (la fenêtre de
+-- métier ne la donne pas), sur une copie. Lot : relevé direct dès qu'une recette est vue ; la réserve seule, comme
+-- VendorData : source externe, build inconnu donc peut-être périmé.
+ns.lire["base des recettes"] = function()
+  local vues, res, d, fait = AzerothCommuneDB.recipes or {}, reserveRecettes(), {}, {}
+  for k, r in pairs(vues) do
+    local c = res[k]
+    if c and r.level == nil then
+      local copie = { level = c.level }
+      for f, v in pairs(r) do copie[f] = v end
+      r = copie
+    end
+    d[k] = r
+    if r.output then fait[r.output] = true end
+  end
+  for k, r in pairs(res) do
+    if d[k] == nil and not fait[r.output] then d[k] = r end
+  end
+  return d, next(vues) and { provenance = "relevé direct" } or { provenance = "source externe", perime = true }
+end
+
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore
   if not GetCraftDisplaySkillLine then return false end
   local prof, rank, max = GetCraftDisplaySkillLine()
