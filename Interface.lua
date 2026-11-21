@@ -96,7 +96,7 @@ end
 function lib.NomObjet(id, objets, garde)
   local it = objets and objets[id]
   local _, link = infoObjet(id)
-  if not link and not it then lib.RetenirObjet(id, garde) end
+  if not link and not (it and it.link) then lib.RetenirObjet(id, garde) end -- sans lien (catalogue, #52) : demandé, pour le lien
   return (it and it.link) or link or (it and it.name) or ("objet " .. id)
 end
 

@@ -521,10 +521,11 @@ C_Item = { GetItemInfo = function(id) local i = client[id]; if i then return i[1
   RequestLoadItemDataByID = function(id) demandesServeur[#demandesServeur + 1] = id end }
 local objets = { [1] = { name = "Barre de fer", link = "|lien1|" }, [2] = { name = "Toile de lin" } }
 assert(lib.NomObjet(1, objets) == "|lien1|" and lib.NomObjet(2, objets) == "Toile de lin" and lib.NomObjet(3, objets) == "|lien3|")
-assert(#demandesServeur == 0, "un objet connu n'est pas demandé")
+assert(#demandesServeur == 1 and demandesServeur[1] == 2,
+  "un objet connu avec son lien n'est pas demandé ; connu par son seul nom (catalogue, #52), il l'est, pour avoir son lien")
 local garde = {}
 assert(lib.NomObjet(4, objets, garde) == "objet 4" and lib.NomObjet(4, objets, garde) == "objet 4")
-assert(#demandesServeur == 1 and demandesServeur[1] == 4, "demandé une seule fois au serveur")
+assert(#demandesServeur == 2 and demandesServeur[2] == 4, "demandé une seule fois au serveur")
 client[4] = { "Épice", "|lien4|" }
 local cadreObjets = cadres[#cadres] -- le cadre privé d'Interface.lua, créé à la première demande au serveur
 cadreObjets.onEvent(cadreObjets, "ITEM_DATA_LOAD_RESULT", 4, true)
