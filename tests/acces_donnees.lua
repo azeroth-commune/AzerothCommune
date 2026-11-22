@@ -52,6 +52,7 @@ end)
 -- #48, #54 : la réserve extraite du client (RecettesClassic.lua, générée, hors du repo : à copier dans un worktree) est
 -- chargée par la TOC du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance, sa
 -- compétence requise et ses seuils jaune et gris.
+local SOURCES = { ["d'emblée"] = true, ["maître"] = true, ["patron vendu"] = true, ["retirée"] = true, inconnue = true }
 test("base des recettes : la réserve du socle chargée, chaque recette avec sa provenance", function()
     local lib = AzerothCommune
     assertTrue(lib:Souscrire("base des recettes"))
@@ -63,11 +64,16 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
     for _, r in pairs(data) do
         if r.provenance == "extrait du client" then
             reserve = reserve + 1
-            assertType("number", r.output)
+            if r.output ~= nil then assertType("number", r.output) end -- nil : un enchantement (#64)
             assertType("string", r.profession)
             assertType("table", r.reagents)
             assertType("number", r.level) -- 0 : inconnue (Bottes d'hiver 44953 : absente de Classic, sans seuils dans le client)
             assertTrue(r.grey >= r.yellow, "seuils : " .. tostring(r.name))
+            assertTrue(SOURCES[r.source], "source : " .. tostring(r.name) .. " " .. tostring(r.source))
+            assertTrue(r.source_provenance == "extrait du client" or r.source_provenance == "source externe")
+            assertType("number", r.cooldown)
+            assertTrue(r.yellow <= 0 or r.level <= r.yellow, "compétence au-dessus du jaune (#62) : " .. tostring(r.name))
+            assertEquals(r.source == "patron vendu", r.pattern_price ~= nil)
         else
             vues = vues + 1
         end
@@ -77,6 +83,29 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
     local potion = data[1244432]
     assertTrue(potion ~= nil and potion.profession == "Secourisme" and potion.output == 858, "recette de Forever")
     print("base des recettes : " .. vues .. " vue(s), " .. reserve .. " de la réserve")
+end)
+
+-- #64 : source, compétence pour l'apprendre, prix du patron et temps de recharge, sur les exemples vérifiés de l'issue ;
+-- les enchantements d'objet entrent dans la réserve, sans objet produit.
+test("base des recettes : source, compétence, patron et recharge de chaque recette", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("base des recettes"))
+    local data = lib:Lire("base des recettes")
+    local rouleau, robe, lunaire = data[18401], data[18406], data[18560]
+    assertEquals("maître", rouleau.source) -- Rouleau d'étoffe runique
+    assertTrue(rouleau.level <= 210, "compétence du rouleau : " .. rouleau.level)
+    assertEquals("patron vendu", robe.source) -- Robe en étoffe runique
+    assertTrue(robe.pattern_price > 0)
+    assertTrue(math.abs(lunaire.cooldown - 95 * 3600) < 3600, "recharge de l'étoffe lunaire : " .. lunaire.cooldown)
+    assertEquals("inconnue", data[19435].source) -- Bottes en étoffe lunaire (recette de quête)
+    assertEquals("d'emblée", data[2149].source) -- Bottes en cuir cousu main
+    assertEquals("extrait du client", data[2149].source_provenance)
+    local ench = data[13501] -- Ench. de bracelets (Endurance inférieure)
+    assertNotNil(ench, "enchantement dans la réserve")
+    assertNil(ench.output)
+    assertEquals("Enchantement", ench.profession)
+    assertTrue(#ench.reagents > 0 and ench.yellow > 0 and ench.grey >= ench.yellow)
+    assertEquals("maître", ench.source)
 end)
 
 -- #49 : la recherche d'objets de la suite, parmi les objets vus et les objets fabriqués de la base des recettes.
