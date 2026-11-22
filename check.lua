@@ -1143,7 +1143,6 @@ assert(ench and ench.output == nil and ench.reagents[1].id == 11083 and ench.lev
 assert(br[9005], "deux enchantements : l'un ne cache pas l'autre")
 assert(AzerothCommune.TrouverObjet("Ench. de bracelets (Endurance inférieure)", {}, br) == nil
   and AzerothCommune.TrouverObjet("Etoffe lunaire", {}, br) == 14342, "un enchantement n'est pas un objet")
-ns.recettesClassic = nil
 -- Sans fichier de réserve (repo cloné tel quel) : les seules recettes vues, sans erreur.
 ns.recettesClassic = nil
 br, lotBr = AzerothCommune:Lire("base des recettes")

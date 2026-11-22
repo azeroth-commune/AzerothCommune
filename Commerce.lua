@@ -125,9 +125,10 @@ local function scanKnownRecipes()
 end
 
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
--- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence requise, la source et le
--- temps de recharge (la fenêtre de métier ne les donne pas), sur une copie. Lot : relevé direct dès qu'une recette est vue ; la réserve seule, comme le
--- catalogue des objets : le lot de la réserve (extrait du client), peut-être périmé sous un autre build ou sans lot.
+-- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre, la source,
+-- le prix du patron et le temps de recharge (la fenêtre de métier ne les donne pas), sur une copie. Lot : relevé direct
+-- dès qu'une recette est vue ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
+-- peut-être périmé sous un autre build ou sans lot.
 ns.lire["base des recettes"] = function()
   local vues, res, d, fait = AzerothCommuneDB.recipes or {}, reserveRecettes(), {}, {}
   for k, r in pairs(vues) do

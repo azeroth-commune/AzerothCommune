@@ -44,7 +44,8 @@ local b, lot = AC:Lire("base des recettes")
 -- gris) / 2) ; source = « d'emblée », « maître », « patron vendu », « retirée » ou « inconnue » (où l'apprendre),
 -- source_provenance = « extrait du client » ou « source externe » (cMaNGOS Classic) ; pattern_price = prix du patron
 -- vendu (cuivre, nil sans) ; cooldown = temps de recharge (secondes, 0 sans). level, source, source_provenance,
--- pattern_price et cooldown viennent de la réserve, même pour une recette vue qu'elle connaît. lot.provenance : « relevé direct » dès qu'une recette est vue, sinon le lot de la
+-- pattern_price et cooldown viennent de la réserve, même pour une recette vue qu'elle connaît. lot.provenance :
+-- « relevé direct » dès qu'une recette est vue, sinon le lot de la
 -- réserve (extrait du client, build, version, date ; perime sous un autre build). Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
 -- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet
 -- rien au socle. Une recette vue n'a pas de champ provenance (relevé direct, comme une ligne de tête de lib.Fusionner).
