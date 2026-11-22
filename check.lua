@@ -1120,6 +1120,30 @@ assert(cuir and cuir.provenance == "extrait du client" and cuir.profession == "T
   and cuir.reagents[2].qty == 2 and cuir.reagents[1].qty == 9, "recette de la réserve, dans la forme des recettes vues")
 assert(cuir.yellow == 180 and cuir.grey == 200 and br[3307].yellow == nil, "seuils jaune et gris de la réserve")
 assert(lotBr.provenance == "relevé direct", "lot mixte : la provenance la plus fiable")
+-- #64 : chaque recette de la réserve porte sa source, la provenance de cette source, le prix du patron (nil sans) et son
+-- temps de recharge (secondes) ; une recette vue que la réserve connaît les prend aussi. Un enchantement (sans objet
+-- produit) entre dans la base sans casser l'index par objet.
+assert(cuir.source == nil and cuir.cooldown == nil, "réserve d'avant #64 : pas de source")
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
+  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0 },
+  [18560] = { 14342, 1, 1, "Couture", "Etoffe lunaire", { 14256, 2 }, 250, 270, 300, "patron vendu", "source externe", 20000, 342000 },
+  [13501] = { nil, 1, 1, "Enchantement", "Ench. de bracelets (Endurance inférieure)", { 11083, 1 }, 130, 155, 195, "maître", "source externe", 0, 0 },
+  [9005] = { nil, 1, 1, "Enchantement", "Ench. de cape (réserve)", { 11083, 2 }, 70, 90, 130, "inconnue", "source externe", 0, 0 },
+}
+br = AzerothCommune:Lire("base des recettes")
+assert(br[9002].source == "patron vendu" and br[9002].source_provenance == "source externe" and br[9002].pattern_price == 12000
+  and br[9002].cooldown == 0, "patron vendu, son prix, sans recharge")
+assert(br[18560].cooldown == 342000, "recharge de l'étoffe lunaire : 95 h")
+assert(br[3307].source == "maître" and br[3307].pattern_price == nil and br[3307].level == 125 and br[3307].provenance == nil,
+  "recette vue : la source de la réserve, sans prix de patron")
+local ench = br[13501]
+assert(ench and ench.output == nil and ench.reagents[1].id == 11083 and ench.level == 130 and ench.yellow == 155
+  and ench.source == "maître", "enchantement : sans objet produit, avec composants, seuils et source")
+assert(br[9005], "deux enchantements : l'un ne cache pas l'autre")
+assert(AzerothCommune.TrouverObjet("Ench. de bracelets (Endurance inférieure)", {}, br) == nil
+  and AzerothCommune.TrouverObjet("Etoffe lunaire", {}, br) == 14342, "un enchantement n'est pas un objet")
+ns.recettesClassic = nil
 -- Sans fichier de réserve (repo cloné tel quel) : les seules recettes vues, sans erreur.
 ns.recettesClassic = nil
 br, lotBr = AzerothCommune:Lire("base des recettes")
