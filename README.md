@@ -36,11 +36,16 @@ local d, raison = AC:Lire("recettes connues", "tous") -- nil = personnage connec
 -- raison : « type inconnu », « pas encore relevé » ; Souscrire avant le chargement du socle : nil, « socle pas chargé »
 AC:Souscrire("base des recettes")                  -- tout ce que fabrique une recette, connue ou non
 local b, lot = AC:Lire("base des recettes")
--- b = { [clé] = { profession, name, output, reagents, made_min, made_max, level, yellow, grey, provenance } } : les
--- recettes vues sur tous les persos (relevé direct), puis la réserve du socle, extraite du client (provenance « extrait
--- du client »), pour les objets qu'aucune recette vue ne fabrique ; level = compétence requise (de la réserve : celle de
--- Classic quand la recette y est identique, sinon le seuil jaune) ; yellow, grey = seuils jaune et gris du client (réserve
--- seule ; vert = (jaune + gris) / 2). lot.provenance : « relevé direct » dès qu'une recette est vue, sinon le lot de la
+-- b = { [clé] = { profession, name, output, reagents, made_min, made_max, level, yellow, grey, source, source_provenance,
+-- pattern_price, cooldown, provenance } } : les recettes vues sur tous les persos (relevé direct), puis la réserve du
+-- socle, extraite du client (provenance « extrait du client »), pour les objets qu'aucune recette vue ne fabrique, et les
+-- enchantements d'objet (output nil : ne pas indexer par objet sans le tester) ; level = compétence pour l'apprendre (de
+-- la réserve, plafonnée au seuil jaune) ; yellow, grey = seuils jaune et gris du client (réserve seule ; vert = (jaune +
+-- gris) / 2) ; source = « d'emblée », « maître », « patron vendu », « retirée » ou « inconnue » (où l'apprendre),
+-- source_provenance = « extrait du client » ou « source externe » (cMaNGOS Classic) ; pattern_price = prix du patron
+-- vendu (cuivre, nil sans) ; cooldown = temps de recharge (secondes, 0 sans). level, source, source_provenance,
+-- pattern_price et cooldown viennent de la réserve, même pour une recette vue qu'elle connaît. lot.provenance :
+-- « relevé direct » dès qu'une recette est vue, sinon le lot de la
 -- réserve (extrait du client, build, version, date ; perime sous un autre build). Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
 -- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet
 -- rien au socle. Une recette vue n'a pas de champ provenance (relevé direct, comme une ligne de tête de lib.Fusionner).

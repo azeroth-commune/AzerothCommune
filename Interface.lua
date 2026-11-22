@@ -101,7 +101,7 @@ function lib.NomObjet(id, objets, garde)
 end
 
 -- Un objet d'après un lien, un ID, ou son nom exact (sans casse) dans objets, à défaut le nom d'une recette
--- (recettes = { [clé] = { name, output } }) : on rend alors son produit.
+-- (recettes = { [clé] = { name, output } }) : on rend alors son produit (un enchantement n'en a pas : on cherche plus loin).
 function lib.TrouverObjet(text, objets, recettes)
   local id = tonumber(text:match("item:(%d+)")) or tonumber(text)
   if id then return id end
@@ -110,7 +110,7 @@ function lib.TrouverObjet(text, objets, recettes)
     if it.name and it.name:lower() == wanted then return iid end
   end
   for _, r in pairs(recettes or {}) do
-    if r.name and r.name:lower() == wanted then return r.output end
+    if r.output and r.name and r.name:lower() == wanted then return r.output end
   end
 end
 
