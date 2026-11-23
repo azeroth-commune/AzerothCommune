@@ -72,7 +72,8 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
             assertTrue(SOURCES[r.source], "source : " .. tostring(r.name) .. " " .. tostring(r.source))
             assertTrue(r.source_provenance == "extrait du client" or r.source_provenance == "source externe")
             assertType("number", r.cooldown)
-            assertTrue(r.yellow <= 0 or r.level <= r.yellow, "compétence au-dessus du jaune (#62) : " .. tostring(r.name))
+            -- sauf un patron connu du client (exposé ou lié à la prise), dont la compétence requise fait foi (Maitrise#15) : jamais au-dessus de 300
+            assertTrue(r.yellow <= 0 or r.level <= r.yellow or ((r.source == "inconnue" or r.source == "patron vendu") and r.level <= 300), "compétence au-dessus du jaune (#62) : " .. tostring(r.name))
             assertEquals(r.source == "patron vendu", r.pattern_price ~= nil)
         else
             vues = vues + 1
