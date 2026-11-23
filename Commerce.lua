@@ -103,6 +103,14 @@ local function fichePNJ(id) -- un PNJ hors de la table garde son ID, sans nom ni
   local p = ns.recettesPNJ and ns.recettesPNJ[id] or {}
   return { pnj = id, nom = p[1], carte = p[2], x = p[3], y = p[4], faction = p[5] }
 end
+-- Le lot des marchands et des maîtres de la réserve (ns.recettesMarchandsLot : provenance « source externe », source
+-- « Fabrikao », version, date de ses données), en copie ; nil sans réserve.
+local function lotMarchands()
+  if not ns.recettesMarchandsLot then return nil end
+  local lot = {}
+  for f, v in pairs(ns.recettesMarchandsLot) do lot[f] = v end
+  return lot
+end
 local function marchandsDe(liste)
   local out = {}
   for i = 1, #liste, 2 do
@@ -229,8 +237,8 @@ ns.lire["base des recettes"] = function()
   for k, r in pairs(res) do
     if d[k] == nil and not fait[r.output] then d[k] = r end
   end
-  if appliquerMaitres(d) > 0 or next(vues) then return d, { provenance = "relevé direct" } end
-  local lot = {}
+  if appliquerMaitres(d) > 0 or next(vues) then return d, { provenance = "relevé direct", marchands = lotMarchands() } end
+  local lot = { marchands = lotMarchands() }
   for f, v in pairs(ns.recettesClassicLot or {}) do lot[f] = v end
   -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
   lot.provenance, lot.perime = "extrait du client", not (GetBuildInfo and lot.build == lib.Build()) or nil
@@ -239,13 +247,14 @@ end
 
 -- Les maîtres d'un métier (« Forge », les noms de métier de la base des recettes), d'après la réserve (Fabrikao, source
 -- externe, #80) : { { pnj, nom, carte, x, y, faction }, … } (champs comme les marchands de la base des recettes), dans
--- l'ordre de Fabrikao (niveau du PNJ) ; nil pour un métier inconnu ou sans réserve. Copies : à modifier sans risque.
+-- l'ordre de Fabrikao (niveau du PNJ), et leur lot { provenance = « source externe », source = « Fabrikao », version, date
+-- (de ses données) } ; nil pour un métier inconnu ou sans réserve. Copies : à modifier sans risque.
 function lib.MaitresDuMetier(metier)
   local ids = ns.recettesMaitres and ns.recettesMaitres[metier]
   if not ids then return nil end
   local out = {}
   for _, id in ipairs(ids) do out[#out + 1] = fichePNJ(id) end
-  return out
+  return out, lotMarchands()
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore

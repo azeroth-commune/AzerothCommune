@@ -960,18 +960,21 @@ end
 print("Azeroth Commune : sondes des sacs, recettes, noms d'objets et fournisseurs OK")
 
 -- Le global ne porte que l'API publique et les champs documentés (#45) : cadres et états de session sont privés (ns ou
--- locaux), après un regroupement, des noms d'objets demandés au serveur, des sondes vérifiées et des rappels posés.
-do
+-- locaux), après un regroupement, des noms d'objets demandés au serveur, des sondes vérifiées et des rappels posés. Rejoué
+-- après le chargement de la base (Commerce.lua complète le global : MaitresDuMetier, #80).
+function verifierGlobalDocumente(lib)
   local documentes = {}
   for nom in ([[Argent ArgentCourt ArgentSigne BoutonCapture Build Capturer ChampsARelever ChercherObjets Conteneurs DeclarerSonde
     Destinataire EXPORT_N EXPORT_PAGE_BYTES EstBanque EstSac Exporter Exports Faction Fenetre Fusionner GrilleExport JsonSur
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
-    Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres]]):gmatch("%S+") do
+    Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres
+    MaitresDuMetier]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
 end
+verifierGlobalDocumente(lib)
 print("Azeroth Commune : le global ne porte que l'API publique OK")
 
 ---------------------------------------------------------------------------------------------------
@@ -1186,6 +1189,7 @@ do
 ns.recettesPNJ = { [254151] = { "Vayn Moongaze", 2521, 63.8, 36 }, [5] = { "Marchand", 1429, 41.8, 67, "Alliance" },
   [7] = { "Maître", nil, nil, nil, "Horde" } }
 ns.recettesMaitres = { Forge = { 7, 5 } }
+ns.recettesMarchandsLot = { provenance = "source externe", source = "Fabrikao", version = "0.9.1", date = "2026-11-22" }
 ns.recettesClassic = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
   [1301421] = { 276992, 1, 1, "Forge", "Cotte de mailles forge-ciel nuageuse", { 2840, 8 }, 60, 65, 70, "patron vendu", "source externe",
@@ -1193,7 +1197,12 @@ ns.recettesClassic = {
   [2158] = { 2307, 1, 1, "Travail du cuir", "Bottes élégantes en cuir", { 2318, 7 }, 90, 95, 125, "patron vendu", "source externe", 500, 0,
     nil, 2406, { 5, 450, 6, 0 } },
 }
-br = AzerothCommune:Lire("base des recettes")
+local lotM
+br, lotM = AzerothCommune:Lire("base des recettes")
+assert(lotM.marchands.provenance == "source externe" and lotM.marchands.source == "Fabrikao" and lotM.marchands.version == "0.9.1"
+  and lotM.marchands.date == "2026-11-22", "le lot dit la provenance des marchands : Fabrikao, sa version, la date de ses données")
+lotM.marchands.date = "touché"
+assert(ns.recettesMarchandsLot.date == "2026-11-22", "lot des marchands en copie")
 local vayn = br[1301421].marchands
 assert(#vayn == 1 and vayn[1].pnj == 254151 and vayn[1].nom == "Vayn Moongaze" and vayn[1].prix == nil and vayn[1].carte == 2521
   and vayn[1].x == 63.8 and vayn[1].y == 36 and vayn[1].faction == nil and br[1301421].source == "patron vendu"
@@ -1209,12 +1218,14 @@ br = AzerothCommune:Lire("base des recettes")
 assert(br[2158].marchands[1].pnj == 5 and AzerothCommuneDB.recipes[2158].marchands == nil, "une recette vue en prend les marchands, sur une copie")
 AzerothCommuneDB.recipes[2158] = nil
 AzerothCommuneDB.recipes[3307] = vue3307
-local forge = AzerothCommune.MaitresDuMetier("Forge")
+local forge, lotF = AzerothCommune.MaitresDuMetier("Forge")
+assert(lotF.provenance == "source externe" and lotF.source == "Fabrikao" and lotF.date == "2026-11-22", "maîtres : leur lot")
 assert(#forge == 2 and forge[1].pnj == 7 and forge[1].nom == "Maître" and forge[1].faction == "Horde" and forge[1].carte == nil
   and forge[2].pnj == 5 and forge[2].carte == 1429 and forge[2].x == 41.8 and forge[2].y == 67, "maîtres de la Forge, dans l'ordre, avec position")
 forge[1].nom = "touché"
 assert(AzerothCommune.MaitresDuMetier("Forge")[1].nom == "Maître" and AzerothCommune.MaitresDuMetier("Pêche") == nil, "copies ; métier inconnu : nil")
-ns.recettesPNJ, ns.recettesMaitres = nil, nil
+verifierGlobalDocumente(AzerothCommune) -- la base chargée : MaitresDuMetier est documenté
+ns.recettesPNJ, ns.recettesMaitres, ns.recettesMarchandsLot = nil, nil, nil
 assert(AzerothCommune.MaitresDuMetier("Forge") == nil, "sans réserve : nil")
 end
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de

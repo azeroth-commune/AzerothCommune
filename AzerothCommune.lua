@@ -19,7 +19,8 @@
 --   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
--- Maîtres d'un métier, avec leur position : AC.MaitresDuMetier(métier) (Commerce.lua, d'après Fabrikao, source externe).
+-- Maîtres d'un métier, avec leur position : AC.MaitresDuMetier(métier) -> maîtres, lot (Commerce.lua, d'après Fabrikao, source
+-- externe : le lot dit sa version et la date de ses données).
 -- Recherche d'objets : AC.ChercherObjets(texte, max) parmi les objets (relevés, puis le catalogue extrait du client) et les
 -- objets fabriqués de la base des recettes (Interface.lua) ; l'add-on qui cherche souscrit à « objets » et à « base des recettes ».
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
@@ -58,7 +59,9 @@ local TYPES = {
   --   n'est connu ; une recette dont Fabrikao connaît un marchand a la source « patron vendu », sauf retirée, d'emblée ou
   --   maître : { { pnj, nom (anglais, de Wowhead), prix (cuivre chez ce marchand, nil inconnu), carte (uiMapID), x, y
   --   (pourcentage de la carte, nil sans position), faction (« Alliance », « Horde », nil : les deux ou inconnue) }, … }),
-  --   provenance } }. La position des maîtres d'un métier : AC.MaitresDuMetier(métier) (Commerce.lua). Les recettes vues
+  --   provenance } }. Le lot porte celui des marchands : lot.marchands = { provenance = « source externe », source =
+  --   « Fabrikao », version, date (de ses données) }. La position des maîtres d'un métier (même lot, en 2e valeur) :
+  --   AC.MaitresDuMetier(métier) (Commerce.lua). Les recettes vues
   --   sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets qu'aucune
   --   recette vue ne fabrique (Commerce.lua). Les maîtres de métier relevés passent devant les deux (#72) : une recette
   --   qu'un maître enseigne (rapprochée par l'objet enseigné, sinon par le nom, dans le métier du service) prend sa

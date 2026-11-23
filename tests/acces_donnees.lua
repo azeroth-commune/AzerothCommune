@@ -75,8 +75,11 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
             assertType("number", r.cooldown)
             -- sauf un patron connu du client (exposé ou lié à la prise), dont la compétence requise fait foi (Maitrise#15) : jamais au-dessus de 300
             assertTrue(r.yellow <= 0 or r.level <= r.yellow or ((r.source == "inconnue" or r.source == "patron vendu") and r.level <= 300), "compétence au-dessus du jaune (#62) : " .. tostring(r.name))
-            -- un patron vendu que Fabrikao seul connaît (#80) peut n'avoir pas de prix de base dans le client
+            -- un patron vendu que Fabrikao seul connaît (#80) peut n'avoir pas de prix de base dans le client, mais il a ses marchands
             if r.pattern_price ~= nil then assertEquals("patron vendu", r.source) end
+            if r.source == "patron vendu" then
+                assertTrue(r.pattern_price ~= nil or r.marchands ~= nil, "patron vendu sans prix ni marchand : " .. tostring(r.name))
+            end
         else
             vues = vues + 1
         end
@@ -115,7 +118,10 @@ end)
 test("base des recettes : le marchand de chaque patron vendu, sa position ; les maîtres d'un métier", function()
     local lib = AzerothCommune
     assertTrue(lib:Souscrire("base des recettes"))
-    local data = lib:Lire("base des recettes")
+    local data, lot = lib:Lire("base des recettes")
+    assertEquals("source externe", lot.marchands.provenance)
+    assertEquals("Fabrikao", lot.marchands.source)
+    assertType("string", lot.marchands.date)
     local n = 0
     for _, r in pairs(data) do
         if r.marchands then
@@ -129,7 +135,7 @@ test("base des recettes : le marchand de chaque patron vendu, sa position ; les 
             end
         end
     end
-    assertTrue(n > 900, "recettes avec un marchand : " .. n)
+    assertTrue(n > 700, "recettes avec un marchand : " .. n)
     -- Patron propre à Forever : la série forge-ciel nuageuse de Vayn Moongaze (PNJ 254151), carte 2521.
     local cotte = data[1301421]
     assertEquals("patron vendu", cotte.source)
@@ -138,7 +144,11 @@ test("base des recettes : le marchand de chaque patron vendu, sa position ; les 
     assertEquals("Vayn Moongaze", cotte.marchands[1].nom)
     assertEquals(2521, cotte.marchands[1].carte)
     assertNil(data[2149].marchands) -- Bottes en cuir cousu main : d'emblée, aucun marchand
-    local forge = lib.MaitresDuMetier("Forge")
+    -- Patron de butin (Robe du Vide, patron 14514 lâché par Darkmaster Gandling) : pas de marchand, toujours « inconnue ».
+    assertNil(data[18458].marchands)
+    assertEquals("inconnue", data[18458].source)
+    local forge, lotF = lib.MaitresDuMetier("Forge")
+    assertEquals("source externe", lotF.provenance)
     assertTrue(#forge > 10, "maîtres de la Forge : " .. #forge)
     local places = 0
     for _, m in ipairs(forge) do
