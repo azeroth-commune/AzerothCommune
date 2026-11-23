@@ -124,10 +124,61 @@ local function scanKnownRecipes()
   lib:ReleverRecettesSansFenetre(c.recipes, candidates, function() ns.noterLot("recipes", false, c.lots) end)
 end
 
+-- Le relevé des maîtres de métier passe devant la réserve (#72) : pour chaque service d'un maître relevé (AzerothCommuneDB.trainers),
+-- la recette qu'il enseigne prend level = la compétence demandée (skill_rank), source « maître », source_provenance
+-- « relevé direct » et prix_maitre = son prix (cuivre) ; le client et cMaNGOS se trompent parfois de 25 points (#68).
+-- Rapprochement, dans le métier du service (service.skill, le nom du métier) : par l'objet enseigné (service.item = output de
+-- la recette) quand une seule recette du métier le produit, sinon par le nom exact (un enchantement n'a pas d'objet : par
+-- son nom). Un service qui ne rapproche rien (« Minage d'apprenti », une compétence de classe) est ignoré. Plusieurs maîtres
+-- pour une recette : la compétence la plus basse, puis le prix le plus bas. d est modifié (ses lignes sont déjà des copies
+-- ou des lignes de la réserve : une ligne touchée est remplacée par une copie, jamais modifiée sur place).
+local function appliquerMaitres(d)
+  local parObjet, parNom = {}, {}
+  for k, r in pairs(d) do
+    local m = r.profession
+    if m then
+      parNom[m] = parNom[m] or {}
+      parNom[m][r.name] = parNom[m][r.name] or {}
+      table.insert(parNom[m][r.name], k)
+      if r.output then
+        parObjet[m] = parObjet[m] or {}
+        parObjet[m][r.output] = parObjet[m][r.output] or {}
+        table.insert(parObjet[m][r.output], k)
+      end
+    end
+  end
+  local meilleur = {} -- clé -> service retenu
+  for _, t in pairs(AzerothCommuneDB.trainers or {}) do
+    for _, sv in ipairs(t.services or {}) do
+      local m, cles = sv.skill, nil
+      if m and sv.skill_rank then
+        cles = sv.item and parObjet[m] and parObjet[m][sv.item]
+        if not cles or #cles ~= 1 then cles = parNom[m] and parNom[m][sv.name] end
+        for _, k in ipairs(cles or {}) do
+          local b = meilleur[k]
+          if not b or sv.skill_rank < b.skill_rank or (sv.skill_rank == b.skill_rank and (sv.cost or 0) < (b.cost or 0)) then
+            meilleur[k] = sv
+          end
+        end
+      end
+    end
+  end
+  local n = 0
+  for k, sv in pairs(meilleur) do
+    local copie = {}
+    for f, v in pairs(d[k]) do copie[f] = v end
+    copie.level, copie.source, copie.source_provenance, copie.prix_maitre = sv.skill_rank, "maître", "relevé direct", sv.cost
+    d[k] = copie
+    n = n + 1
+  end
+  return n
+end
+
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
 -- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre, les seuils
--- jaune et gris, la source, le prix du patron et le temps de recharge (la fenêtre de métier ne les donne pas), sur une copie. Lot : relevé direct
--- dès qu'une recette est vue ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
+-- jaune et gris, la source, le prix du patron et le temps de recharge (la fenêtre de métier ne les donne pas), sur une copie.
+-- Puis les maîtres relevés (appliquerMaitres) l'emportent sur les deux. Lot : relevé direct dès qu'une recette est vue ou
+-- qu'un maître en a donné une ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
 -- peut-être périmé sous un autre build ou sans lot.
 ns.lire["base des recettes"] = function()
   local vues, res, d, fait = AzerothCommuneDB.recipes or {}, reserveRecettes(), {}, {}
@@ -145,7 +196,7 @@ ns.lire["base des recettes"] = function()
   for k, r in pairs(res) do
     if d[k] == nil and not fait[r.output] then d[k] = r end
   end
-  if next(vues) then return d, { provenance = "relevé direct" } end
+  if appliquerMaitres(d) > 0 or next(vues) then return d, { provenance = "relevé direct" } end
   local lot = {}
   for f, v in pairs(ns.recettesClassicLot or {}) do lot[f] = v end
   -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.

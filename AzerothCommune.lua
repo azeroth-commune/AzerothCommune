@@ -51,7 +51,10 @@ local TYPES = {
   --   made_min, made_max, level (compétence pour l'apprendre, de la réserve), yellow, grey (seuils du client, de la
   --   réserve), source, source_provenance, pattern_price, cooldown (de la réserve, #64), provenance } }. Les recettes vues
   --   sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets qu'aucune
-  --   recette vue ne fabrique (Commerce.lua).
+  --   recette vue ne fabrique (Commerce.lua). Les maîtres de métier relevés passent devant les deux (#72) : une recette
+  --   qu'un maître enseigne (rapprochée par l'objet enseigné, sinon par le nom, dans le métier du service) prend sa
+  --   compétence demandée en level, source « maître », source_provenance « relevé direct » et prix_maitre (cuivre) ;
+  --   les autres gardent les valeurs de la réserve.
   ["base des recettes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
   marchands = {}, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
