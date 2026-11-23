@@ -92,20 +92,21 @@ end
 -- client », avec les seuils jaune et gris du client (vert = (jaune + gris) / 2) et, depuis #64, la source de la recette
 -- (« d'emblée », « maître », « patron vendu », « retirée », « inconnue »), la provenance de cette source (« extrait du
 -- client », ou « source externe » : cMaNGOS), la compétence pour l'apprendre (level, plafonnée au seuil jaune), le prix du
--- patron (cuivre, nil sans) et le temps de recharge (secondes, 0 sans) : le générateur en décide. Un enchantement n'a pas
+-- patron (cuivre, nil sans), le temps de recharge (secondes, 0 sans) et, depuis #67, la condition d'accès (« spécialisation : … »,
+-- « réputation : … », « plus enseignée », nil sans) : le générateur en décide. Un enchantement n'a pas
 -- d'objet produit (output nil).
 local reserve, brute
 local function reserveRecettes()
   if reserve == nil or brute ~= ns.recettesClassic then
     brute, reserve = ns.recettesClassic, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
-    --   provenance de la source, prix du patron, recharge }
+    --   provenance de la source, prix du patron, recharge, condition (nil sans) }
     for k, c in pairs(brute or {}) do
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
         level = c[7], yellow = c[8], grey = c[9], source = c[10], source_provenance = c[11],
-        pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], provenance = "extrait du client" }
+        pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], provenance = "extrait du client" }
     end
   end
   return reserve
@@ -124,10 +125,73 @@ local function scanKnownRecipes()
   lib:ReleverRecettesSansFenetre(c.recipes, candidates, function() ns.noterLot("recipes", false, c.lots) end)
 end
 
+-- Le relevé des maîtres de métier passe devant la réserve (#72) : pour chaque service d'un maître relevé (AzerothCommuneDB.trainers),
+-- la recette qu'il enseigne prend level = la compétence demandée (skill_rank), source « maître », source_provenance
+-- « relevé direct » et prix_maitre = son prix (cuivre) ; le client et cMaNGOS se trompent parfois de 25 points (#68).
+-- Rapprochement, dans le métier du service (service.skill, le nom du métier) : par l'objet enseigné (service.item = output de
+-- la recette) quand une seule recette du métier le produit, sinon par le nom exact (un enchantement n'a pas d'objet : par
+-- son nom). Un service qui ne rapproche rien (« Minage d'apprenti », une compétence de classe) est ignoré. Plusieurs maîtres
+-- pour une recette : la compétence la plus basse, puis le prix le plus bas. d est modifié (ses lignes sont déjà des copies
+-- ou des lignes de la réserve : une ligne touchée est remplacée par une copie, jamais modifiée sur place).
+local function appliquerMaitres(d)
+  -- ponytail: la base est lue souvent ; on n'indexe que les métiers d'un maître relevé (rien sans maître).
+  local metiers = {}
+  for _, t in pairs(AzerothCommuneDB.trainers or {}) do
+    for _, sv in ipairs(t.services or {}) do
+      if sv.skill and sv.skill_rank then metiers[sv.skill] = true end
+    end
+  end
+  if not next(metiers) then return 0 end
+  local parObjet, parNom = {}, {}
+  for k, r in pairs(d) do
+    local m = r.profession
+    if m and metiers[m] and r.name then
+      parNom[m] = parNom[m] or {}
+      parNom[m][r.name] = parNom[m][r.name] or {}
+      table.insert(parNom[m][r.name], k)
+      if r.output then
+        parObjet[m] = parObjet[m] or {}
+        parObjet[m][r.output] = parObjet[m][r.output] or {}
+        table.insert(parObjet[m][r.output], k)
+      end
+    end
+  end
+  local meilleur = {} -- clé -> service retenu
+  for _, t in pairs(AzerothCommuneDB.trainers or {}) do
+    for _, sv in ipairs(t.services or {}) do
+      local m, cles = sv.skill, nil
+      if m and sv.skill_rank then
+        cles = sv.item and parObjet[m] and parObjet[m][sv.item]
+        if not cles or #cles ~= 1 then cles = parNom[m] and parNom[m][sv.name] end
+        -- Plusieurs recettes du métier pour ce service (même nom, même objet : deux enchantements d'époques différentes…) :
+        -- on ne choisit pas, le service est ignoré (pas d'état deviné ; relecture de la PR #74).
+        if cles and #cles ~= 1 then cles = nil end
+        for _, k in ipairs(cles or {}) do
+          local b = meilleur[k]
+          if not b or sv.skill_rank < b.skill_rank or (sv.skill_rank == b.skill_rank and (sv.cost or 0) < (b.cost or 0)) then
+            meilleur[k] = sv
+          end
+        end
+      end
+    end
+  end
+  local n = 0
+  for k, sv in pairs(meilleur) do
+    local copie = {}
+    for f, v in pairs(d[k]) do copie[f] = v end
+    copie.level, copie.source, copie.source_provenance, copie.prix_maitre = sv.skill_rank, "maître", "relevé direct", sv.cost
+    if copie.condition == "plus enseignée" then copie.condition = nil end -- un maître l'enseigne : elle l'est encore
+    d[k] = copie
+    n = n + 1
+  end
+  return n
+end
+
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
 -- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre, les seuils
--- jaune et gris, la source, le prix du patron et le temps de recharge (la fenêtre de métier ne les donne pas), sur une copie. Lot : relevé direct
--- dès qu'une recette est vue ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
+-- jaune et gris, la source, le prix du patron et le temps de recharge (la fenêtre de métier ne les donne pas), sur une copie.
+-- Puis les maîtres relevés (appliquerMaitres) l'emportent sur les deux. Lot : relevé direct dès qu'une recette est vue ou
+-- qu'un maître en a donné une ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
 -- peut-être périmé sous un autre build ou sans lot.
 ns.lire["base des recettes"] = function()
   local vues, res, d, fait = AzerothCommuneDB.recipes or {}, reserveRecettes(), {}, {}
@@ -135,7 +199,7 @@ ns.lire["base des recettes"] = function()
     local c = res[k]
     if c and r.level == nil then
       local copie = { level = c.level, yellow = c.yellow, grey = c.grey, source = c.source,
-        source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown }
+        source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition }
       for f, v in pairs(r) do copie[f] = v end
       r = copie
     end
@@ -145,7 +209,7 @@ ns.lire["base des recettes"] = function()
   for k, r in pairs(res) do
     if d[k] == nil and not fait[r.output] then d[k] = r end
   end
-  if next(vues) then return d, { provenance = "relevé direct" } end
+  if appliquerMaitres(d) > 0 or next(vues) then return d, { provenance = "relevé direct" } end
   local lot = {}
   for f, v in pairs(ns.recettesClassicLot or {}) do lot[f] = v end
   -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.

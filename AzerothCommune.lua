@@ -49,9 +49,14 @@ local TYPES = {
   ["recettes connues"] = { parPerso = true },
   -- Tout ce que fabrique une recette, connue ou non : { [clé] = { profession, name, output (nil : enchantement), reagents,
   --   made_min, made_max, level (compétence pour l'apprendre, de la réserve), yellow, grey (seuils du client, de la
-  --   réserve), source, source_provenance, pattern_price, cooldown (de la réserve, #64), provenance } }. Les recettes vues
+  --   réserve), source, source_provenance, pattern_price, cooldown (de la réserve, #64), condition (de la réserve, #67 :
+  --   « spécialisation : travail du cuir tribal », « réputation : Aube d'argent » ou « plus enseignée » ; nil quand la
+  --   recette n'en demande aucune : une recette à condition n'est pas apprenable par qui ne l'a pas), provenance } }. Les recettes vues
   --   sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets qu'aucune
-  --   recette vue ne fabrique (Commerce.lua).
+  --   recette vue ne fabrique (Commerce.lua). Les maîtres de métier relevés passent devant les deux (#72) : une recette
+  --   qu'un maître enseigne (rapprochée par l'objet enseigné, sinon par le nom, dans le métier du service) prend sa
+  --   compétence demandée en level, source « maître », source_provenance « relevé direct » et prix_maitre (cuivre) ;
+  --   les autres gardent les valeurs de la réserve.
   ["base des recettes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
   marchands = {}, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
