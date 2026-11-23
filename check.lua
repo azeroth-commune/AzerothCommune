@@ -1228,11 +1228,28 @@ verifierGlobalDocumente(AzerothCommune) -- la base chargée : MaitresDuMetier es
 ns.recettesPNJ, ns.recettesMaitres, ns.recettesMarchandsLot = nil, nil, nil
 assert(AzerothCommune.MaitresDuMetier("Forge") == nil, "sans réserve : nil")
 end
+-- #81 : la provenance de la compétence pour l'apprendre (17e champ ; nil à la place des champs absents avant elle), exposée
+-- en level_provenance, copiée sur une recette vue ; nil dans une réserve d'avant #81.
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
+  [2666] = { 2857, 1, 1, "Forge", "Ceinture runique en cuivre", { 2840, 10 }, 45, 85, 125, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
+  [1301421] = { 276992, 1, 1, "Forge", "Cotte de mailles forge-ciel nuageuse", { 2840, 8 }, 60, 65, 70, "patron vendu", "source externe",
+    1250, 0, nil, nil, { 254151, 0 }, "patron" },
+  [1249630] = { 249409, 1, 1, "Alchimie", "Teinture céruléenne", { 249399, 2 }, 50, 50, 90, "maître", "extrait du client", 0, 0, nil, nil, nil, "incertaine" },
+  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0 },
+}
+br = AzerothCommune:Lire("base des recettes")
+assert(br[2666].level == 45 and br[2666].level_provenance == "règle" and br[1301421].level_provenance == "patron"
+  and br[1301421].marchands[1].pnj == 254151 and br[1249630].level_provenance == "incertaine" and br[9002].level_provenance == nil,
+  "provenance de la compétence exposée ; nil dans une réserve d'avant #81")
+assert(br[3307].level_provenance == "règle" and br[3307].provenance == nil and AzerothCommuneDB.recipes[3307].level_provenance == nil,
+  "une recette vue en prend la provenance de la compétence, sur une copie")
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "retirée", "extrait du client", 0, 0, "plus enseignée" },
-  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0 },
+  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0,
+    nil, nil, nil, "règle" },
   [461708] = { 4300, 1, 1, "Forge", "Bottes brillantes en cuivre", { 2840, 4 }, 40, 40, 40, "inconnue", "extrait du client", 0, 0 },
   [13501] = { nil, 1, 1, "Enchantement", "Ench. de bracelets (Endurance inférieure)", { 11083, 1 }, 130, 155, 195, "patron vendu", "source externe", 500, 0 },
   [9009] = { 4301, 1, 1, "Forge", "Jamais vue chez un maître", { 2840, 1 }, 60, 70, 80, "maître", "source externe", 0, 0 },
@@ -1257,6 +1274,7 @@ br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[3307].level == 1 and br[3307].source == "maître" and br[3307].prix_maitre == 1 and br[3307].condition == nil,
   "nom exact quand l'objet ne rapproche rien dans le métier ; enseignée par un maître : plus « plus enseignée »")
 assert(br[9002].level == 140 and br[9002].prix_maitre == 900 and br[9002].source == "maître" and br[9002].source_provenance == "relevé direct"
+  and br[9002].level_provenance == "relevé direct"
   and br[9002].pattern_price == 12000 and br[9002].yellow == 180, "vue chez un maître : sa compétence et son prix, les autres champs de la réserve gardés ; plusieurs maîtres : le plus bas")
 assert(br[461708].level == 35 and br[461708].source == "maître" and br[461708].source_provenance == "relevé direct"
   and br[461708].prix_maitre == 60, "recette Forever « inconnue » vendue par un maître : maître")
@@ -1270,7 +1288,8 @@ local avant = AzerothCommuneDB.trainers
 AzerothCommuneDB.trainers = nil
 br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[9002].level == 175 and br[9002].source == "patron vendu" and br[9002].prix_maitre == nil and br[461708].source == "inconnue"
-  and AzerothCommuneDB.recipes[3307].level == nil and lotBr.provenance == "relevé direct", "tables relevées et réserve intactes")
+  and br[9002].level_provenance == "règle" and AzerothCommuneDB.recipes[3307].level == nil and lotBr.provenance == "relevé direct",
+  "tables relevées et réserve intactes")
 AzerothCommuneDB.trainers = avant
 assert(avant[1].services[2].skill_rank == 100 and avant[2].services[1].cost == 900, "relevé des maîtres intact")
 AzerothCommuneDB.trainers = nil

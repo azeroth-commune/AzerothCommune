@@ -91,13 +91,16 @@ end
 -- d'un repo cloné tel quel. Mise en forme une fois dans la forme des recettes vues, chaque ligne marquée « extrait du
 -- client », avec les seuils jaune et gris du client (vert = (jaune + gris) / 2) et, depuis #64, la source de la recette
 -- (« d'emblée », « maître », « patron vendu », « retirée », « inconnue »), la provenance de cette source (« extrait du
--- client », ou « source externe » : cMaNGOS), la compétence pour l'apprendre (level, plafonnée au seuil jaune), le prix du
+-- client », ou « source externe » : cMaNGOS), la compétence pour l'apprendre (level), le prix du
 -- patron (cuivre, nil sans), le temps de recharge (secondes, 0 sans) et, depuis #67, la condition d'accès (« spécialisation : … »,
 -- « réputation : … », « plus enseignée », nil sans) et, depuis Maitrise#15, l'objet patron qui l'enseigne (patron : marchand, butin
 -- ou quête, nil sans) : le générateur en décide. Un enchantement n'a pas
 -- d'objet produit (output nil). Depuis #80, les marchands du patron (Fabrikao, source externe ; nil sans), chacun
 -- { pnj, nom, prix (cuivre, nil inconnu), carte (uiMapID), x, y (pourcentage de la carte ; nil sans), faction (« Alliance »,
--- « Horde », nil : les deux ou inconnue) } d'après la table des PNJ de la réserve (ns.recettesPNJ).
+-- « Horde », nil : les deux ou inconnue) } d'après la table des PNJ de la réserve (ns.recettesPNJ). Depuis #81, la provenance
+-- de la compétence pour l'apprendre (level_provenance, 17e champ) : « règle » (la règle du décalage), « incertaine » (recette
+-- ajoutée par Forever ou seuils incomplets : Fabrikao), « patron » (la compétence requise de l'objet patron, dans le client),
+-- « extrait du client » (d'emblée) ; nil dans une réserve d'avant #81.
 local reserve, brute
 local function fichePNJ(id) -- un PNJ hors de la table garde son ID, sans nom ni position
   local p = ns.recettesPNJ and ns.recettesPNJ[id] or {}
@@ -125,14 +128,14 @@ local function reserveRecettes()
     brute, reserve = ns.recettesClassic, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
     --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans),
-    --   marchands du patron ({ PNJ, prix, … }, nil sans) }
+    --   marchands du patron ({ PNJ, prix, … }, nil sans), provenance de la compétence }
     for k, c in pairs(brute or {}) do
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
         level = c[7], yellow = c[8], grey = c[9], source = c[10], source_provenance = c[11],
         pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], patron = c[15],
-        marchands = c[16] and marchandsDe(c[16]), provenance = "extrait du client" }
+        marchands = c[16] and marchandsDe(c[16]), level_provenance = c[17], provenance = "extrait du client" }
     end
   end
   return reserve
@@ -152,8 +155,8 @@ local function scanKnownRecipes()
 end
 
 -- Le relevé des maîtres de métier passe devant la réserve (#72) : pour chaque service d'un maître relevé (AzerothCommuneDB.trainers),
--- la recette qu'il enseigne prend level = la compétence demandée (skill_rank), source « maître », source_provenance
--- « relevé direct » et prix_maitre = son prix (cuivre) ; le client et cMaNGOS se trompent parfois de 25 points (#68).
+-- la recette qu'il enseigne prend level = la compétence demandée (skill_rank), source « maître », source_provenance et
+-- level_provenance « relevé direct » et prix_maitre = son prix (cuivre) ; le client et cMaNGOS se trompent parfois de 25 points (#68).
 -- Rapprochement, dans le métier du service (service.skill, le nom du métier) : par l'objet enseigné (service.item = output de
 -- la recette) quand une seule recette du métier le produit, sinon par le nom exact (un enchantement n'a pas d'objet : par
 -- son nom). Un service qui ne rapproche rien (« Minage d'apprenti », une compétence de classe) est ignoré. Plusieurs maîtres
@@ -206,6 +209,7 @@ local function appliquerMaitres(d)
     local copie = {}
     for f, v in pairs(d[k]) do copie[f] = v end
     copie.level, copie.source, copie.source_provenance, copie.prix_maitre = sv.skill_rank, "maître", "relevé direct", sv.cost
+    copie.level_provenance = "relevé direct"
     if copie.condition == "plus enseignée" then copie.condition = nil end -- un maître l'enseigne : elle l'est encore
     d[k] = copie
     n = n + 1
@@ -214,7 +218,7 @@ local function appliquerMaitres(d)
 end
 
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
--- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre, les seuils
+-- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre (et sa provenance), les seuils
 -- jaune et gris, la source, le prix du patron, le temps de recharge, la condition, le patron et ses marchands (la fenêtre
 -- de métier ne les donne pas), sur une copie.
 -- Puis les maîtres relevés (appliquerMaitres) l'emportent sur les deux. Lot : relevé direct dès qu'une recette est vue ou
@@ -225,7 +229,7 @@ ns.lire["base des recettes"] = function()
   for k, r in pairs(vues) do
     local c = res[k]
     if c and r.level == nil then
-      local copie = { level = c.level, yellow = c.yellow, grey = c.grey, source = c.source,
+      local copie = { level = c.level, level_provenance = c.level_provenance, yellow = c.yellow, grey = c.grey, source = c.source,
         source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition, patron = c.patron,
         marchands = c.marchands }
       for f, v in pairs(r) do copie[f] = v end

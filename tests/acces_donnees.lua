@@ -54,6 +54,7 @@ end)
 -- chargée par la TOC du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance, sa
 -- compétence requise et ses seuils jaune et gris.
 local SOURCES = { ["d'emblée"] = true, ["maître"] = true, ["patron vendu"] = true, ["retirée"] = true, inconnue = true }
+local COMPETENCES = { ["règle"] = true, incertaine = true, patron = true, ["extrait du client"] = true }
 test("base des recettes : la réserve du socle chargée, chaque recette avec sa provenance", function()
     local lib = AzerothCommune
     assertTrue(lib:Souscrire("base des recettes"))
@@ -73,8 +74,11 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
             assertTrue(SOURCES[r.source], "source : " .. tostring(r.name) .. " " .. tostring(r.source))
             assertTrue(r.source_provenance == "extrait du client" or r.source_provenance == "source externe")
             assertType("number", r.cooldown)
-            -- sauf un patron connu du client (exposé ou lié à la prise), dont la compétence requise fait foi (Maitrise#15) : jamais au-dessus de 300
-            assertTrue(r.yellow <= 0 or r.level <= r.yellow or ((r.source == "inconnue" or r.source == "patron vendu") and r.level <= 300), "compétence au-dessus du jaune (#62) : " .. tostring(r.name))
+            -- #81 : la provenance de la compétence ; la règle du décalage ne dépasse jamais le jaune (Boulettes fumées du désert :
+            -- 305, jaune 325) ; un patron, seulement pour une recette « inconnue » ou « patron vendu », jamais au-dessus de 300
+            assertTrue(COMPETENCES[r.level_provenance], "provenance de la compétence : " .. tostring(r.name) .. " " .. tostring(r.level_provenance))
+            if r.level_provenance == "règle" then assertTrue(r.level >= 1 and r.level <= r.yellow, "règle au-dessus du jaune : " .. tostring(r.name)) end
+            if r.level_provenance == "patron" then assertTrue((r.source == "inconnue" or r.source == "patron vendu") and r.level <= 300) end
             -- un patron vendu que Fabrikao seul connaît (#80) peut n'avoir pas de prix de base dans le client, mais il a ses marchands
             if r.pattern_price ~= nil then assertEquals("patron vendu", r.source) end
             if r.source == "patron vendu" then
@@ -112,6 +116,20 @@ test("base des recettes : source, compétence, patron et recharge de chaque rece
     assertEquals("Enchantement", ench.profession)
     assertTrue(#ench.reagents > 0 and ench.yellow > 0 and ench.grey >= ench.yellow)
     assertEquals("maître", ench.source)
+end)
+
+-- #81 : la compétence pour l'apprendre par la règle du décalage, rang Classic − (jaune Classic − jaune Forever) ; Fabrikao
+-- « incertaine » pour une recette ajoutée par Forever ; le patron du client pour une recette de patron (Maitrise#15).
+test("base des recettes : la compétence pour l'apprendre et sa provenance", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("base des recettes"))
+    local data = lib:Lire("base des recettes")
+    local ceinture = data[2666] -- Ceinture runique en cuivre : 70 − (110 − 85)
+    assertEquals(45, ceinture.level)
+    assertEquals("règle", ceinture.level_provenance)
+    assertEquals("incertaine", data[1249630].level_provenance) -- Teinture céruléenne, ajoutée par Forever
+    assertEquals("extrait du client", data[2149].level_provenance) -- d'emblée
+    assertEquals("patron", data[1301421].level_provenance) -- Cotte forge-ciel nuageuse : le patron de Vayn Moongaze
 end)
 
 -- #80 : les marchands des patrons (Fabrikao, source externe), avec leur position et leur prix, et la position des maîtres.
