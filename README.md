@@ -21,9 +21,9 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
-| `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (données cMaNGOS GPL-3.0) : hors du repo, ignoré par git |
-| `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, hors du repo, ignoré par git ; sans lui, le type « objets » rend les seuls objets relevés |
-| `RecettesClassic.lua` | la réserve de la base des recettes (nom historique), privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, hors du repo, ignorée par git ; sans elle, la base des recettes rend les seules recettes vues |
+| `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (données cMaNGOS GPL-3.0) : commité (le socle est sous GPL-3.0) |
+| `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, commité (le socle est sous GPL-3.0) ; sans lui, le type « objets » rend les seuls objets relevés |
+| `RecettesClassic.lua` | la réserve de la base des recettes (nom historique), privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, commitée (le socle est sous GPL-3.0) ; sans elle, la base des recettes rend les seules recettes vues |
 
 ## Accès aux données relevées
 

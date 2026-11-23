@@ -7,7 +7,7 @@ l'historique de GameData). Espace de travail parent : `../` (outils, recherche, 
 Déploiement : lien symbolique depuis le dossier AddOns du jeu, `/reload` suffit. Vérifier : `luajit AzerothCommune/check.lua`
 depuis le dossier des add-ons, puis `tools/sim.sh test AzerothCommune` dans l'atelier. `VendorData.lua`, `RecettesClassic.lua`
 et `CatalogueObjets.lua` sont générés (`tools/build_vendor_data.py`, `tools/build_recipe_data_client.py`, `tools/build_item_catalog.py`)
-et ignorés par git : les copier dans un worktree.
+et commités (le socle est sous GPL-3.0 depuis sa publication sur CurseForge) : les régénérer puis les commiter.
 
 ## Agent skills
 
