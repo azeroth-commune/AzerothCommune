@@ -1144,6 +1144,22 @@ assert(ench and ench.output == nil and ench.reagents[1].id == 11083 and ench.lev
 assert(br[9005], "deux enchantements : l'un ne cache pas l'autre")
 assert(AzerothCommune.TrouverObjet("Ench. de bracelets (Endurance inférieure)", {}, br) == nil
   and AzerothCommune.TrouverObjet("Etoffe lunaire", {}, br) == 14342, "un enchantement n'est pas un objet")
+-- #67 : la condition d'accès de la réserve (14e champ : spécialisation, réputation, plus enseignée) est exposée, sur une recette
+-- de la réserve et sur une recette vue ; absente (nil) sinon.
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
+  [19053] = { 15074, 1, 1, "Travail du cuir", "Gants chimériques", { 8170, 6 }, 260, 260, 280, "patron vendu", "source externe", 12000, 0,
+    "spécialisation : travail du cuir tribal" },
+  [18560] = { 14342, 1, 1, "Couture", "Etoffe lunaire", { 14256, 2 }, 250, 270, 300, "patron vendu", "source externe", 20000, 342000, "réputation : Aube d'argent" },
+}
+AzerothCommuneDB.recipes[3307].condition = nil
+br = AzerothCommune:Lire("base des recettes")
+assert(br[19053].condition == "spécialisation : travail du cuir tribal" and br[18560].condition == "réputation : Aube d'argent"
+  and br[3307].condition == nil, "condition de la réserve exposée, nil sans")
+ns.recettesClassic = { [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "retirée", "extrait du client", 0, 0, "plus enseignée" } }
+br = AzerothCommune:Lire("base des recettes")
+assert(br[3307].condition == "plus enseignée" and br[3307].name == "Fondre le fer" and AzerothCommuneDB.recipes[3307].condition == nil,
+  "une recette vue en prend la condition, sur une copie")
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {
@@ -1172,7 +1188,7 @@ assert(br[9002].level == 140 and br[9002].prix_maitre == 900 and br[9002].source
 assert(br[461708].level == 35 and br[461708].source == "maître" and br[461708].source_provenance == "relevé direct"
   and br[461708].prix_maitre == 60, "recette Forever « inconnue » vendue par un maître : maître")
 assert(br[13501].level == 120 and br[13501].source == "maître" and br[13501].prix_maitre == 300, "enchantement rapproché par son nom")
-assert(br[9009].level == 60 and br[9009].source == "maître" and br[9009].source_provenance == nil and br[9009].prix_maitre == nil,
+assert(br[9009].level == 60 and br[9009].source == "maître" and br[9009].source_provenance == "source externe" and br[9009].prix_maitre == nil,
   "jamais vue chez un maître : valeurs de la réserve")
 assert(lotBr.provenance == "relevé direct", "un maître relevé : lot en relevé direct")
 local avant = AzerothCommuneDB.trainers
