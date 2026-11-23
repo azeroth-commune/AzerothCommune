@@ -142,7 +142,7 @@ function ns.personnage(guid)
 end
 
 -- Marchands : un lot mixte. Les marchands vus en jeu (relevé direct) et la base VendorData.lua, générée hors jeu (quel
--- PNJ vend quoi : Fabrikao ou QuestieDB selon l'objet, source externe ; prix, lots et piles : client Forever, extrait du client), dont la ligne vaut
+-- PNJ vend quoi : Fabrikao pour un patron, QuestieDB sinon, source externe ; prix, lots et piles : client Forever, extrait du client), dont la ligne vaut
 -- donc « source externe », la moins fiable de ses deux sources. La provenance la plus fiable gagne : un marchand vu en
 -- jeu prend toute sa liste au relevé (elle dit aussi ce qu'il ne vend pas), la base ne remplit que les marchands pas vus.
 -- Une ligne de la base porte aussi la revente au marchand (sell) et la taille de pile (maxStack) ; un PNJ amical pour la

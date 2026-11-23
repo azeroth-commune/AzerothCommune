@@ -479,7 +479,7 @@ end
 
 -- Prix d'achat (langage commun de l'atelier) : ce que coûtent qty objets, au moins cher entre les marchands et l'HV.
 --   lib:PrixMarchands()                 : { [itemID] = prix unitaire } du marchand le moins cher, payé en or, hors stock
---                                         limité vu en jeu (la base générée ne sait pas le stock, #82) ; lu une fois par
+--                                         limité (vu en jeu, ou d'après cMaNGOS pour la base générée, #82) ; lu une fois par
 --                                         calcul (la liste des marchands est refaite à chaque lecture).
 --   lib:PrixAchat(id, qty, hv, marchands) : coût, source (« marchand » ou « HV »), partiel (l'HV n'en a pas assez : le
 --                                         reste au dernier prix vu) ; nil si ni marchand ni HV. hv : table [itemID] -> ligne
