@@ -1168,6 +1168,7 @@ ns.recettesClassic = {
   [19053] = { 15074, 1, 1, "Travail du cuir", "Gants chimériques", { 8170, 6 }, 260, 260, 280, "patron vendu", "source externe", 12000, 0,
     "spécialisation : travail du cuir tribal", 15750 },
 }
+local vue3307 = AzerothCommuneDB.recipes[3307] -- la recette vue des tests suivants : rendue telle quelle à la fin
 AzerothCommuneDB.recipes[3307].patron = nil
 br = AzerothCommune:Lire("base des recettes")
 assert(br[2158].patron == 2406 and br[2158].condition == nil and br[19053].patron == 15750 and br[19053].condition ~= nil
@@ -1177,6 +1178,7 @@ AzerothCommuneDB.recipes[2158] = { profession = "Travail du cuir", name = "Botte
 br = AzerothCommune:Lire("base des recettes")
 assert(br[2158].patron == 2406 and AzerothCommuneDB.recipes[2158].patron == nil, "une recette vue en prend le patron, sur une copie")
 AzerothCommuneDB.recipes[2158] = nil
+AzerothCommuneDB.recipes[3307] = vue3307
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {
