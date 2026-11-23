@@ -93,20 +93,21 @@ end
 -- (« d'emblée », « maître », « patron vendu », « retirée », « inconnue »), la provenance de cette source (« extrait du
 -- client », ou « source externe » : cMaNGOS), la compétence pour l'apprendre (level, plafonnée au seuil jaune), le prix du
 -- patron (cuivre, nil sans), le temps de recharge (secondes, 0 sans) et, depuis #67, la condition d'accès (« spécialisation : … »,
--- « réputation : … », « plus enseignée », nil sans) : le générateur en décide. Un enchantement n'a pas
+-- « réputation : … », « plus enseignée », nil sans) et, depuis Maitrise#15, l'objet patron qui l'enseigne (patron : marchand, butin
+-- ou quête, nil sans) : le générateur en décide. Un enchantement n'a pas
 -- d'objet produit (output nil).
 local reserve, brute
 local function reserveRecettes()
   if reserve == nil or brute ~= ns.recettesClassic then
     brute, reserve = ns.recettesClassic, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
-    --   provenance de la source, prix du patron, recharge, condition (nil sans) }
+    --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans) }
     for k, c in pairs(brute or {}) do
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
         level = c[7], yellow = c[8], grey = c[9], source = c[10], source_provenance = c[11],
-        pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], provenance = "extrait du client" }
+        pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], patron = c[15], provenance = "extrait du client" }
     end
   end
   return reserve
@@ -199,7 +200,7 @@ ns.lire["base des recettes"] = function()
     local c = res[k]
     if c and r.level == nil then
       local copie = { level = c.level, yellow = c.yellow, grey = c.grey, source = c.source,
-        source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition }
+        source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition, patron = c.patron }
       for f, v in pairs(r) do copie[f] = v end
       r = copie
     end

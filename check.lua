@@ -1160,6 +1160,23 @@ ns.recettesClassic = { [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772,
 br = AzerothCommune:Lire("base des recettes")
 assert(br[3307].condition == "plus enseignée" and br[3307].name == "Fondre le fer" and AzerothCommuneDB.recipes[3307].condition == nil,
   "une recette vue en prend la condition, sur une copie")
+-- Maitrise#15 : l'objet patron de la réserve (15e champ, nil entre condition et patron quand la recette n'a pas de condition) est
+-- exposé sur une recette de la réserve et, sur une copie, sur une recette vue ; nil sans.
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
+  [2158] = { 2307, 1, 1, "Travail du cuir", "Bottes élégantes en cuir", { 2318, 7, 2320, 2 }, 90, 95, 125, "inconnue", "source externe", 0, 0, nil, 2406 },
+  [19053] = { 15074, 1, 1, "Travail du cuir", "Gants chimériques", { 8170, 6 }, 260, 260, 280, "patron vendu", "source externe", 12000, 0,
+    "spécialisation : travail du cuir tribal", 15750 },
+}
+AzerothCommuneDB.recipes[3307].patron = nil
+br = AzerothCommune:Lire("base des recettes")
+assert(br[2158].patron == 2406 and br[2158].condition == nil and br[19053].patron == 15750 and br[19053].condition ~= nil
+  and br[3307].patron == nil, "patron de la réserve exposé, nil sans")
+AzerothCommuneDB.recipes[3307] = nil
+AzerothCommuneDB.recipes[2158] = { profession = "Travail du cuir", name = "Bottes élégantes en cuir", output = 2307, reagents = {} }
+br = AzerothCommune:Lire("base des recettes")
+assert(br[2158].patron == 2406 and AzerothCommuneDB.recipes[2158].patron == nil, "une recette vue en prend le patron, sur une copie")
+AzerothCommuneDB.recipes[2158] = nil
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {
