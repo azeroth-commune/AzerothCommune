@@ -1163,11 +1163,14 @@ assert(br[3307].condition == "plus enseignée" and br[3307].name == "Fondre le f
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {
-  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "retirée", "extrait du client", 0, 0, "plus enseignée" },
   [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0 },
   [461708] = { 4300, 1, 1, "Forge", "Bottes brillantes en cuivre", { 2840, 4 }, 40, 40, 40, "inconnue", "extrait du client", 0, 0 },
   [13501] = { nil, 1, 1, "Enchantement", "Ench. de bracelets (Endurance inférieure)", { 11083, 1 }, 130, 155, 195, "patron vendu", "source externe", 500, 0 },
   [9009] = { 4301, 1, 1, "Forge", "Jamais vue chez un maître", { 2840, 1 }, 60, 70, 80, "maître", "source externe", 0, 0 },
+  -- deux enchantements de même nom (époques différentes) : un service par ce nom est ambigu
+  [9101] = { nil, 1, 1, "Enchantement", "Ench. en double", { 11083, 1 }, 200, 225, 245, "maître", "source externe", 0, 0 },
+  [9102] = { nil, 1, 1, "Enchantement", "Ench. en double", { 11137, 4 }, 300, 320, 360, "inconnue", "source externe", 0, 0 },
 }
 AzerothCommuneDB.trainers = {
   [1] = { services = {
@@ -1178,11 +1181,13 @@ AzerothCommuneDB.trainers = {
     { name = "Ench. de bracelets (Endurance inférieure)", skill = "Enchantement", skill_rank = 120, cost = 300 }, -- enchantement : par le nom
     { name = "Recette inconnue de la base", item = 99999, skill = "Forge", skill_rank = 10, cost = 1 },
     { name = "Fondre le fer", item = 4300, skill = "Minage", skill_rank = 1, cost = 1 },           -- l'objet est celui d'un autre métier : le nom décide
+    { name = "Ench. en double", skill = "Enchantement", skill_rank = 210, cost = 5 },              -- deux recettes de ce nom : ignoré
   } },
   [2] = { services = { { name = "Armure verte en cuir", skill = "Travail du cuir", skill_rank = 140, cost = 900 } } }, -- un autre maître, plus bas
 }
 br, lotBr = AzerothCommune:Lire("base des recettes")
-assert(br[3307].level == 1 and br[3307].source == "maître" and br[3307].prix_maitre == 1, "nom exact quand l'objet ne rapproche rien dans le métier")
+assert(br[3307].level == 1 and br[3307].source == "maître" and br[3307].prix_maitre == 1 and br[3307].condition == nil,
+  "nom exact quand l'objet ne rapproche rien dans le métier ; enseignée par un maître : plus « plus enseignée »")
 assert(br[9002].level == 140 and br[9002].prix_maitre == 900 and br[9002].source == "maître" and br[9002].source_provenance == "relevé direct"
   and br[9002].pattern_price == 12000 and br[9002].yellow == 180, "vue chez un maître : sa compétence et son prix, les autres champs de la réserve gardés ; plusieurs maîtres : le plus bas")
 assert(br[461708].level == 35 and br[461708].source == "maître" and br[461708].source_provenance == "relevé direct"
@@ -1190,6 +1195,8 @@ assert(br[461708].level == 35 and br[461708].source == "maître" and br[461708].
 assert(br[13501].level == 120 and br[13501].source == "maître" and br[13501].prix_maitre == 300, "enchantement rapproché par son nom")
 assert(br[9009].level == 60 and br[9009].source == "maître" and br[9009].source_provenance == "source externe" and br[9009].prix_maitre == nil,
   "jamais vue chez un maître : valeurs de la réserve")
+assert(br[9101].level == 200 and br[9101].prix_maitre == nil and br[9102].level == 300 and br[9102].source == "inconnue",
+  "service ambigu (deux recettes de ce nom) : ignoré, rien n'est deviné")
 assert(lotBr.provenance == "relevé direct", "un maître relevé : lot en relevé direct")
 local avant = AzerothCommuneDB.trainers
 AzerothCommuneDB.trainers = nil

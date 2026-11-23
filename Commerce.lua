@@ -134,10 +134,18 @@ end
 -- pour une recette : la compétence la plus basse, puis le prix le plus bas. d est modifié (ses lignes sont déjà des copies
 -- ou des lignes de la réserve : une ligne touchée est remplacée par une copie, jamais modifiée sur place).
 local function appliquerMaitres(d)
+  -- ponytail: la base est lue souvent ; on n'indexe que les métiers d'un maître relevé (rien sans maître).
+  local metiers = {}
+  for _, t in pairs(AzerothCommuneDB.trainers or {}) do
+    for _, sv in ipairs(t.services or {}) do
+      if sv.skill and sv.skill_rank then metiers[sv.skill] = true end
+    end
+  end
+  if not next(metiers) then return 0 end
   local parObjet, parNom = {}, {}
   for k, r in pairs(d) do
     local m = r.profession
-    if m then
+    if m and metiers[m] and r.name then
       parNom[m] = parNom[m] or {}
       parNom[m][r.name] = parNom[m][r.name] or {}
       table.insert(parNom[m][r.name], k)
@@ -155,6 +163,9 @@ local function appliquerMaitres(d)
       if m and sv.skill_rank then
         cles = sv.item and parObjet[m] and parObjet[m][sv.item]
         if not cles or #cles ~= 1 then cles = parNom[m] and parNom[m][sv.name] end
+        -- Plusieurs recettes du métier pour ce service (même nom, même objet : deux enchantements d'époques différentes…) :
+        -- on ne choisit pas, le service est ignoré (pas d'état deviné ; relecture de la PR #74).
+        if cles and #cles ~= 1 then cles = nil end
         for _, k in ipairs(cles or {}) do
           local b = meilleur[k]
           if not b or sv.skill_rank < b.skill_rank or (sv.skill_rank == b.skill_rank and (sv.cost or 0) < (b.cost or 0)) then
@@ -169,6 +180,7 @@ local function appliquerMaitres(d)
     local copie = {}
     for f, v in pairs(d[k]) do copie[f] = v end
     copie.level, copie.source, copie.source_provenance, copie.prix_maitre = sv.skill_rank, "maître", "relevé direct", sv.cost
+    if copie.condition == "plus enseignée" then copie.condition = nil end -- un maître l'enseigne : elle l'est encore
     d[k] = copie
     n = n + 1
   end
