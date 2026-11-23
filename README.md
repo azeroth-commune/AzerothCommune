@@ -1,5 +1,32 @@
 # Azeroth Commune
 
+**Le socle des add-ons Azeroth Commune pour WoW Forever** (en bêta, interface en français). Seul, il ne montre presque
+rien : on l'installe avec l'add-on qui en a besoin, comme [Compagnie](https://github.com/azeroth-commune/Compagnie).
+
+*English: shared core required by the Azeroth Commune addons for WoW Forever. It scans your characters and game data once
+for all of them, and groups them under one minimap button and one options entry. French UI for now.*
+
+## Pour le joueur
+
+- **Il relève les données du jeu une seule fois pour tous les add-ons** : tes personnages (sacs, banque, courrier,
+  équipement, monnaies, réputations, métiers, recettes, quêtes), les objets du jeu, les maîtres de métier, les marchands,
+  les prix de l'hôtel des ventes (avec Auctionator, TSM ou AuctionDB s'ils sont là). Seulement ce que tes add-ons
+  demandent.
+- **Un seul bouton de minicarte** et **une seule entrée dans les options** pour tous les add-ons Azeroth Commune.
+- **Il prévient dans le chat** quand le jeu répond quelque chose d'inattendu à un relevé.
+- Commande : `/ac` (le résumé ; `/ac souscriptions` pour voir quelles données sont relevées).
+
+**Installation** : avec le client CurseForge, installe l'add-on qui t'intéresse et Azeroth Commune, puis clic droit sur
+chacun → *Release type* : **Beta**. À la main : dézippe `AzerothCommune` dans `_forever_\Interface\AddOns\`.
+
+**Un souci ?** Ouvre une [issue](https://github.com/azeroth-commune/AzerothCommune/issues).
+
+**Licence** : GPL-3.0 ou ultérieure (voir [`LICENSE`](LICENSE)). La liste des marchands vient des données de
+[cMaNGOS](https://github.com/cmangos) (GPL-3.0) ; le catalogue des objets et la réserve des recettes sont extraits du
+client du jeu.
+
+## Pour un développeur d'add-on
+
 Le socle des add-ons Azeroth Commune (WoW Forever), requis par chacun (`## Dependencies: AzerothCommune`) : il fait
 tout le relevé des données du jeu, tient la base des données relevées, et offre son API sur un seul global,
 `AzerothCommune` (fenêtres et tableaux, montants, noms d'objets, capture et export, accès aux données relevées, sondes),

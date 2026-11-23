@@ -2,7 +2,7 @@
 
 Le socle des add-ons Azeroth Commune (WoW Forever), requis par chacun : GameData et la lib LibCommune fondus en un seul
 add-on (ADR 0002 de l'atelier), API publique sur le global `AzerothCommune`, intérieur de la base privé (`ns`). Voir
-`README.md`. Repo `azeroth-commune/AzerothCommune` (privé pour l'instant ; les issues et l'historique de LibCommune, et
+`README.md`. Repo `azeroth-commune/AzerothCommune` (public depuis le 23/11, publié sur CurseForge ; les issues et l'historique de LibCommune, et
 l'historique de GameData). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
 Déploiement : lien symbolique depuis le dossier AddOns du jeu, `/reload` suffit. Vérifier : `luajit AzerothCommune/check.lua`
 depuis le dossier des add-ons, puis `tools/sim.sh test AzerothCommune` dans l'atelier. `VendorData.lua`, `RecettesClassic.lua`
