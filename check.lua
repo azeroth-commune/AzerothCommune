@@ -1179,6 +1179,44 @@ br = AzerothCommune:Lire("base des recettes")
 assert(br[2158].patron == 2406 and AzerothCommuneDB.recipes[2158].patron == nil, "une recette vue en prend le patron, sur une copie")
 AzerothCommuneDB.recipes[2158] = nil
 AzerothCommuneDB.recipes[3307] = vue3307
+-- #80 : les marchands du patron (16e champ, liste plate { PNJ, prix, … } ; nil à la place de la condition et du patron absents),
+-- joints à la table des PNJ de la réserve (ns.recettesPNJ : nom, carte, x, y, faction) ; prix 0 : inconnu (nil) ; un PNJ hors de
+-- la table garde son ID. Nil sans marchand, et copiés sur une recette vue. Les maîtres d'un métier : AC.MaitresDuMetier.
+do
+ns.recettesPNJ = { [254151] = { "Vayn Moongaze", 2521, 63.8, 36 }, [5] = { "Marchand", 1429, 41.8, 67, "Alliance" },
+  [7] = { "Maître", nil, nil, nil, "Horde" } }
+ns.recettesMaitres = { Forge = { 7, 5 } }
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
+  [1301421] = { 276992, 1, 1, "Forge", "Cotte de mailles forge-ciel nuageuse", { 2840, 8 }, 60, 65, 70, "patron vendu", "source externe",
+    1250, 0, nil, nil, { 254151, 0 } },
+  [2158] = { 2307, 1, 1, "Travail du cuir", "Bottes élégantes en cuir", { 2318, 7 }, 90, 95, 125, "patron vendu", "source externe", 500, 0,
+    nil, 2406, { 5, 450, 6, 0 } },
+}
+br = AzerothCommune:Lire("base des recettes")
+local vayn = br[1301421].marchands
+assert(#vayn == 1 and vayn[1].pnj == 254151 and vayn[1].nom == "Vayn Moongaze" and vayn[1].prix == nil and vayn[1].carte == 2521
+  and vayn[1].x == 63.8 and vayn[1].y == 36 and vayn[1].faction == nil and br[1301421].source == "patron vendu"
+  and br[1301421].source_provenance == "source externe" and br[1301421].patron == nil and br[1301421].pattern_price == 1250,
+  "patron de Forever lié à la prise : son marchand, sa position, prix inconnu, provenance source externe")
+local bottes = br[2158].marchands
+assert(#bottes == 2 and bottes[1].prix == 450 and bottes[1].faction == "Alliance" and bottes[1].carte == 1429 and br[2158].patron == 2406
+  and bottes[2].pnj == 6 and bottes[2].nom == nil and bottes[2].carte == nil and bottes[2].prix == nil, "deux marchands, un hors de la table des PNJ")
+assert(br[3307].marchands == nil, "aucun marchand connu : nil")
+AzerothCommuneDB.recipes[3307] = nil
+AzerothCommuneDB.recipes[2158] = { profession = "Travail du cuir", name = "Bottes élégantes en cuir", output = 2307, reagents = {} }
+br = AzerothCommune:Lire("base des recettes")
+assert(br[2158].marchands[1].pnj == 5 and AzerothCommuneDB.recipes[2158].marchands == nil, "une recette vue en prend les marchands, sur une copie")
+AzerothCommuneDB.recipes[2158] = nil
+AzerothCommuneDB.recipes[3307] = vue3307
+local forge = AzerothCommune.MaitresDuMetier("Forge")
+assert(#forge == 2 and forge[1].pnj == 7 and forge[1].nom == "Maître" and forge[1].faction == "Horde" and forge[1].carte == nil
+  and forge[2].pnj == 5 and forge[2].carte == 1429 and forge[2].x == 41.8 and forge[2].y == 67, "maîtres de la Forge, dans l'ordre, avec position")
+forge[1].nom = "touché"
+assert(AzerothCommune.MaitresDuMetier("Forge")[1].nom == "Maître" and AzerothCommune.MaitresDuMetier("Pêche") == nil, "copies ; métier inconnu : nil")
+ns.recettesPNJ, ns.recettesMaitres = nil, nil
+assert(AzerothCommune.MaitresDuMetier("Forge") == nil, "sans réserve : nil")
+end
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {

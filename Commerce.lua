@@ -95,19 +95,36 @@ end
 -- patron (cuivre, nil sans), le temps de recharge (secondes, 0 sans) et, depuis #67, la condition d'accès (« spécialisation : … »,
 -- « réputation : … », « plus enseignée », nil sans) et, depuis Maitrise#15, l'objet patron qui l'enseigne (patron : marchand, butin
 -- ou quête, nil sans) : le générateur en décide. Un enchantement n'a pas
--- d'objet produit (output nil).
+-- d'objet produit (output nil). Depuis #80, les marchands du patron (Fabrikao, source externe ; nil sans), chacun
+-- { pnj, nom, prix (cuivre, nil inconnu), carte (uiMapID), x, y (pourcentage de la carte ; nil sans), faction (« Alliance »,
+-- « Horde », nil : les deux ou inconnue) } d'après la table des PNJ de la réserve (ns.recettesPNJ).
 local reserve, brute
+local function fichePNJ(id) -- un PNJ hors de la table garde son ID, sans nom ni position
+  local p = ns.recettesPNJ and ns.recettesPNJ[id] or {}
+  return { pnj = id, nom = p[1], carte = p[2], x = p[3], y = p[4], faction = p[5] }
+end
+local function marchandsDe(liste)
+  local out = {}
+  for i = 1, #liste, 2 do
+    local m = fichePNJ(liste[i])
+    m.prix = liste[i + 1] ~= 0 and liste[i + 1] or nil
+    out[#out + 1] = m
+  end
+  return out
+end
 local function reserveRecettes()
   if reserve == nil or brute ~= ns.recettesClassic then
     brute, reserve = ns.recettesClassic, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
-    --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans) }
+    --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans),
+    --   marchands du patron ({ PNJ, prix, … }, nil sans) }
     for k, c in pairs(brute or {}) do
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
         level = c[7], yellow = c[8], grey = c[9], source = c[10], source_provenance = c[11],
-        pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], patron = c[15], provenance = "extrait du client" }
+        pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], patron = c[15],
+        marchands = c[16] and marchandsDe(c[16]), provenance = "extrait du client" }
     end
   end
   return reserve
@@ -190,7 +207,8 @@ end
 
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
 -- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre, les seuils
--- jaune et gris, la source, le prix du patron et le temps de recharge (la fenêtre de métier ne les donne pas), sur une copie.
+-- jaune et gris, la source, le prix du patron, le temps de recharge, la condition, le patron et ses marchands (la fenêtre
+-- de métier ne les donne pas), sur une copie.
 -- Puis les maîtres relevés (appliquerMaitres) l'emportent sur les deux. Lot : relevé direct dès qu'une recette est vue ou
 -- qu'un maître en a donné une ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
 -- peut-être périmé sous un autre build ou sans lot.
@@ -200,7 +218,8 @@ ns.lire["base des recettes"] = function()
     local c = res[k]
     if c and r.level == nil then
       local copie = { level = c.level, yellow = c.yellow, grey = c.grey, source = c.source,
-        source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition, patron = c.patron }
+        source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition, patron = c.patron,
+        marchands = c.marchands }
       for f, v in pairs(r) do copie[f] = v end
       r = copie
     end
@@ -216,6 +235,17 @@ ns.lire["base des recettes"] = function()
   -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
   lot.provenance, lot.perime = "extrait du client", not (GetBuildInfo and lot.build == lib.Build()) or nil
   return d, lot
+end
+
+-- Les maîtres d'un métier (« Forge », les noms de métier de la base des recettes), d'après la réserve (Fabrikao, source
+-- externe, #80) : { { pnj, nom, carte, x, y, faction }, … } (champs comme les marchands de la base des recettes), dans
+-- l'ordre de Fabrikao (niveau du PNJ) ; nil pour un métier inconnu ou sans réserve. Copies : à modifier sans risque.
+function lib.MaitresDuMetier(metier)
+  local ids = ns.recettesMaitres and ns.recettesMaitres[metier]
+  if not ids then return nil end
+  local out = {}
+  for _, id in ipairs(ids) do out[#out + 1] = fichePNJ(id) end
+  return out
 end
 
 local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement), si ce client l'a encore

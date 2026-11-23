@@ -4,7 +4,8 @@
 local API = { "Lire", "Souscrire", "QuandReleve", "Signaler", "Personnage", "Destinataire", "Royaume", "MaisonHV", "Faction",
     "Build", "Sondes", "RelancerSondes", "DeclarerSonde", "Sonder", "Conteneurs", "EstSac", "EstBanque", "Fusionner",
     "PrixAchat", "PrixMarchands", "Fenetre", "Tableau", "TrierLignes", "Argent", "ArgentCourt", "ArgentSigne", "NomObjet",
-    "RetenirObjet", "TrouverObjet", "ChercherObjets", "Capturer", "BoutonCapture", "Exporter", "JsonSur", "Regrouper", "Exports" }
+    "RetenirObjet", "TrouverObjet", "ChercherObjets", "Capturer", "BoutonCapture", "Exporter", "JsonSur", "Regrouper", "Exports",
+    "MaitresDuMetier" }
 
 test("le global AzerothCommune porte l'API publique ; plus de LibCommune ni de GameDataAPI", function()
     assertType("table", AzerothCommune)
@@ -74,7 +75,8 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
             assertType("number", r.cooldown)
             -- sauf un patron connu du client (exposé ou lié à la prise), dont la compétence requise fait foi (Maitrise#15) : jamais au-dessus de 300
             assertTrue(r.yellow <= 0 or r.level <= r.yellow or ((r.source == "inconnue" or r.source == "patron vendu") and r.level <= 300), "compétence au-dessus du jaune (#62) : " .. tostring(r.name))
-            assertEquals(r.source == "patron vendu", r.pattern_price ~= nil)
+            -- un patron vendu que Fabrikao seul connaît (#80) peut n'avoir pas de prix de base dans le client
+            if r.pattern_price ~= nil then assertEquals("patron vendu", r.source) end
         else
             vues = vues + 1
         end
@@ -107,6 +109,46 @@ test("base des recettes : source, compétence, patron et recharge de chaque rece
     assertEquals("Enchantement", ench.profession)
     assertTrue(#ench.reagents > 0 and ench.yellow > 0 and ench.grey >= ench.yellow)
     assertEquals("maître", ench.source)
+end)
+
+-- #80 : les marchands des patrons (Fabrikao, source externe), avec leur position et leur prix, et la position des maîtres.
+test("base des recettes : le marchand de chaque patron vendu, sa position ; les maîtres d'un métier", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("base des recettes"))
+    local data = lib:Lire("base des recettes")
+    local n = 0
+    for _, r in pairs(data) do
+        if r.marchands then
+            n = n + 1
+            assertTrue(#r.marchands > 0, "liste vide : " .. tostring(r.name))
+            for _, m in ipairs(r.marchands) do
+                assertType("number", m.pnj)
+                if m.carte then assertType("number", m.x) assertType("number", m.y) end
+                if m.prix then assertTrue(m.prix > 0) end
+                assertTrue(m.faction == nil or m.faction == "Alliance" or m.faction == "Horde")
+            end
+        end
+    end
+    assertTrue(n > 900, "recettes avec un marchand : " .. n)
+    -- Patron propre à Forever : la série forge-ciel nuageuse de Vayn Moongaze (PNJ 254151), carte 2521.
+    local cotte = data[1301421]
+    assertEquals("patron vendu", cotte.source)
+    assertEquals("source externe", cotte.source_provenance)
+    assertEquals(254151, cotte.marchands[1].pnj)
+    assertEquals("Vayn Moongaze", cotte.marchands[1].nom)
+    assertEquals(2521, cotte.marchands[1].carte)
+    assertNil(data[2149].marchands) -- Bottes en cuir cousu main : d'emblée, aucun marchand
+    local forge = lib.MaitresDuMetier("Forge")
+    assertTrue(#forge > 10, "maîtres de la Forge : " .. #forge)
+    local places = 0
+    for _, m in ipairs(forge) do
+        assertType("number", m.pnj)
+        assertType("string", m.nom)
+        if m.carte then places = places + 1 end
+    end
+    assertTrue(places >= #forge - 1, "maîtres placés : " .. places .. "/" .. #forge)
+    assertNil(lib.MaitresDuMetier("pas un métier"))
+    print("base des recettes : " .. n .. " recettes avec un marchand ; " .. #forge .. " maîtres de la Forge")
 end)
 
 -- #49 : la recherche d'objets de la suite, parmi les objets vus et les objets fabriqués de la base des recettes.
