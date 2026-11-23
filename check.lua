@@ -1118,7 +1118,8 @@ local cuir = br[9002]
 assert(cuir and cuir.provenance == "extrait du client" and cuir.profession == "Travail du cuir" and cuir.output == 4255
   and cuir.made_min == 1 and cuir.made_max == 2 and cuir.level == 175 and cuir.reagents[2].id == 2321
   and cuir.reagents[2].qty == 2 and cuir.reagents[1].qty == 9, "recette de la réserve, dans la forme des recettes vues")
-assert(cuir.yellow == 180 and cuir.grey == 200 and br[3307].yellow == nil, "seuils jaune et gris de la réserve")
+assert(cuir.yellow == 180 and cuir.grey == 200 and br[3307].yellow == 130 and br[3307].grey == 140,
+  "seuils jaune et gris de la réserve, aussi pour une recette vue (Maîtrise en a besoin)")
 assert(lotBr.provenance == "relevé direct", "lot mixte : la provenance la plus fiable")
 -- #64 : chaque recette de la réserve porte sa source, la provenance de cette source, le prix du patron (nil sans) et son
 -- temps de recharge (secondes) ; une recette vue que la réserve connaît les prend aussi. Un enchantement (sans objet

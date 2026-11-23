@@ -48,8 +48,8 @@ local TYPES = {
   --   persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
   ["recettes connues"] = { parPerso = true },
   -- Tout ce que fabrique une recette, connue ou non : { [clé] = { profession, name, output (nil : enchantement), reagents,
-  --   made_min, made_max, level (compétence pour l'apprendre, de la réserve), yellow, grey (seuils du client, réserve
-  --   seule), source, source_provenance, pattern_price, cooldown (de la réserve, #64), provenance } }. Les recettes vues
+  --   made_min, made_max, level (compétence pour l'apprendre, de la réserve), yellow, grey (seuils du client, de la
+  --   réserve), source, source_provenance, pattern_price, cooldown (de la réserve, #64), provenance } }. Les recettes vues
   --   sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets qu'aucune
   --   recette vue ne fabrique (Commerce.lua).
   ["base des recettes"] = {},
