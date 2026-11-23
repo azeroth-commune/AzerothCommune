@@ -21,6 +21,8 @@ chacun → *Release type* : **Beta**. À la main : dézippe `AzerothCommune` dan
 
 **Un souci ?** Ouvre une [issue](https://github.com/azeroth-commune/AzerothCommune/issues).
 
+**Soutenir** : ça te plaît ? Tu peux m'offrir un café sur [Ko-fi](https://ko-fi.com/virgile86017). ☕
+
 **Licence** : GPL-3.0 ou ultérieure (voir [`LICENSE`](LICENSE)). La liste des marchands vient des données de
 [cMaNGOS](https://github.com/cmangos) (GPL-3.0) ; le catalogue des objets et la réserve des recettes sont extraits du
 client du jeu.
