@@ -56,7 +56,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
 | `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, commité (le socle est sous GPL-3.0) ; sans lui, le type « objets » rend les seuls objets relevés |
-| `RecettesClassic.lua` | la réserve de la base des recettes (nom historique), privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, commitée (le socle est sous GPL-3.0) ; sans elle, la base des recettes rend les seules recettes vues |
+| `RecettesReserve.lua` | la réserve de la base des recettes, privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, commitée (le socle est sous GPL-3.0) ; sans elle, la base des recettes rend les seules recettes vues |
 
 ## Accès aux données relevées
 
