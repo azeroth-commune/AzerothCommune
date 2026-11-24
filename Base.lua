@@ -184,10 +184,13 @@ local function scanAll()
   for name, fn in pairs(scan) do run(name, fn) end
 end
 
--- Gain de compétence (SKILL_LINES_CHANGED, #69) : les métiers relus tout de suite, puis signalés (QuandReleve) ; hors combat
--- seulement (en combat, ce sont les armes et la défense : le relevé des 60 s suffit).
+-- Gain de compétence (SKILL_LINES_CHANGED, #69) : les métiers relus tout de suite, puis signalés (QuandReleve), en combat
+-- aussi (un bandage, un dépeçage, une récolte y font monter un métier ; deux petites listes à relire). Pas avant la
+-- connexion ni pendant un chargement, où le jeu rend une liste de métiers vide : rien n'est écrasé, le relevé des 60 s suit.
+-- ponytail: un événement par gain, parfois plusieurs (et jusqu'à 30 quand un add-on déplie les en-têtes) : relu à chaque fois.
+local connecte = false
 local function metiersChanges()
-  if InCombatLockdown() then return end
+  if not connecte or not next({ GetProfessions() }) then return end
   run("professions", scan.professions)
   run("skills", scan.skills)
   lib:Signaler("métiers et compétences")
@@ -312,6 +315,7 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
     itemsReady()
     ns.verifierLots()
   elseif event == "PLAYER_LOGIN" then
+    connecte = true
     char() -- la fiche du perso connecté, reprise tout de suite sous son GUID
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)
     C_Timer.NewTicker(60, scanAll)

@@ -334,6 +334,20 @@ test("gain de compétence : les métiers relus aussitôt et signalés", function
         assertNotNil(fiche, "fiche du perso")
         assertEquals("Forge", fiche.professions[1].name)
         assertEquals(42, fiche.professions[1].rank)
+        -- En combat aussi (un bandage, un dépeçage, une récolte font monter un métier).
+        local icl = InCombatLockdown
+        InCombatLockdown = function() return true end
+        GetProfessionInfo = function() return "Forge", "icône", 43, 75 end
+        local ok2, err2 = pcall(FireEvent, "SKILL_LINES_CHANGED")
+        InCombatLockdown = icl
+        assert(ok2, err2)
+        assertEquals(2, recus, "signalé en combat")
+        -- Liste vide (écran de chargement) : rien d'écrasé, rien de signalé.
+        GetProfessions = function() return nil, nil, nil, nil, nil end
+        FireEvent("SKILL_LINES_CHANGED")
+        assertEquals(2, recus, "liste vide : pas de signal")
+        _, fiche = next(lib:Lire("métiers et compétences", UnitGUID("player")).persos)
+        assertEquals(43, fiche.professions[1].rank, "liste vide : la fiche reste")
     end)
     GetProfessions, GetProfessionInfo = gp, gpi
     assert(ok, err)
