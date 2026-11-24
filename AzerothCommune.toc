@@ -13,7 +13,7 @@ Capture.lua
 Regroupement.lua
 Fournisseurs.lua
 Base.lua
-RecettesClassic.lua
+RecettesReserve.lua
 CatalogueObjets.lua
 Commerce.lua
 Souscriptions.lua

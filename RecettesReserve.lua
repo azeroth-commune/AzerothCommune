@@ -23,9 +23,9 @@
 -- ns.recettesOutils[clé] = { nom, { objet, … } } : un outil demandé (catégorie d'outil par son ID, objet précis par −son ID)
 --   et les objets qui conviennent (le client : SpellTotems, TotemCategory, ItemSparse).
 local _, ns = ...
-ns.recettesClassicLot = { provenance = "extrait du client", build = 71037, version = "1.60.1.71037", date = "2026-11-24" }
+ns.recettesReserveLot = { provenance = "extrait du client", build = 71037, version = "1.60.1.71037", date = "2026-11-24" }
 ns.recettesMarchandsLot = { provenance = "source externe", source = "Fabrikao", version = "0.9.1", date = "2026-11-22", releves = "2026-11-23 23:43:24" }
-ns.recettesClassic = { -- privée au socle : lue par la base des recettes (nom historique)
+ns.recettesReserve = { -- privée au socle : lue par la base des recettes
 [2149]={2302,1,1,"Travail du cuir","Bottes en cuir cousu main",{2318,2,2320,1},1,40,70,"d'emblée","extrait du client",0,0,nil,nil,nil,"extrait du client",nil,5.125},
 [2152]={2304,1,1,"Travail du cuir","Renfort d'armure léger",{2318,1},1,30,60,"d'emblée","extrait du client",0,0,nil,nil,nil,"extrait du client",nil,5.125},
 [2153]={2303,1,1,"Travail du cuir","Pantalon en cuir cousu main",{2318,4,2320,1},15,45,75,"maître","source externe",0,0,nil,nil,nil,"règle",nil,5.125},

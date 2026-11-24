@@ -50,7 +50,7 @@ test("recettes connues sans fenêtre : l'API de Forever est là et le relevé to
     assertNil(lib.RemettreRecettes) -- plus de remise par un add-on (#48)
 end)
 
--- #48, #54 : la réserve extraite du client (RecettesClassic.lua, générée, hors du repo : à copier dans un worktree) est
+-- #48, #54 : la réserve extraite du client (RecettesReserve.lua, générée, hors du repo : à copier dans un worktree) est
 -- chargée par la TOC du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance, sa
 -- compétence requise et ses seuils jaune et gris.
 local SOURCES = { ["d'emblée"] = true, ["maître"] = true, ["patron vendu"] = true, ["retirée"] = true, inconnue = true }
@@ -60,7 +60,7 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
     assertTrue(lib:Souscrire("base des recettes"))
     assertNil(HandshakeClassicRecipes)
     local data, lot = lib:Lire("base des recettes")
-    assertNotNil(data, "base des recettes vide (RecettesClassic.lua présent ?)")
+    assertNotNil(data, "base des recettes vide (RecettesReserve.lua présent ?)")
     assertType("table", lot)
     local reserve, vues = 0, 0
     for _, r in pairs(data) do

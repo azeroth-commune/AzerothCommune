@@ -5,7 +5,7 @@ add-on (ADR 0002 de l'atelier), API publique sur le global `AzerothCommune`, int
 `README.md`. Repo `azeroth-commune/AzerothCommune` (public depuis le 23/11, publié sur CurseForge ; les issues et l'historique de LibCommune, et
 l'historique de GameData). Espace de travail parent : `../` (outils, recherche, captures — pas dans ce repo).
 Déploiement : lien symbolique depuis le dossier AddOns du jeu, `/reload` suffit. Vérifier : `luajit AzerothCommune/check.lua`
-depuis le dossier des add-ons, puis `tools/sim.sh test AzerothCommune` dans l'atelier. `VendorData.lua`, `RecettesClassic.lua`
+depuis le dossier des add-ons, puis `tools/sim.sh test AzerothCommune` dans l'atelier. `VendorData.lua`, `RecettesReserve.lua`
 et `CatalogueObjets.lua` sont générés (`tools/build_vendor_data.py`, `tools/build_recipe_data_client.py`, `tools/build_item_catalog.py`)
 et commités (le socle est sous GPL-3.0 depuis sa publication sur CurseForge) : les régénérer puis les commiter.
 

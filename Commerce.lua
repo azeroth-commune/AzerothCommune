@@ -87,7 +87,7 @@ ns.lire["recettes connues"] = function()
   return { recettes = AzerothCommuneDB.recipes, persos = persos }, { persos = lots }
 end
 
--- La réserve : RecettesClassic.lua (nom historique), généré par tools/build_recipe_data_client.py de l'atelier depuis les
+-- La réserve : RecettesReserve.lua, généré par tools/build_recipe_data_client.py de l'atelier depuis les
 -- tables du client Forever et ses correctifs en cache (#54), hors du repo tant que la licence n'est pas choisie : absent
 -- d'un repo cloné tel quel. Mise en forme une fois dans la forme des recettes vues, chaque ligne marquée « extrait du
 -- client », avec les seuils jaune et gris du client (vert = (jaune + gris) / 2) et, depuis #64, la source de la recette
@@ -137,8 +137,8 @@ local function outilsDe(cles)
   return out
 end
 local function reserveRecettes()
-  if reserve == nil or brute ~= ns.recettesClassic then
-    brute, reserve = ns.recettesClassic, {}
+  if reserve == nil or brute ~= ns.recettesReserve then
+    brute, reserve = ns.recettesReserve, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
     --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans),
     --   marchands du patron ({ PNJ, prix, … }, nil sans), provenance de la compétence, date du relevé direct,
@@ -268,7 +268,7 @@ ns.lire["base des recettes"] = function()
   end
   if appliquerMaitres(d) > 0 or next(vues) then return d, { provenance = "relevé direct", marchands = lotMarchands() } end
   local lot = { marchands = lotMarchands() }
-  for f, v in pairs(ns.recettesClassicLot or {}) do lot[f] = v end
+  for f, v in pairs(ns.recettesReserveLot or {}) do lot[f] = v end
   -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
   lot.provenance, lot.perime = "extrait du client", not (GetBuildInfo and lot.build == lib.Build()) or nil
   return d, lot

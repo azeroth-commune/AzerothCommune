@@ -1104,15 +1104,15 @@ assert(rc.recettes[3307].output == 3575 and rc.persos["Belegard-Test"].Minage.kn
 assert(rc.persos["Sans-Metier"] == nil, "un perso sans métier relevé n'apparaît pas")
 assert(AzerothCommune:Lire("recettes connues", "Belegard-Test").persos["Belegard-Test"].Minage, "lu par la lib")
 -- Base des recettes (#48, #54) : les recettes vues d'abord (3307 et 3308, relevé direct), la réserve extraite du client
--- (RecettesClassic.lua, générée, privée au socle : ns.recettesClassic, nom historique) pour les objets qu'aucune recette vue
+-- (RecettesReserve.lua, générée, privée au socle : ns.recettesReserve) pour les objets qu'aucune recette vue
 -- ne fabrique, chaque ligne de la réserve marquée « extrait du client », avec les seuils jaune et gris du client. La
 -- compétence requise, que la fenêtre ne donne pas, vient de la réserve.
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140 },        -- vue aussi : la vue gagne
   [9003] = { 3577, 1, 1, "Minage", "Barre d'or (réserve)", { 2776, 1 }, 155, 160, 170 }, -- même objet que la vue 3308 : écartée
   [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9, 2321, 2 }, 175, 180, 200 },
 }
-ns.recettesClassicLot = { provenance = "extrait du client", build = 64000, version = "1.16.1.64000", date = "2026-11-21" }
+ns.recettesReserveLot = { provenance = "extrait du client", build = 64000, version = "1.16.1.64000", date = "2026-11-21" }
 local br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[3307].name == "Fondre le fer" and br[3307].provenance == nil and br[3307].level == 125, "recette vue, sa compétence requise de la réserve")
 assert(AzerothCommuneDB.recipes[3307].level == nil, "la base des recettes vues n'est pas touchée")
@@ -1128,7 +1128,7 @@ assert(lotBr.provenance == "relevé direct", "lot mixte : la provenance la plus 
 -- temps de recharge (secondes) ; une recette vue que la réserve connaît les prend aussi. Un enchantement (sans objet
 -- produit) entre dans la base sans casser l'index par objet.
 assert(cuir.source == nil and cuir.cooldown == nil, "réserve d'avant #64 : pas de source")
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
   [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0 },
   [18560] = { 14342, 1, 1, "Couture", "Etoffe lunaire", { 14256, 2 }, 250, 270, 300, "patron vendu", "source externe", 20000, 342000 },
@@ -1149,7 +1149,7 @@ assert(AzerothCommune.TrouverObjet("Ench. de bracelets (Endurance inférieure)",
   and AzerothCommune.TrouverObjet("Etoffe lunaire", {}, br) == 14342, "un enchantement n'est pas un objet")
 -- #67 : la condition d'accès de la réserve (14e champ : spécialisation, réputation, plus enseignée) est exposée, sur une recette
 -- de la réserve et sur une recette vue ; absente (nil) sinon.
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
   [19053] = { 15074, 1, 1, "Travail du cuir", "Gants chimériques", { 8170, 6 }, 260, 260, 280, "patron vendu", "source externe", 12000, 0,
     "spécialisation : travail du cuir tribal" },
@@ -1159,13 +1159,13 @@ AzerothCommuneDB.recipes[3307].condition = nil
 br = AzerothCommune:Lire("base des recettes")
 assert(br[19053].condition == "spécialisation : travail du cuir tribal" and br[18560].condition == "réputation : Aube d'argent"
   and br[3307].condition == nil, "condition de la réserve exposée, nil sans")
-ns.recettesClassic = { [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "retirée", "extrait du client", 0, 0, "plus enseignée" } }
+ns.recettesReserve = { [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "retirée", "extrait du client", 0, 0, "plus enseignée" } }
 br = AzerothCommune:Lire("base des recettes")
 assert(br[3307].condition == "plus enseignée" and br[3307].name == "Fondre le fer" and AzerothCommuneDB.recipes[3307].condition == nil,
   "une recette vue en prend la condition, sur une copie")
 -- Maitrise#15 : l'objet patron de la réserve (15e champ, nil entre condition et patron quand la recette n'a pas de condition) est
 -- exposé sur une recette de la réserve et, sur une copie, sur une recette vue ; nil sans.
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
   [2158] = { 2307, 1, 1, "Travail du cuir", "Bottes élégantes en cuir", { 2318, 7, 2320, 2 }, 90, 95, 125, "inconnue", "source externe", 0, 0, nil, 2406 },
   [19053] = { 15074, 1, 1, "Travail du cuir", "Gants chimériques", { 8170, 6 }, 260, 260, 280, "patron vendu", "source externe", 12000, 0,
@@ -1190,7 +1190,7 @@ ns.recettesPNJ = { [254151] = { "Vayn Moongaze", 2521, 63.8, 36 }, [5] = { "Marc
   [7] = { "Maître", nil, nil, nil, "Horde" } }
 ns.recettesMaitres = { Forge = { 7, 5 } }
 ns.recettesMarchandsLot = { provenance = "source externe", source = "Fabrikao", version = "0.9.1", date = "2026-11-22" }
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0 },
   [1301421] = { 276992, 1, 1, "Forge", "Cotte de mailles forge-ciel nuageuse", { 2840, 8 }, 60, 65, 70, "patron vendu", "source externe",
     1250, 0, nil, nil, { 254151, 0 } },
@@ -1231,7 +1231,7 @@ end
 -- #81 : la provenance de la compétence pour l'apprendre (17e champ ; nil à la place des champs absents avant elle), exposée
 -- en level_provenance, copiée sur une recette vue ; nil dans une réserve d'avant #81. #83 : un relevé direct de l'atelier, avec
 -- sa date (18e champ, level_date), copiée aussi.
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "relevé direct", 0, 0, nil, nil, nil,
     "relevé direct", "2026-11-23 23:43:24" },
   [2666] = { 2857, 1, 1, "Forge", "Ceinture runique en cuivre", { 2840, 10 }, 45, 85, 125, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
@@ -1250,7 +1250,7 @@ assert(br[3307].level_provenance == "relevé direct" and br[3307].level_date == 
   "une recette vue en prend la provenance de la compétence et la date du relevé, sur une copie ; sans relevé : nil")
 -- #70, #71 : le temps d'incantation (19e champ, secondes) et les outils demandés (20e : clés de ns.recettesOutils), rendus
 -- { { nom, objets } } ; une recette vue que la réserve connaît les prend aussi ; nil sans.
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0, nil, nil, nil, nil, nil, 3 },
   [2666] = { 2857, 1, 1, "Forge", "Ceinture runique en cuivre", { 2840, 10 }, 45, 85, 125, "maître", "source externe", 0, 0, nil, nil, nil,
     "règle", nil, 8, { 162, -4471 } },
@@ -1265,7 +1265,7 @@ assert(br[9002].cast == nil and br[9002].outils == nil, "sans : nil")
 ns.recettesOutils = nil
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
-ns.recettesClassic = {
+ns.recettesReserve = {
   [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "retirée", "extrait du client", 0, 0, "plus enseignée" },
   [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0,
     nil, nil, nil, "relevé direct", "2026-11-01 08:00:00" },
@@ -1315,8 +1315,8 @@ AzerothCommuneDB.trainers = nil
 -- #84 : un maître ou un marchand vu (fenêtre simulée) qui contredit la réserve : l'écart est noté (AC.Ecarts), sans doublon,
 -- et la donnée du joueur l'emporte comme avant. Réserve : deux recettes de maître, deux patrons vendus (2406 par 5, 2407 par 6).
 do (function() -- une fonction : le fichier a atteint 200 locales
-  local reserve0, guid0 = ns.recettesClassic, UnitGUID
-  ns.recettesClassic = {
+  local reserve0, guid0 = ns.recettesReserve, UnitGUID
+  ns.recettesReserve = {
     [2666] = { 2857, 1, 1, "Forge", "Ceinture runique en cuivre", { 2840, 10 }, 45, 85, 125, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
     [2667] = { 2858, 1, 1, "Forge", "Gantelets en cuivre", { 2840, 6 }, 30, 40, 50, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
     [2158] = { 2307, 1, 1, "Travail du cuir", "Bottes élégantes en cuir", { 2318, 7 }, 90, 95, 125, "patron vendu", "source externe", 500, 0,
@@ -1371,37 +1371,37 @@ do (function() -- une fonction : le fichier a atteint 200 locales
   -- Réserve régénérée : l'attendu suit la réserve en cours ; réglé par elle (50, le relevé), l'écart s'efface.
   local function regen(niveau)
     local t = {}
-    for k, c in pairs(ns.recettesClassic) do t[k] = { unpack(c, 1, 17) } end
+    for k, c in pairs(ns.recettesReserve) do t[k] = { unpack(c, 1, 17) } end
     t[2666][7] = niveau
-    ns.recettesClassic = t
+    ns.recettesReserve = t
   end
   regen(48)
   e = AzerothCommune.Ecarts()
   assert(#e == 1 and e[1].attendu == 48, "l'attendu suit la réserve en cours")
   regen(50)
   assert(#AzerothCommune.Ecarts() == 0 and not next(AzerothCommuneDB.ecarts), "réglé par la réserve en cours : effacé")
-  ns.recettesClassic, UnitGUID, AzerothCommuneDB.ecarts, AzerothCommuneDB.vendors = reserve0, guid0, {}, {}
+  ns.recettesReserve, UnitGUID, AzerothCommuneDB.ecarts, AzerothCommuneDB.vendors = reserve0, guid0, {}, {}
   print("Azeroth Commune : écarts entre relevés et réserve OK")
 end)() end
 -- Sans fichier de réserve (repo cloné tel quel) : les seules recettes vues, sans erreur.
-ns.recettesClassic = nil
+ns.recettesReserve = nil
 br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[3307] and br[3307].level == nil and br[9002] == nil and lotBr.provenance == "relevé direct", "sans réserve : les recettes vues")
 -- La réserve seule (aucune recette vue) : son lot, extrait du client, au build du client (64000 ici) ; périmé sous un
 -- autre build, ou sans lot (une réserve d'avant #54) ; ni l'une ni l'autre : pas encore relevé.
 local vuesAvant = AzerothCommuneDB.recipes
 AzerothCommuneDB.recipes = {}
-ns.recettesClassic = { [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200 } }
+ns.recettesReserve = { [9002] = { 4255, 1, 1, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200 } }
 br, lotBr = AzerothCommune:Lire("base des recettes")
 assert(br[9002] and lotBr.provenance == "extrait du client" and lotBr.build == 64000 and lotBr.version == "1.16.1.64000"
   and lotBr.date == "2026-11-21" and not lotBr.perime, "la réserve seule, au build du client")
-assert(ns.recettesClassicLot.perime == nil, "le lot de la réserve n'est pas touché")
-ns.recettesClassicLot = { provenance = "extrait du client", build = 63000 }
+assert(ns.recettesReserveLot.perime == nil, "le lot de la réserve n'est pas touché")
+ns.recettesReserveLot = { provenance = "extrait du client", build = 63000 }
 assert(select(2, AzerothCommune:Lire("base des recettes")).perime, "réserve extraite sous un autre build : peut-être périmée")
-ns.recettesClassicLot = nil
+ns.recettesReserveLot = nil
 lotBr = select(2, AzerothCommune:Lire("base des recettes"))
 assert(lotBr.provenance == "extrait du client" and lotBr.perime, "réserve sans lot : peut-être périmée")
-ns.recettesClassic = nil
+ns.recettesReserve = nil
 assert(select(2, AzerothCommune:Lire("base des recettes")) == "pas encore relevé", "ni recette vue ni réserve")
 AzerothCommuneDB.recipes = vuesAvant
 -- Objets (#52) : les objets relevés (1 nommé, 2 vu sans nom, 5 inconnu du serveur : scan plus haut), puis le catalogue des
@@ -1446,13 +1446,13 @@ ns.char, ns.run = function() return neuf end, function(_, fn) fn(neuf) end
 AzerothCommuneDB.recipes[3310] = { profession = "Minage", name = "Fondre le thorium" } -- vue chez un autre perso
 -- La réserve du socle (#48) est interrogée aussi, même pour un objet qu'une recette vue fabrique déjà (9004 : la
 -- barre de fer, comme 3307) : le même relevé que quand Handshake la remettait.
-ns.recettesClassic = { [9001] = { 2840, 1, 1, "Minage", "Fondre le cuivre", { 2770, 1 }, 1 },
+ns.recettesReserve = { [9001] = { 2840, 1, 1, "Minage", "Fondre le cuivre", { 2770, 1 }, 1 },
   [9004] = { 3575, 1, 1, "Minage", "Fondre le fer (autre)", { 2772, 1 }, 125 } }
 GetProfessions = function() return 1 end
 GetProfessionInfo = function() return "Minage", "icône", 150, 225 end
 IsPlayerSpell = function(id) return id == 3307 or id == 3310 or id == 9001 or id == 9004 end
 commerce.fn(commerce, "PLAYER_LOGIN")
-ns.recettesClassic = nil
+ns.recettesReserve = nil
 local mn = neuf.recipes and neuf.recipes.Minage
 assert(mn and mn.rank == 150 and mn.known[3307] == true and mn.known[3310] and not mn.known[3308], "relevé sans fenêtre sauvegardé")
 assert(mn.known[9001] and mn.known[9004], "relevé sans fenêtre : la réserve du socle interrogée")
