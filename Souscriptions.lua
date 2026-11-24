@@ -142,7 +142,7 @@ function ns.personnage(guid)
 end
 
 -- Marchands : un lot mixte. Les marchands vus en jeu (relevé direct) et la base VendorData.lua, générée hors jeu (quel
--- PNJ vend quoi : cMaNGOS, source externe ; prix, lots et piles : client Forever, extrait du client), dont la ligne vaut
+-- PNJ vend quoi : Fabrikao pour un patron, QuestieDB sinon, source externe ; prix, lots et piles : client Forever, extrait du client), dont la ligne vaut
 -- donc « source externe », la moins fiable de ses deux sources. La provenance la plus fiable gagne : un marchand vu en
 -- jeu prend toute sa liste au relevé (elle dit aussi ce qu'il ne vend pas), la base ne remplit que les marchands pas vus.
 -- Une ligne de la base porte aussi la revente au marchand (sell) et la taille de pile (maxStack) ; un PNJ amical pour la
@@ -168,8 +168,8 @@ function lire.marchands()
   local d, provenance = lib.Fusionner({ { donnees = AzerothCommuneDB.vendors, provenance = "relevé direct" },
     { donnees = vendorDataParPNJ(), provenance = "source externe" } })
   if provenance == "relevé direct" then return d, AzerothCommuneDB.lots.marchands end
-  -- ponytail: VendorData.lua ne dit pas sous quel build ni quand il a été généré : build inconnu, donc peut-être périmé ;
-  -- à lire ici le jour où tools/build_vendor_data.py l'écrit.
+  -- ponytail: VendorData.lua porte sa date et son build en commentaire seulement : illisible ici, donc peut-être périmé ;
+  -- émettre ns.VENDOR_LOT dans tools/build_vendor_data.py le jour où le lot doit le dire.
   return d, { provenance = provenance, perime = true }
 end
 

@@ -54,7 +54,7 @@ end)
 -- chargée par la TOC du socle, privée ; elle se lit par la base des recettes, chaque recette avec sa provenance, sa
 -- compétence requise et ses seuils jaune et gris.
 local SOURCES = { ["d'emblée"] = true, ["maître"] = true, ["patron vendu"] = true, ["retirée"] = true, inconnue = true }
-local COMPETENCES = { ["règle"] = true, incertaine = true, patron = true, ["extrait du client"] = true }
+local COMPETENCES = { ["règle"] = true, incertaine = true, patron = true, ["extrait du client"] = true, ["relevé direct"] = true }
 test("base des recettes : la réserve du socle chargée, chaque recette avec sa provenance", function()
     local lib = AzerothCommune
     assertTrue(lib:Souscrire("base des recettes"))

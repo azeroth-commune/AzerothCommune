@@ -1718,4 +1718,32 @@ for _, e in ipairs(glib.Exports()) do if e.cle == "perso" then exportPerso = e e
 assert(next(exportPerso.donnees()) == B, "export perso : sous le GUID")
 NOM_DE_FAMILLE.Alice = nil
 print("Azeroth Commune : fiches par GUID OK")
+
+-- La base des marchands générée (#82) : une source par objet selon sa catégorie (patrons des recettes : Fabrikao ; le reste,
+-- composants compris : QuestieDB), sans les objets vendus seulement en stock limité (cMaNGOS), prix du client ; et le prix
+-- d'achat qui en sort.
+do (function() -- une fonction : le fichier a atteint 200 locales
+  AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = { marchands = os.time() } }, nil, nil
+  gns, glib = session("Alice") -- personnage de l'Alliance
+  charger("VendorData", gns)
+  local mv = glib:Lire("marchands")
+  local function vend(pnj, id)
+    for _, it in ipairs((mv[pnj] or {}).items or {}) do if it.id == id then return true end end
+    return false
+  end
+  -- Recette : Sagerelle fumée (21099), un patron : 2664 la vend d'après Fabrikao ; 242498, d'après QuestieDB seulement, qui
+  -- ne fait pas foi pour un patron (il vend d'autres objets : il est bien dans la base).
+  assert(vend(2664, 21099) and mv[242498] and not vend(242498, 21099), "patron : les marchands de Fabrikao seuls")
+  -- Bûches épaisses (272941), composant ajouté par Forever : d'après QuestieDB (242498 l'y vend, Fabrikao ne le dit pas).
+  assert(vend(242498, 272941), "composant : les marchands de QuestieDB")
+  -- Flèche grossière (2512), munitions : d'après QuestieDB (1198 l'y vend ; Fabrikao ne la connaît pas).
+  assert(vend(1198, 2512), "objet hors artisanat : les marchands de QuestieDB")
+  local pmv, d = glib:PrixMarchands(), gns.VENDOR_DB[272941]
+  local c, src = glib:PrixAchat(272941, 3, {}, pmv)
+  assert(src == "marchand" and c == 3 * d[1] / d[2], "prix d'achat d'un composant de Forever : son prix marchand")
+  c, src = glib:PrixAchat(2512, 400, {}, pmv)
+  assert(src == "marchand" and c == 20, "prix d'achat d'un objet hors artisanat : 10 pc les 200")
+  assert(pmv[2447] == nil and gns.VENDOR_DB[2447] == nil, "Pacifique, vendu seulement en stock limité (cMaNGOS) : pas de prix marchand")
+  print("Azeroth Commune : base des marchands par catégorie et prix d'achat OK")
+end)() end
 end
