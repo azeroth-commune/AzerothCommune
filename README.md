@@ -48,7 +48,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | Fichier | Rôle |
 |---|---|
 | `AzerothCommune.lua` | crée le global ; catalogue des types de données, `Souscrire`, `Lire`, `QuandReleve`, sondes, identité (personnage, royaume, faction, maison de l'HV, build), sacs, relevé des recettes, prix d'achat |
-| `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets |
+| `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
