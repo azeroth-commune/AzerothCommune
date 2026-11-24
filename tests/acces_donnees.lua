@@ -316,3 +316,25 @@ test("prix d'achat exposé par la lib : un coût ou rien, sans erreur", function
     if c then assertType("number", c); assertTrue(src == "marchand" or src == "HV") end
     assertEquals(300, (lib:PrixAchat(1, 3, { [1] = { min = 100 } }, {})))
 end)
+
+-- #69 : un gain de compétence (SKILL_LINES_CHANGED) relit tout de suite les métiers et le signale (QuandReleve).
+test("gain de compétence : les métiers relus aussitôt et signalés", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("métiers et compétences"))
+    local recus = 0
+    assertTrue(lib:QuandReleve("métiers et compétences", function() recus = recus + 1 end))
+    local gp, gpi = GetProfessions, GetProfessionInfo
+    GetProfessions = function() return 1 end
+    GetProfessionInfo = function() return "Forge", "icône", 42, 75 end
+    local ok, err = pcall(function()
+        FireEvent("SKILL_LINES_CHANGED")
+        assertEquals(1, recus)
+        local d = lib:Lire("métiers et compétences", UnitGUID("player"))
+        local _, fiche = next(d and d.persos or {})
+        assertNotNil(fiche, "fiche du perso")
+        assertEquals("Forge", fiche.professions[1].name)
+        assertEquals(42, fiche.professions[1].rank)
+    end)
+    GetProfessions, GetProfessionInfo = gp, gpi
+    assert(ok, err)
+end)
