@@ -50,7 +50,11 @@ local TYPES = {
   --   persos = { [GUID] = { [métier] = { rank, max, known = { [clé] = difficulté, ou true sans fenêtre } } } } }
   ["recettes connues"] = { parPerso = true },
   -- Tout ce que fabrique une recette, connue ou non : { [clé] = { profession, name, output (nil : enchantement), reagents,
-  --   made_min, made_max, level (compétence pour l'apprendre, de la réserve), yellow, grey (seuils du client, de la
+  --   made_min, made_max, level (compétence pour l'apprendre, de la réserve), level_provenance (#81 : d'où vient level ;
+  --   « règle » : la règle du décalage, rang Classic − (jaune Classic − jaune Forever) ; « incertaine » : recette ajoutée par
+  --   Forever ou aux seuils incomplets, d'après Fabrikao, à défaut le seuil jaune du client (0 : inconnue) ; « patron » : la
+  --   compétence requise de l'objet patron, dans le client ; « extrait du client » : d'emblée ; « relevé direct » : vue chez
+  --   un maître ; nil : réserve d'avant #81 ou recette vue inconnue de la réserve), yellow, grey (seuils du client, de la
   --   réserve), source, source_provenance, pattern_price, cooldown (de la réserve, #64), condition (de la réserve, #67 :
   --   « spécialisation : travail du cuir tribal », « réputation : Aube d'argent » ou « plus enseignée » ; nil quand la
   --   recette n'en demande aucune : une recette à condition n'est pas apprenable par qui ne l'a pas), patron (de la réserve, Maitrise#15 : l'objet qui
@@ -65,7 +69,7 @@ local TYPES = {
   --   sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets qu'aucune
   --   recette vue ne fabrique (Commerce.lua). Les maîtres de métier relevés passent devant les deux (#72) : une recette
   --   qu'un maître enseigne (rapprochée par l'objet enseigné, sinon par le nom, dans le métier du service) prend sa
-  --   compétence demandée en level, source « maître », source_provenance « relevé direct » et prix_maitre (cuivre) ;
+  --   compétence demandée en level, source « maître », source_provenance et level_provenance « relevé direct » et prix_maitre (cuivre) ;
   --   les autres gardent les valeurs de la réserve.
   ["base des recettes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
