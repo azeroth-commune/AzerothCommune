@@ -1702,8 +1702,8 @@ print("Azeroth Commune : fiches par GUID OK")
 
 -- La base des marchands générée (#82) : une source par objet selon sa catégorie (patrons des recettes : Fabrikao ; le reste,
 -- composants compris : QuestieDB), sans les objets vendus seulement en stock limité (cMaNGOS), prix du client ; et le prix
--- d'achat qui en sort. Sautée si VendorData.lua manque.
-if io.open("AzerothCommune/VendorData.lua") then (function() -- une fonction : le fichier a atteint 200 locales
+-- d'achat qui en sort.
+do (function() -- une fonction : le fichier a atteint 200 locales
   AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = { marchands = os.time() } }, nil, nil
   gns, glib = session("Alice") -- personnage de l'Alliance
   charger("VendorData", gns)

@@ -168,8 +168,8 @@ function lire.marchands()
   local d, provenance = lib.Fusionner({ { donnees = AzerothCommuneDB.vendors, provenance = "relevé direct" },
     { donnees = vendorDataParPNJ(), provenance = "source externe" } })
   if provenance == "relevé direct" then return d, AzerothCommuneDB.lots.marchands end
-  -- ponytail: VendorData.lua ne dit pas sous quel build ni quand il a été généré : build inconnu, donc peut-être périmé ;
-  -- à lire ici le jour où tools/build_vendor_data.py l'écrit.
+  -- ponytail: VendorData.lua porte sa date et son build en commentaire seulement : illisible ici, donc peut-être périmé ;
+  -- émettre ns.VENDOR_LOT dans tools/build_vendor_data.py le jour où le lot doit le dire.
   return d, { provenance = provenance, perime = true }
 end
 
