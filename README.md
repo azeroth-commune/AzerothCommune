@@ -83,6 +83,9 @@ local b, lot = AC:Lire("base des recettes")
 -- réserve (extrait du client, build, version, date ; perime sous un autre build). Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
 -- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet
 -- rien au socle. Une recette vue n'a pas de champ provenance (relevé direct, comme une ligne de tête de lib.Fusionner).
+AC.Ecarts()                                        -- { { genre, recette, nom, attendu, vu, pnj, pnjNom, patron, date }, … } :
+-- chaque maître ou marchand vu en jeu qui contredit la réserve des recettes (« compétence », « patron absent », « marchand
+-- inconnu ») ; gardés dans la base sans doublon (un écart revu prend la date du relevé), rien d'autre n'est corrigé
 AC.Conteneurs(AC.EstSac)                           -- sacs lus à l'instant : { [nom] = { size, items = { { id, count, link } } } }
 local d, lot = AC:Lire("marchands")
 -- lot = { provenance, build, version, date, perime } ; par personnage pour un type par perso : { persos = { [GUID] = lot } }

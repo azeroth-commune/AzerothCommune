@@ -969,7 +969,7 @@ function verifierGlobalDocumente(lib)
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
     Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres
-    MaitresDuMetier]]):gmatch("%S+") do
+    MaitresDuMetier Ecarts]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
@@ -1297,6 +1297,77 @@ assert(br[9002].level == 175 and br[9002].source == "patron vendu" and br[9002].
 AzerothCommuneDB.trainers = avant
 assert(avant[1].services[2].skill_rank == 100 and avant[2].services[1].cost == 900, "relevé des maîtres intact")
 AzerothCommuneDB.trainers = nil
+-- #84 : un maître ou un marchand vu (fenêtre simulée) qui contredit la réserve : l'écart est noté (AC.Ecarts), sans doublon,
+-- et la donnée du joueur l'emporte comme avant. Réserve : deux recettes de maître, deux patrons vendus (2406 par 5, 2407 par 6).
+do (function() -- une fonction : le fichier a atteint 200 locales
+  local reserve0, guid0 = ns.recettesClassic, UnitGUID
+  ns.recettesClassic = {
+    [2666] = { 2857, 1, 1, "Forge", "Ceinture runique en cuivre", { 2840, 10 }, 45, 85, 125, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
+    [2667] = { 2858, 1, 1, "Forge", "Gantelets en cuivre", { 2840, 6 }, 30, 40, 50, "maître", "source externe", 0, 0, nil, nil, nil, "règle" },
+    [2158] = { 2307, 1, 1, "Travail du cuir", "Bottes élégantes en cuir", { 2318, 7 }, 90, 95, 125, "patron vendu", "source externe", 500, 0,
+      nil, 2406, { 5, 450 }, "patron" },
+    [2159] = { 2308, 1, 1, "Travail du cuir", "Cape fine en cuir", { 2318, 5 }, 85, 90, 120, "patron vendu", "source externe", 400, 0,
+      nil, 2407, { 6, 0 }, "patron" },
+  }
+  AzerothCommuneDB.ecarts, AzerothCommuneDB.trainers, AzerothCommuneDB.vendors = {}, {}, {}
+  UnitGUID = function(u) if u == "npc" then return "Creature-0-1-2-3-5-0" end end -- le PNJ 5
+  strsplit = function(sep, x) local t = {} for v in (x .. sep):gmatch("(.-)" .. sep) do t[#t + 1] = v end return unpack(t) end
+  C_Map, GetZoneText, GetSubZoneText = { GetBestMapForUnit = noop }, noop, noop
+  local services = { { "Ceinture runique en cuivre", 50, 2857 }, { "Gantelets en cuivre", 30, 2858 }, { "Minage d'apprenti", 0 } }
+  GetNumTrainerServices = function() return #services end
+  GetTrainerServiceInfo = function(i) return services[i][1], "", "available" end
+  GetTrainerServiceSkillReq = function(i) return services[i][3] and "Forge" or nil, services[i][2] end
+  GetTrainerServiceCost, GetTrainerServiceLevelReq = function() return 100 end, function() return 1 end
+  GetTrainerServiceItemLink = function(i) return services[i][3] and ("|Hitem:" .. services[i][3] .. "|h") end
+  commerce.fn(commerce, "TRAINER_SHOW")
+  assert(AzerothCommuneDB.errors.trainer == nil, tostring(AzerothCommuneDB.errors.trainer))
+  local e = AzerothCommune.Ecarts()
+  assert(#e == 1 and e[1].genre == "compétence" and e[1].recette == 2666 and e[1].nom == "Ceinture runique en cuivre" and e[1].attendu == 45
+    and e[1].vu == 50 and e[1].pnj == 5 and e[1].date, "maître qui contredit la réserve : écart noté (recette, attendu, vu, PNJ, date)")
+  assert(AzerothCommune:Lire("base des recettes")[2666].level == 50, "la donnée du joueur l'emporte")
+  e[1].vu = 0
+  assert(AzerothCommune.Ecarts()[1].vu == 50, "en copies")
+  AzerothCommuneDB.ecarts["compétence:2666:5"].date = "avant"
+  commerce.fn(commerce, "TRAINER_UPDATE")
+  e = AzerothCommune.Ecarts()
+  assert(#e == 1 and e[1].date ~= "avant", "revu : pas de doublon, la date du dernier relevé")
+  services[1][2] = 45
+  commerce.fn(commerce, "TRAINER_SHOW")
+  assert(#AzerothCommune.Ecarts() == 0, "revu d'accord avec la réserve : l'écart s'efface")
+  -- Marchand 5 : la réserve dit qu'il vend 2406, il vend 2407 (que la réserve donne au seul 6).
+  services[1][2] = 50
+  commerce.fn(commerce, "TRAINER_SHOW") -- un écart de compétence chez le même PNJ, que le relevé du marchand ne touche pas
+  local vend = { 2407, 117 }
+  GetMerchantNumItems = function() return #vend end
+  GetMerchantItemID = function(i) return vend[i] end
+  C_MerchantFrame = { GetItemInfo = function() return { name = "x", price = 1, stackCount = 1, numAvailable = -1 } end }
+  commerce.fn(commerce, "MERCHANT_SHOW")
+  assert(AzerothCommuneDB.errors.merchant == nil, tostring(AzerothCommuneDB.errors.merchant))
+  local par = {}
+  for _, x in ipairs(AzerothCommune.Ecarts()) do par[x.genre] = x end
+  assert(par["patron absent"] and par["patron absent"].recette == 2158 and par["patron absent"].patron == 2406 and par["patron absent"].pnj == 5,
+    "patron absent chez un marchand annoncé")
+  assert(par["marchand inconnu"] and par["marchand inconnu"].recette == 2159 and par["marchand inconnu"].patron == 2407, "patron vendu par un marchand inconnu de la base")
+  assert(#AzerothCommune.Ecarts() == 3, "un écart par recette et par PNJ")
+  vend = { 2406 }
+  commerce.fn(commerce, "MERCHANT_UPDATE")
+  e = AzerothCommune.Ecarts()
+  assert(#e == 1 and e[1].genre == "compétence", "la liste du marchand dit tout : ses écarts refaits ; celui du maître reste")
+  -- Réserve régénérée : l'attendu suit la réserve en cours ; réglé par elle (50, le relevé), l'écart s'efface.
+  local function regen(niveau)
+    local t = {}
+    for k, c in pairs(ns.recettesClassic) do t[k] = { unpack(c, 1, 17) } end
+    t[2666][7] = niveau
+    ns.recettesClassic = t
+  end
+  regen(48)
+  e = AzerothCommune.Ecarts()
+  assert(#e == 1 and e[1].attendu == 48, "l'attendu suit la réserve en cours")
+  regen(50)
+  assert(#AzerothCommune.Ecarts() == 0 and not next(AzerothCommuneDB.ecarts), "réglé par la réserve en cours : effacé")
+  ns.recettesClassic, UnitGUID, AzerothCommuneDB.ecarts, AzerothCommuneDB.vendors = reserve0, guid0, {}, {}
+  print("Azeroth Commune : écarts entre relevés et réserve OK")
+end)() end
 -- Sans fichier de réserve (repo cloné tel quel) : les seules recettes vues, sans erreur.
 ns.recettesClassic = nil
 br, lotBr = AzerothCommune:Lire("base des recettes")

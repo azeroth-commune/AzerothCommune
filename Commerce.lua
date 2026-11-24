@@ -5,6 +5,7 @@
 --                              ou true quand relevée sans fenêtre).
 --   AzerothCommuneDB.trainers[npc]  : ce que chaque maître enseigne, à quel prix, quel rang et quel niveau requis.
 --   AzerothCommuneDB.vendors[npc]   : ce que chaque marchand vend, à quel prix, par combien, en stock limité ou non.
+--   AzerothCommuneDB.ecarts[clé]    : les écarts entre un maître ou un marchand vu et la réserve des recettes (#84).
 --   AzerothCommuneDB.taxi[départ]   : prix des vols depuis chaque maître de vol ouvert.
 --   AzerothCommuneMarket[maison] : dernier scan complet de l'hôtel des ventes, sous la maison de l'HV (lib.MaisonHV,
 --                              « n° de serveur-faction », « 6942-Alliance ») : par objet, le prix unitaire le
@@ -165,15 +166,11 @@ end
 -- son nom). Un service qui ne rapproche rien (« Minage d'apprenti », une compétence de classe) est ignoré. Plusieurs maîtres
 -- pour une recette : la compétence la plus basse, puis le prix le plus bas. d est modifié (ses lignes sont déjà des copies
 -- ou des lignes de la réserve : une ligne touchée est remplacée par une copie, jamais modifiée sur place).
-local function appliquerMaitres(d)
-  -- ponytail: la base est lue souvent ; on n'indexe que les métiers d'un maître relevé (rien sans maître).
-  local metiers = {}
-  for _, t in pairs(AzerothCommuneDB.trainers or {}) do
-    for _, sv in ipairs(t.services or {}) do
-      if sv.skill and sv.skill_rank then metiers[sv.skill] = true end
-    end
-  end
-  if not next(metiers) then return 0 end
+-- Le rapprochement d'un service de maître (avec skill et skill_rank) à sa recette de d, limité aux métiers de metiers
+-- ({ [métier] = true }) : rend function(service) -> clé de la recette, ou nil. Plusieurs recettes du métier pour ce service
+-- (même nom, même objet : deux enchantements d'époques différentes…) : nil, on ne choisit pas (pas d'état deviné ;
+-- relecture de la PR #74).
+local function rapprocheur(d, metiers)
   local parObjet, parNom = {}, {}
   for k, r in pairs(d) do
     local m = r.profession
@@ -188,21 +185,34 @@ local function appliquerMaitres(d)
       end
     end
   end
+  return function(sv)
+    local m = sv.skill
+    local cles = sv.item and parObjet[m] and parObjet[m][sv.item]
+    if not cles or #cles ~= 1 then cles = parNom[m] and parNom[m][sv.name] end
+    return cles and #cles == 1 and cles[1] or nil
+  end
+end
+local function metiersDe(services, metiers)
+  for _, sv in ipairs(services or {}) do
+    if sv.skill and sv.skill_rank then metiers[sv.skill] = true end
+  end
+  return metiers
+end
+
+local function appliquerMaitres(d)
+  -- ponytail: la base est lue souvent ; on n'indexe que les métiers d'un maître relevé (rien sans maître).
+  local metiers = {}
+  for _, t in pairs(AzerothCommuneDB.trainers or {}) do metiersDe(t.services, metiers) end
+  if not next(metiers) then return 0 end
+  local recette = rapprocheur(d, metiers)
   local meilleur, quand = {}, {} -- clé -> service retenu, date du relevé de son maître
   for _, t in pairs(AzerothCommuneDB.trainers or {}) do
     for _, sv in ipairs(t.services or {}) do
-      local m, cles = sv.skill, nil
-      if m and sv.skill_rank then
-        cles = sv.item and parObjet[m] and parObjet[m][sv.item]
-        if not cles or #cles ~= 1 then cles = parNom[m] and parNom[m][sv.name] end
-        -- Plusieurs recettes du métier pour ce service (même nom, même objet : deux enchantements d'époques différentes…) :
-        -- on ne choisit pas, le service est ignoré (pas d'état deviné ; relecture de la PR #74).
-        if cles and #cles ~= 1 then cles = nil end
-        for _, k in ipairs(cles or {}) do
-          local b = meilleur[k]
-          if not b or sv.skill_rank < b.skill_rank or (sv.skill_rank == b.skill_rank and (sv.cost or 0) < (b.cost or 0)) then
-            meilleur[k], quand[k] = sv, t.seen
-          end
+      local k = sv.skill and sv.skill_rank and recette(sv)
+      if k then
+        local b = meilleur[k]
+        if not b or sv.skill_rank < b.skill_rank or (sv.skill_rank == b.skill_rank and (sv.cost or 0) < (b.cost or 0)) then
+          meilleur[k], quand[k] = sv, t.seen
         end
       end
     end
@@ -287,6 +297,82 @@ local function scanCraft(c) -- la fenêtre « Craft » de vanilla (Enchantement)
 end
 
 ---------------------------------------------------------------------------------------------------
+-- Écarts (#84) : quand un relevé direct du joueur (la fenêtre d'un maître ou d'un marchand) contredit la réserve (la base
+-- livrée), l'écart est noté dans AzerothCommuneDB.ecarts[genre:recette:PNJ] = { genre, recette (clé), nom (de la recette),
+-- attendu (la réserve), vu (le relevé), pnj, pnjNom, patron (l'objet patron de la réserve), date } ; un écart revu remplace
+-- le précédent (nouvelle date). La donnée du joueur l'emporte déjà (appliquerMaitres, lire.marchands) : rien d'autre n'est
+-- corrigé. Lus par AC.Ecarts() (Diagnostic). Genres :
+--   « compétence »       : un maître enseigne la recette à une autre compétence que celle de la réserve (attendu nil ou 0 :
+--                          la réserve ne la connaissait pas) ; revue à la même compétence, l'écart s'efface ;
+--   « patron absent »    : la réserve dit que ce marchand vend le patron, il ne l'a pas ;
+--   « marchand inconnu » : il vend le patron, la réserve ne le compte pas parmi ses marchands.
+local function noterEcart(genre, k, r, pnj, info, attendu, vu)
+  AzerothCommuneDB.ecarts[genre .. ":" .. k .. ":" .. pnj] = { genre = genre, recette = k, nom = r.name, attendu = attendu, vu = vu,
+    pnj = pnj, pnjNom = info.name, patron = r.patron, date = ns.now() }
+end
+-- ponytail: un service caché par les filtres du joueur n'est pas revu, son écart reste tel quel.
+local function ecartsMaitre(pnj, info)
+  local metiers = metiersDe(info.services, {})
+  if not next(metiers) then return end
+  local res = reserveRecettes()
+  local recette = rapprocheur(res, metiers)
+  for _, sv in ipairs(info.services) do
+    local k = sv.skill and sv.skill_rank and recette(sv)
+    if k and res[k].level ~= sv.skill_rank then
+      noterEcart("compétence", k, res[k], pnj, info, res[k].level, sv.skill_rank)
+    elseif k then
+      AzerothCommuneDB.ecarts["compétence:" .. k .. ":" .. pnj] = nil
+    end
+  end
+end
+-- La liste d'un marchand dit tout ce qu'il vend : ses écarts sont refaits à chaque relevé. Seules les recettes dont la réserve
+-- expose l'objet patron sont comparées.
+-- ponytail: un patron en stock limité épuisé disparaît peut-être de la liste (à vérifier en jeu) : noté « patron absent » ;
+-- un patron qui se lie à la prise n'a pas d'objet dans la réserve, pas comparé.
+local function ecartsMarchand(pnj, info)
+  for cle, e in pairs(AzerothCommuneDB.ecarts) do
+    if e.pnj == pnj and e.genre ~= "compétence" then AzerothCommuneDB.ecarts[cle] = nil end
+  end
+  local vend = {}
+  for _, it in ipairs(info.items) do if it.id then vend[it.id] = true end end
+  for k, r in pairs(reserveRecettes()) do
+    if r.patron then
+      local annonce = false
+      for _, m in ipairs(r.marchands or {}) do annonce = annonce or m.pnj == pnj end
+      if annonce and not vend[r.patron] then noterEcart("patron absent", k, r, pnj, info, "en vente", "absent")
+      elseif vend[r.patron] and not annonce then noterEcart("marchand inconnu", k, r, pnj, info, "absent", "en vente") end
+    end
+  end
+end
+
+-- Un écart que la réserve en cours a réglé (régénérée depuis le relevé) est effacé ; « attendu » suit la réserve en cours.
+local function regle(e, r)
+  if not r then return true end -- recette sortie de la réserve
+  if e.genre == "compétence" then
+    e.attendu = r.level
+    return r.level == e.vu
+  end
+  local annonce = false
+  for _, m in ipairs(r.marchands or {}) do annonce = annonce or m.pnj == e.pnj end
+  return annonce == (e.genre == "marchand inconnu")
+end
+-- Les écarts notés, en copies : { { genre, recette, nom, attendu, vu, pnj, pnjNom, patron, date }, … } ({} sans écart).
+function lib.Ecarts()
+  local out, ecarts = {}, AzerothCommuneDB and AzerothCommuneDB.ecarts or {}
+  local res = next(ecarts) and reserveRecettes()
+  for cle, e in pairs(ecarts) do
+    if regle(e, res[e.recette]) then
+      ecarts[cle] = nil
+    else
+      local c = {}
+      for f, v in pairs(e) do c[f] = v end
+      out[#out + 1] = c
+    end
+  end
+  return out
+end
+
+---------------------------------------------------------------------------------------------------
 -- Maîtres de métier (et de classe). Les filtres « disponible / indisponible / déjà appris » du joueur
 -- cachent des lignes : on les note pour savoir si la liste est complète.
 local function scanTrainer()
@@ -311,6 +397,7 @@ local function scanTrainer()
   info.tradeskill = IsTradeskillTrainer and IsTradeskillTrainer() or nil
   AzerothCommuneDB.trainers[id] = info
   ns.noterLot("maîtres de métier")
+  ecartsMaitre(id, info)
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -338,6 +425,7 @@ local function scanMerchant()
   info.items = items
   AzerothCommuneDB.vendors[id] = info
   ns.noterLot("marchands")
+  ecartsMarchand(id, info)
 end
 
 ---------------------------------------------------------------------------------------------------
