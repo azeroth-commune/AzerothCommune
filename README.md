@@ -23,8 +23,10 @@ chacun → *Release type* : **Beta**. À la main : dézippe `AzerothCommune` dan
 
 **Soutenir** : ça te plaît ? Tu peux m'offrir un café sur [Ko-fi](https://ko-fi.com/virgile86017). ☕
 
-**Licence** : GPL-3.0 ou ultérieure (voir [`LICENSE`](LICENSE)). La liste des marchands vient des données de
-[cMaNGOS](https://github.com/cmangos) (GPL-3.0) ; le catalogue des objets et la réserve des recettes sont extraits du
+**Licence** : GPL-3.0 ou ultérieure (voir [`LICENSE`](LICENSE)). La liste des marchands vient de
+[Fabrikao](https://github.com/LechuckThePirate/Fabrikao) (GPL-3.0, LechuckThePirate) pour les patrons des recettes, et de
+[QuestieDB](https://github.com/Questie/QuestieDB) (GPL-3.0) pour les autres objets ; le stock limité, de
+[cMaNGOS](https://github.com/cmangos/classic-db) (GPL-3.0) ; le catalogue des objets et la réserve des recettes sont extraits du
 client du jeu.
 
 ## Pour un développeur d'add-on
@@ -50,7 +52,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
-| `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (données cMaNGOS GPL-3.0) : commité (le socle est sous GPL-3.0) |
+| `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
 | `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, commité (le socle est sous GPL-3.0) ; sans lui, le type « objets » rend les seuls objets relevés |
 | `RecettesClassic.lua` | la réserve de la base des recettes (nom historique), privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, commitée (le socle est sous GPL-3.0) ; sans elle, la base des recettes rend les seules recettes vues |
 
@@ -97,7 +99,7 @@ AC:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque no
 -- signalés : cours de l'HV (scan du socle). Les autres relevés ne signalent pas encore. Un rappel qui plante ne prive
 -- pas les autres (erreur au jeu).
 local cout, source, partiel = AC:PrixAchat(itemID, qty)  -- le moins cher entre marchands et HV, palier par palier
-AC:PrixMarchands()                                  -- { [itemID] = prix unitaire } du marchand le moins cher (stock illimité, or)
+AC:PrixMarchands()                                  -- { [itemID] = prix unitaire } du marchand le moins cher (payé en or, hors stock limité)
 ```
 
 Types de données (`AC.types`) : inventaires, réputations, métiers et compétences, quêtes terminées, recettes connues
