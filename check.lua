@@ -1349,6 +1349,18 @@ do (function() -- une fonction : le fichier a atteint 200 locales
   commerce.fn(commerce, "MERCHANT_UPDATE")
   e = AzerothCommune.Ecarts()
   assert(#e == 1 and e[1].genre == "compétence", "la liste du marchand dit tout : ses écarts refaits ; celui du maître reste")
+  -- Réserve régénérée : l'attendu suit la réserve en cours ; réglé par elle (50, le relevé), l'écart s'efface.
+  local function regen(niveau)
+    local t = {}
+    for k, c in pairs(ns.recettesClassic) do t[k] = { unpack(c, 1, 17) } end
+    t[2666][7] = niveau
+    ns.recettesClassic = t
+  end
+  regen(48)
+  e = AzerothCommune.Ecarts()
+  assert(#e == 1 and e[1].attendu == 48, "l'attendu suit la réserve en cours")
+  regen(50)
+  assert(#AzerothCommune.Ecarts() == 0 and not next(AzerothCommuneDB.ecarts), "réglé par la réserve en cours : effacé")
   ns.recettesClassic, UnitGUID, AzerothCommuneDB.ecarts, AzerothCommuneDB.vendors = reserve0, guid0, {}, {}
   print("Azeroth Commune : écarts entre relevés et réserve OK")
 end)() end

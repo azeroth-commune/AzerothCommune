@@ -342,13 +342,29 @@ local function ecartsMarchand(pnj, info)
   end
 end
 
+-- Un écart que la réserve en cours a réglé (régénérée depuis le relevé) est effacé ; « attendu » suit la réserve en cours.
+local function regle(e, r)
+  if not r then return true end -- recette sortie de la réserve
+  if e.genre == "compétence" then
+    e.attendu = r.level
+    return r.level == e.vu
+  end
+  local annonce = false
+  for _, m in ipairs(r.marchands or {}) do annonce = annonce or m.pnj == e.pnj end
+  return annonce == (e.genre == "marchand inconnu")
+end
 -- Les écarts notés, en copies : { { genre, recette, nom, attendu, vu, pnj, pnjNom, patron, date }, … } ({} sans écart).
 function lib.Ecarts()
-  local out = {}
-  for _, e in pairs(AzerothCommuneDB and AzerothCommuneDB.ecarts or {}) do
-    local c = {}
-    for f, v in pairs(e) do c[f] = v end
-    out[#out + 1] = c
+  local out, ecarts = {}, AzerothCommuneDB and AzerothCommuneDB.ecarts or {}
+  local res = next(ecarts) and reserveRecettes()
+  for cle, e in pairs(ecarts) do
+    if regle(e, res[e.recette]) then
+      ecarts[cle] = nil
+    else
+      local c = {}
+      for f, v in pairs(e) do c[f] = v end
+      out[#out + 1] = c
+    end
   end
   return out
 end
