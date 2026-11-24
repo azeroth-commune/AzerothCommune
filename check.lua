@@ -1851,6 +1851,7 @@ do (function()
   local q = d[952] -- Bosquet des Anciens, à Sombrivage ; prérequis : Teldrassil (940), à Teldrassil
   assert(q.zone == 148 and q.prerequis_un[1] == 940 and d[940].zone == 141, "952 : zone et prérequis")
   assert(q.donneur.pnj == 3516 and q.donneur.objet == nil and d[940].donneur.objet == 673378, "donneur : PNJ, ou objet (ID négatif)")
+  assert(d[93963].races[1] == 95 and #d[93963].races == 1 and q.races[1] == 1 and q.races[5] == 95, "races : raceID, Skyborne 95")
   assert(d[729].amorces[1] == 730 and d[729].prerequis == nil and d[729].prerequis_un == nil, "730 : une amorce de 729, pas un prérequis")
   print("Azeroth Commune : base des quêtes OK")
 end)() end

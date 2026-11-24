@@ -145,7 +145,7 @@ lire["base des quêtes"] = function()
   if quetesBrutes ~= ns.quetesReserve then
     quetesBrutes, quetes = ns.quetesReserve, {}
     for id, c in pairs(quetesBrutes) do
-      local d = c[11] -- { ID (négatif : un objet du monde), nom, carte, x, y }
+      local d = c[11] -- { ID (négatif : un objet du monde), nom, carte, x, y } ; races, classes : listes d'IDs, nil : toutes
       quetes[id] = { nom = c[1], zone = c[2], niveau = c[3], niveau_requis = c[4], races = c[5], classes = c[6],
         prerequis = c[7], prerequis_un = c[8], suites = c[9], amorces = c[10], objet = c[12],
         donneur = d and { pnj = d[1] > 0 and d[1] or nil, objet = d[1] < 0 and -d[1] or nil, nom = d[2], carte = d[3], x = d[4], y = d[5] } }

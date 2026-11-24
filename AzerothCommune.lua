@@ -90,7 +90,8 @@ local TYPES = {
   ["base des recettes"] = {},
   -- Les quêtes que l'Alliance peut prendre, non liées à un perso (#43) : { [questID] = { nom (français, sinon anglais), zone
   --   (areaID, C_Map.GetAreaInfo pour son nom ; négative : catégorie de quête de QuestieDB ; nil : inconnue), niveau,
-  --   niveau_requis, races, classes (masques du client, 0 : toutes), prerequis (toutes à terminer), prerequis_un (une seule
+  --   niveau_requis, races, classes (listes de raceID, classID : select(3, UnitRace / UnitClass("player")) ; 95 : Skyborne
+  --   de l'Alliance ; nil : toutes), prerequis (toutes à terminer), prerequis_un (une seule
   --   suffit), suites, amorces (facultatives, pas des prérequis), donneur = { pnj ou objet (ID), nom, carte (uiMapID), x, y
   --   (pourcentage de la carte) }, objet (l'objet qui donne la quête) } } ; listes de questID, nil quand vides. Rien que la
   --   réserve générée depuis QuestieDB Forever (QuetesReserve.lua), lot « source externe » (source, version, date) ; rien

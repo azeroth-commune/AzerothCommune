@@ -94,7 +94,9 @@ local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription :
 --   objet } } : la réserve générée depuis QuestieDB Forever, seule (rien n'est relevé en jeu) ; lot = { provenance =
 --   « source externe », source = « QuestieDB Forever », version, date (de la génération) }.
 -- nom : français (traductions de QuestieDB), sinon anglais. zone : l'areaID (C_Map.GetAreaInfo pour son nom) ; négative :
--- une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue. races, classes : masques du client, 0 : toutes.
+-- une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue (avec les corrections de zone que QuestieDB fait en
+-- jeu pour l'Alliance). races : liste des raceID (select(3, UnitRace("player")) ; 95 : Skyborne de l'Alliance), classes :
+-- liste des classID (select(3, UnitClass("player"))), nil : toutes ; toute l'Alliance : {1, 3, 4, 7, 95}.
 -- prerequis : quêtes à avoir toutes terminées ; prerequis_un : il suffit d'en avoir terminé une. suites : la suite de
 -- QuestieDB et les quêtes qui ont celle-ci en prérequis ; amorces : quêtes facultatives qui y mènent (pas des prérequis).
 -- Listes de questID, nil quand vides ; suites, amorces : de la réserve ; prerequis, prerequis_un : tels quels dans

@@ -77,6 +77,37 @@ test("vrai cas : Des problèmes à Sombrivage ? (730) est une amorce, pas un pr�
     end)
 end)
 
+-- races : liste des raceID (UnitRace), nil : toutes ; les bits 2^32 / 2^33 de QuestieDB sont les races Skyborne (95, 96).
+local function contient(liste, v)
+    for _, x in ipairs(liste or {}) do if x == v then return true end end
+    return false
+end
+
+test("races : À la découverte de l'Alliance (93963) est pour les Skyborne de l'Alliance seuls", function()
+    avec(true, function()
+        local q = AzerothCommune:Lire(BASE)[93963]
+        assertType("table", q.races)
+        assertTrue(contient(q.races, 95), "Skyborne de l'Alliance (95)")
+        assertTrue(not contient(q.races, 1), "pas les Humains")
+    end)
+end)
+
+test("races : toute l'Alliance (952) est la liste explicite, Humain et Skyborne compris", function()
+    avec(true, function()
+        local q = AzerothCommune:Lire(BASE)[952]
+        assertTrue(contient(q.races, 1), "Humain (1)")
+        assertTrue(contient(q.races, 95), "Skyborne de l'Alliance (95)")
+        assertTrue(not contient(q.races, 96), "pas les Skyborne de la Horde")
+        assertNil(q.classes) -- toutes
+    end)
+end)
+
+test("zone corrigée pour l'Alliance : Almanach de Nar'thalas (78124) est à Hurlevent", function()
+    avec(true, function()
+        assertEquals(1519, AzerothCommune:Lire(BASE)[78124].zone)
+    end)
+end)
+
 test("/ac souscriptions montre la souscription à la base des quêtes", function()
     avec(true, function()
         local dits, garde = {}, print
