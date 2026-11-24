@@ -1248,6 +1248,21 @@ assert(br[3307].level_provenance == "relevé direct" and br[3307].level_date == 
   and br[3307].source_provenance == "relevé direct" and AzerothCommuneDB.recipes[3307].level_provenance == nil
   and AzerothCommuneDB.recipes[3307].level_date == nil and br[2666].level_date == nil,
   "une recette vue en prend la provenance de la compétence et la date du relevé, sur une copie ; sans relevé : nil")
+-- #70, #71 : le temps d'incantation (19e champ, secondes) et les outils demandés (20e : clés de ns.recettesOutils), rendus
+-- { { nom, objets } } ; une recette vue que la réserve connaît les prend aussi ; nil sans.
+ns.recettesClassic = {
+  [3307] = { 3575, 1, 1, "Minage", "Fondre le fer", { 2772, 1 }, 125, 130, 140, "maître", "source externe", 0, 0, nil, nil, nil, nil, nil, 3 },
+  [2666] = { 2857, 1, 1, "Forge", "Ceinture runique en cuivre", { 2840, 10 }, 45, 85, 125, "maître", "source externe", 0, 0, nil, nil, nil,
+    "règle", nil, 8, { 162, -4471 } },
+  [9002] = { 4255, 1, 2, "Travail du cuir", "Armure verte en cuir", { 4234, 9 }, 175, 180, 200, "patron vendu", "source externe", 12000, 0 },
+}
+ns.recettesOutils = { [162] = { "Marteau de forgeron", { 5956, 260811 } }, [-4471] = { "Silex et amadou", { 4471 } } }
+br = AzerothCommune:Lire("base des recettes")
+assert(br[2666].cast == 8 and #br[2666].outils == 2 and br[2666].outils[1].nom == "Marteau de forgeron"
+  and br[2666].outils[1].objets[2] == 260811 and br[2666].outils[2].objets[1] == 4471, "temps d'incantation et outils")
+assert(br[3307].cast == 3 and br[3307].outils == nil and AzerothCommuneDB.recipes[3307].cast == nil, "recette vue : le temps de la réserve, sur une copie")
+assert(br[9002].cast == nil and br[9002].outils == nil, "sans : nil")
+ns.recettesOutils = nil
 -- #72 : le relevé des maîtres de métier passe devant la réserve et la copie d'une recette vue. Bouchon : trois recettes de
 -- la réserve (patron vendu, ajout de Forever « inconnue », jamais vue chez un maître) et une recette vue (3307).
 ns.recettesClassic = {

@@ -70,7 +70,7 @@ local d, raison = AC:Lire("recettes connues", "tous") -- nil = personnage connec
 AC:Souscrire("base des recettes")                  -- tout ce que fabrique une recette, connue ou non
 local b, lot = AC:Lire("base des recettes")
 -- b = { [clé] = { profession, name, output, reagents, made_min, made_max, level, level_provenance, yellow, grey, source, source_provenance,
--- pattern_price, cooldown, provenance } } : les recettes vues sur tous les persos (relevé direct), puis la réserve du
+-- pattern_price, cooldown, cast, outils, provenance } } : les recettes vues sur tous les persos (relevé direct), puis la réserve du
 -- socle, extraite du client (provenance « extrait du client »), pour les objets qu'aucune recette vue ne fabrique, et les
 -- enchantements d'objet (output nil : ne pas indexer par objet sans le tester) ; level = compétence pour l'apprendre (de
 -- la réserve, ou d'un maître relevé) ; level_provenance = « règle » (rang Classic − (jaune Classic − jaune Forever)),
@@ -78,8 +78,11 @@ local b, lot = AC:Lire("base des recettes")
 -- « extrait du client » (d'emblée) ou « relevé direct » (maître relevé) ; yellow, grey = seuils jaune et gris du client (réserve seule ; vert = (jaune +
 -- gris) / 2) ; source = « d'emblée », « maître », « patron vendu », « retirée » ou « inconnue » (où l'apprendre),
 -- source_provenance = « extrait du client », « source externe » (Fabrikao) ou « relevé direct » (maître de l'atelier) ; pattern_price = prix du patron
--- vendu (cuivre, nil sans) ; cooldown = temps de recharge (secondes, 0 sans). level, level_provenance, source, source_provenance,
--- pattern_price et cooldown viennent de la réserve, même pour une recette vue qu'elle connaît. lot.provenance :
+-- vendu (cuivre, nil sans) ; cooldown = temps de recharge (secondes, 0 sans) ; cast = temps d'incantation (secondes, du
+-- client ; nil sans) ; outils = les outils demandés (du client ; nil sans) : { { nom (« Marteau de forgeron »), objets =
+-- { objet qui convient, … } (le couteau de l'armée gnome sert de marteau, un bâtonnet supérieur pour les inférieurs) }, … }.
+-- level, level_provenance, source, source_provenance, pattern_price, cooldown, cast et outils viennent de la réserve, même
+-- pour une recette vue qu'elle connaît. lot.provenance :
 -- « relevé direct » dès qu'une recette est vue, sinon le lot de la
 -- réserve (extrait du client, build, version, date ; perime sous un autre build). Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
 -- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet

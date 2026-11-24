@@ -75,6 +75,8 @@ local TYPES = {
   --   n'est connu ; une recette dont Fabrikao connaît un marchand a la source « patron vendu », sauf retirée, d'emblée ou
   --   maître : { { pnj, nom (anglais, de Wowhead), prix (cuivre chez ce marchand, nil inconnu), carte (uiMapID), x, y
   --   (pourcentage de la carte, nil sans position), faction (« Alliance », « Horde », nil : les deux ou inconnue) }, … }),
+  --   cast (de la réserve, #70 : temps d'incantation, secondes, du client ; nil sans), outils (de la réserve, #71 : les outils
+  --   demandés, du client, { { nom, objets = { objet qui convient, … } }, … } ; nil sans),
   --   provenance } }. Le lot porte celui des marchands : lot.marchands = { provenance = « source externe », source =
   --   « Fabrikao », version, date (de ses données), releves (#83 : date du dernier relevé direct de l'atelier fondu dans la
   --   réserve : ses maîtres et ses marchands, qui complètent ceux de Fabrikao ou en corrigent le prix) }. Une recette vue
