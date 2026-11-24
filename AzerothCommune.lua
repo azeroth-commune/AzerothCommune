@@ -21,6 +21,13 @@
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
 -- Maîtres d'un métier, avec leur position : AC.MaitresDuMetier(métier) -> maîtres, lot (Commerce.lua, d'après Fabrikao, source
 -- externe : le lot dit sa version et la date de ses données).
+-- Écarts (#84) : AC.Ecarts() = { { genre, recette, nom, attendu, vu, pnj, pnjNom, patron, date }, … }, en copies : chaque fois
+-- qu'un maître ou un marchand vu en jeu (relevés « maîtres de métier », « marchands ») contredit la réserve des recettes livrée
+-- avec le socle. genre : « compétence » (attendu, vu : la compétence pour apprendre ; attendu nil ou 0 : inconnue de la réserve),
+-- « patron absent » (le marchand ne vend pas le patron annoncé), « marchand inconnu » (il le vend, la réserve ne le dit pas) :
+-- pour ces deux-là, attendu et vu sont « en vente » ou « absent » ; un écart que la réserve en cours a réglé n'est plus rendu ;
+-- recette : sa clé dans la base des recettes ; patron : l'objet patron de la réserve ; date : le dernier relevé qui l'a vu.
+-- Gardés dans la base, sans doublon ; le relevé du joueur l'emporte déjà, rien d'autre n'est corrigé (Commerce.lua).
 -- Recherche d'objets : AC.ChercherObjets(texte, max) parmi les objets (relevés, puis le catalogue extrait du client) et les
 -- objets fabriqués de la base des recettes (Interface.lua) ; l'add-on qui cherche souscrit à « objets » et à « base des recettes ».
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
