@@ -61,7 +61,9 @@ local TYPES = {
   --   « règle » : la règle du décalage, rang Classic − (jaune Classic − jaune Forever) ; « incertaine » : recette ajoutée par
   --   Forever ou aux seuils incomplets, d'après Fabrikao, à défaut le seuil jaune du client (0 : inconnue) ; « patron » : la
   --   compétence requise de l'objet patron, dans le client ; « extrait du client » : d'emblée ; « relevé direct » : vue chez
-  --   un maître ; nil : réserve d'avant #81 ou recette vue inconnue de la réserve), yellow, grey (seuils du client, de la
+  --   un maître, par toi en jeu ou par l'atelier (#83, dans la réserve) ; nil : réserve d'avant #81 ou recette vue inconnue de
+  --   la réserve), level_date (#83 : la date du relevé direct qui donne level, « AAAA-MM-JJ hh:mm:ss » ; nil sans),
+  --   yellow, grey (seuils du client, de la
   --   réserve), source, source_provenance, pattern_price, cooldown (de la réserve, #64), condition (de la réserve, #67 :
   --   « spécialisation : travail du cuir tribal », « réputation : Aube d'argent » ou « plus enseignée » ; nil quand la
   --   recette n'en demande aucune : une recette à condition n'est pas apprenable par qui ne l'a pas), patron (de la réserve, Maitrise#15 : l'objet qui
@@ -71,7 +73,9 @@ local TYPES = {
   --   maître : { { pnj, nom (anglais, de Wowhead), prix (cuivre chez ce marchand, nil inconnu), carte (uiMapID), x, y
   --   (pourcentage de la carte, nil sans position), faction (« Alliance », « Horde », nil : les deux ou inconnue) }, … }),
   --   provenance } }. Le lot porte celui des marchands : lot.marchands = { provenance = « source externe », source =
-  --   « Fabrikao », version, date (de ses données) }. La position des maîtres d'un métier (même lot, en 2e valeur) :
+  --   « Fabrikao », version, date (de ses données), releves (#83 : date du dernier relevé direct de l'atelier fondu dans la
+  --   réserve : ses maîtres et ses marchands, qui complètent ceux de Fabrikao ou en corrigent le prix) }. Une recette vue
+  --   chez un maître de l'atelier a, dans la réserve, la source « maître » et source_provenance « relevé direct ». La position des maîtres d'un métier (même lot, en 2e valeur) :
   --   AC.MaitresDuMetier(métier) (Commerce.lua). Les recettes vues
   --   sur tous les persos (relevé direct), la réserve extraite du client (champ provenance) pour les objets qu'aucune
   --   recette vue ne fabrique (Commerce.lua). Les maîtres de métier relevés passent devant les deux (#72) : une recette

@@ -72,7 +72,9 @@ test("base des recettes : la réserve du socle chargée, chaque recette avec sa 
             assertType("number", r.level) -- 0 : inconnue (Bottes d'hiver 44953 : absente de Classic, sans seuils dans le client)
             assertTrue(r.grey >= r.yellow, "seuils : " .. tostring(r.name))
             assertTrue(SOURCES[r.source], "source : " .. tostring(r.name) .. " " .. tostring(r.source))
-            assertTrue(r.source_provenance == "extrait du client" or r.source_provenance == "source externe")
+            assertTrue(r.source_provenance == "extrait du client" or r.source_provenance == "source externe"
+                or r.source_provenance == "relevé direct" and r.source == "maître") -- #83 : un maître de l'atelier
+            if r.level_provenance == "relevé direct" then assertType("string", r.level_date) else assertNil(r.level_date) end
             assertType("number", r.cooldown)
             -- #81 : la provenance de la compétence ; la règle du décalage ne dépasse jamais le jaune (Boulettes fumées du désert :
             -- 305, jaune 325) ; un patron, seulement pour une recette « inconnue » ou « patron vendu », jamais au-dessus de 300
@@ -124,12 +126,33 @@ test("base des recettes : la compétence pour l'apprendre et sa provenance", fun
     local lib = AzerothCommune
     assertTrue(lib:Souscrire("base des recettes"))
     local data = lib:Lire("base des recettes")
-    local ceinture = data[2666] -- Ceinture runique en cuivre : 70 − (110 − 85)
+    local ceinture = data[2666] -- Ceinture runique en cuivre : 70 − (110 − 85), confirmé par le relevé de l'atelier (#83)
     assertEquals(45, ceinture.level)
-    assertEquals("règle", ceinture.level_provenance)
+    assertEquals("règle", data[2331].level_provenance) -- Potion de mana mineure : jamais vue chez un maître de l'atelier
     assertEquals("incertaine", data[1249630].level_provenance) -- Teinture céruléenne, ajoutée par Forever
     assertEquals("extrait du client", data[2149].level_provenance) -- d'emblée
     assertEquals("patron", data[1301421].level_provenance) -- Cotte forge-ciel nuageuse : le patron de Vayn Moongaze
+end)
+
+-- #83 : les relevés directs de l'atelier dans la réserve. Pantalon en anneaux de cuivre : la règle dit 1, Bengus Deepforge
+-- enseigne à 15 ; Ardeur de palourde géante : Kelsey Yance (2664), dont Fabrikao ignore le prix, le vend 50 pa.
+test("base des recettes : les relevés directs de l'atelier (maîtres et marchands visités)", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("base des recettes"))
+    local data, lot = lib:Lire("base des recettes")
+    local pantalon = data[2662]
+    assertEquals(15, pantalon.level)
+    assertEquals("relevé direct", pantalon.level_provenance)
+    assertEquals("maître", pantalon.source)
+    assertType("string", pantalon.level_date)
+    assertTrue(pantalon.level_date:match("^%d%d%d%d%-%d%d%-%d%d") ~= nil, "date du relevé : " .. pantalon.level_date)
+    assertEquals("règle", data[2331].level_provenance) -- Potion de mana mineure : jamais vue chez un maître de l'atelier
+    assertNil(data[2331].level_date)
+    local yance
+    for _, m in ipairs(data[7213].marchands) do if m.pnj == 2664 then yance = m end end
+    assertNotNil(yance, "Kelsey Yance parmi les marchands du patron")
+    assertEquals(5000, yance.prix)
+    assertType("string", lot.marchands.releves)
 end)
 
 -- #80 : les marchands des patrons (Fabrikao, source externe), avec leur position et leur prix, et la position des maîtres.
