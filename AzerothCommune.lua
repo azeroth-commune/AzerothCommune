@@ -16,7 +16,8 @@
 -- Un seul chemin par type : la lecture passe par l'accesseur privé de la base (ns.lire[type] : Souscriptions.lua,
 -- Commerce.lua).
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
---   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (ex. scan de l'HV terminé).
+--   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (scan de l'HV terminé ; métiers relus sur un
+--                                  gain de compétence).
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
 -- Maîtres d'un métier, avec leur position : AC.MaitresDuMetier(métier) -> maîtres, lot (Commerce.lua, d'après Fabrikao, source
@@ -434,9 +435,10 @@ function lib.EstSac(n) return n == "Backpack" or n == "Keyring" or n == "Reagent
 function lib.EstBanque(n) return n:find("[Bb]ank") ~= nil end
 
 ---------------------------------------------------------------------------------------------------
--- Signal « type relevé à nouveau », appelé par le relevé lui-même (Commerce.lua, après chaque scan de l'HV). Un rappel
--- qui plante ne prive pas les autres ni le relevé (erreur rendue au gestionnaire du jeu).
--- ponytail: seul l'HV signale ; un autre type appellera lib:Signaler au bout de son relevé quand un add-on en aura besoin.
+-- Signal « type relevé à nouveau », appelé par le relevé lui-même : « cours de l'HV » après chaque scan (Commerce.lua),
+-- « métiers et compétences » sur un gain de compétence (Base.lua, #69). Un rappel qui plante ne prive pas les autres ni le
+-- relevé (erreur rendue au gestionnaire du jeu).
+-- ponytail: seuls ces deux types signalent ; un autre appellera lib:Signaler au bout de son relevé quand un add-on en aura besoin.
 ns.rappels = {} -- [type] = { fn, … }
 
 function lib:QuandReleve(typeDeDonnees, fn)

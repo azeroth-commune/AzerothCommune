@@ -103,8 +103,8 @@ local l = hv and hv.objet(2772)                     -- ton HV : { min, qty, auct
 --         scan = { time, scanned } } : scan = le dernier scan du socle pour ton HV (time() et date lisible), absent sans
 -- lui ; on ne lit pas hv.hv soi-même (forme interne de la base)
 AC:QuandReleve("cours de l'HV", function(typeDeDonnees) end) -- après chaque nouveau relevé de ce type ; nil, « type inconnu »
--- signalés : cours de l'HV (scan du socle). Les autres relevés ne signalent pas encore. Un rappel qui plante ne prive
--- pas les autres (erreur au jeu).
+-- signalés : cours de l'HV (scan du socle) ; métiers et compétences (relus sur un gain de compétence, hors combat). Les
+-- autres relevés ne signalent pas encore. Un rappel qui plante ne prive pas les autres (erreur au jeu).
 local cout, source, partiel = AC:PrixAchat(itemID, qty)  -- le moins cher entre marchands et HV, palier par palier
 AC:PrixMarchands()                                  -- { [itemID] = prix unitaire } du marchand le moins cher (payé en or, hors stock limité)
 ```

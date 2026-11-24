@@ -316,3 +316,39 @@ test("prix d'achat exposé par la lib : un coût ou rien, sans erreur", function
     if c then assertType("number", c); assertTrue(src == "marchand" or src == "HV") end
     assertEquals(300, (lib:PrixAchat(1, 3, { [1] = { min = 100 } }, {})))
 end)
+
+-- #69 : un gain de compétence (SKILL_LINES_CHANGED) relit tout de suite les métiers et le signale (QuandReleve).
+test("gain de compétence : les métiers relus aussitôt et signalés", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("métiers et compétences"))
+    local recus = 0
+    assertTrue(lib:QuandReleve("métiers et compétences", function() recus = recus + 1 end))
+    local gp, gpi = GetProfessions, GetProfessionInfo
+    GetProfessions = function() return 1 end
+    GetProfessionInfo = function() return "Forge", "icône", 42, 75 end
+    local ok, err = pcall(function()
+        FireEvent("SKILL_LINES_CHANGED")
+        assertEquals(1, recus)
+        local d = lib:Lire("métiers et compétences", UnitGUID("player"))
+        local _, fiche = next(d and d.persos or {})
+        assertNotNil(fiche, "fiche du perso")
+        assertEquals("Forge", fiche.professions[1].name)
+        assertEquals(42, fiche.professions[1].rank)
+        -- En combat aussi (un bandage, un dépeçage, une récolte font monter un métier).
+        local icl = InCombatLockdown
+        InCombatLockdown = function() return true end
+        GetProfessionInfo = function() return "Forge", "icône", 43, 75 end
+        local ok2, err2 = pcall(FireEvent, "SKILL_LINES_CHANGED")
+        InCombatLockdown = icl
+        assert(ok2, err2)
+        assertEquals(2, recus, "signalé en combat")
+        -- Liste vide (écran de chargement) : rien d'écrasé, rien de signalé.
+        GetProfessions = function() return nil, nil, nil, nil, nil end
+        FireEvent("SKILL_LINES_CHANGED")
+        assertEquals(2, recus, "liste vide : pas de signal")
+        _, fiche = next(lib:Lire("métiers et compétences", UnitGUID("player")).persos)
+        assertEquals(43, fiche.professions[1].rank, "liste vide : la fiche reste")
+    end)
+    GetProfessions, GetProfessionInfo = gp, gpi
+    assert(ok, err)
+end)

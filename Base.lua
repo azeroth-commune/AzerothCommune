@@ -184,6 +184,19 @@ local function scanAll()
   for name, fn in pairs(scan) do run(name, fn) end
 end
 
+-- Gain de compétence (SKILL_LINES_CHANGED, #69) : les métiers relus tout de suite, puis signalés (QuandReleve), en combat
+-- aussi (un bandage, un dépeçage, une récolte y font monter un métier ; deux petites listes à relire). Pas avant la
+-- connexion ni pendant un chargement, où le jeu rend une liste de métiers vide : rien n'est écrasé, le relevé des 60 s suit.
+-- ponytail: un événement par gain, parfois plusieurs (et jusqu'à 30 quand un add-on déplie les en-têtes) : relu à chaque fois.
+local connecte = false
+local function metiersChanges()
+  if not connecte or not next({ GetProfessions() }) then return end
+  run("professions", scan.professions)
+  run("skills", scan.skills)
+  lib:Signaler("métiers et compétences")
+end
+ns.metiersChanges = metiersChanges
+
 ---------------------------------------------------------------------------------------------------
 -- Objets du jeu, en deux passes et en tâche de fond :
 --   1. catalogue local : chaque ID que le client connaît (GetItemInfoInstant), avec catégorie,
@@ -271,7 +284,7 @@ ns.itemsReady = itemsReady
 local bankOpen = false
 local f = CreateFrame("Frame")
 for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "BANKFRAME_OPENED", "BANKFRAME_CLOSED",
-  "PLAYERBANKSLOTS_CHANGED", "BAG_UPDATE_DELAYED", "MAIL_INBOX_UPDATE", "ITEM_DATA_LOAD_RESULT" }) do
+  "PLAYERBANKSLOTS_CHANGED", "BAG_UPDATE_DELAYED", "MAIL_INBOX_UPDATE", "ITEM_DATA_LOAD_RESULT", "SKILL_LINES_CHANGED" }) do
   pcall(f.RegisterEvent, f, e) -- un événement absent de ce client ne doit pas bloquer les autres
 end
 
@@ -302,12 +315,15 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
     itemsReady()
     ns.verifierLots()
   elseif event == "PLAYER_LOGIN" then
+    connecte = true
     char() -- la fiche du perso connecté, reprise tout de suite sous son GUID
     C_Timer.After(5, function() scanAll(); pcall(scanAddons) end)
     C_Timer.NewTicker(60, scanAll)
     setItemScan(AzerothCommuneDB.item_scan)
   elseif event == "PLAYER_ENTERING_WORLD" then
     quietUntil = GetTime() + 5
+  elseif event == "SKILL_LINES_CHANGED" then
+    metiersChanges()
   elseif event == "ITEM_DATA_LOAD_RESULT" then
     itemLoaded(a1, a2)
   elseif event == "BANKFRAME_OPENED" then
