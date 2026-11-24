@@ -92,7 +92,7 @@ end
 -- d'un repo cloné tel quel. Mise en forme une fois dans la forme des recettes vues, chaque ligne marquée « extrait du
 -- client », avec les seuils jaune et gris du client (vert = (jaune + gris) / 2) et, depuis #64, la source de la recette
 -- (« d'emblée », « maître », « patron vendu », « retirée », « inconnue »), la provenance de cette source (« extrait du
--- client », ou « source externe » : cMaNGOS), la compétence pour l'apprendre (level), le prix du
+-- client », « source externe » : Fabrikao, ou « relevé direct » : un maître de l'atelier, #83), la compétence pour l'apprendre (level), le prix du
 -- patron (cuivre, nil sans), le temps de recharge (secondes, 0 sans) et, depuis #67, la condition d'accès (« spécialisation : … »,
 -- « réputation : … », « plus enseignée », nil sans) et, depuis Maitrise#15, l'objet patron qui l'enseigne (patron : marchand, butin
 -- ou quête, nil sans) : le générateur en décide. Un enchantement n'a pas
@@ -160,7 +160,7 @@ end
 -- Le relevé des maîtres de métier passe devant la réserve (#72) : pour chaque service d'un maître relevé (AzerothCommuneDB.trainers),
 -- la recette qu'il enseigne prend level = la compétence demandée (skill_rank), source « maître », source_provenance et
 -- level_provenance « relevé direct », level_date = la date de ce relevé (seen du maître, #83) et prix_maitre = son prix (cuivre) ;
--- le client et cMaNGOS se trompent parfois de 25 points (#68).
+-- la base livrée se trompe parfois de 25 points (#68).
 -- Rapprochement, dans le métier du service (service.skill, le nom du métier) : par l'objet enseigné (service.item = output de
 -- la recette) quand une seule recette du métier le produit, sinon par le nom exact (un enchantement n'a pas d'objet : par
 -- son nom). Un service qui ne rapproche rien (« Minage d'apprenti », une compétence de classe) est ignoré. Plusieurs maîtres

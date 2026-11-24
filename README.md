@@ -27,7 +27,8 @@ chacun → *Release type* : **Beta**. À la main : dézippe `AzerothCommune` dan
 [Fabrikao](https://github.com/LechuckThePirate/Fabrikao) (GPL-3.0, LechuckThePirate) pour les patrons des recettes, et de
 [QuestieDB](https://github.com/Questie/QuestieDB) (GPL-3.0) pour les autres objets ; le stock limité, de
 [cMaNGOS](https://github.com/cmangos/classic-db) (GPL-3.0) ; le catalogue des objets et la réserve des recettes sont extraits du
-client du jeu ; la compétence pour apprendre (rang et seuil jaune de Classic Era, Wowhead pour les recettes de Forever) vient
+client du jeu, avec leurs conditions (spécialisation, réputation) ; la source « maître » ou « patron vendu » vient de
+Fabrikao ; la compétence pour apprendre (rang et seuil jaune de Classic Era, Wowhead pour les recettes de Forever) vient
 de Fabrikao. Une compétence à 0 veut dire inconnue.
 
 ## Pour un développeur d'add-on
@@ -76,7 +77,7 @@ local b, lot = AC:Lire("base des recettes")
 -- « incertaine » (ajout de Forever ou seuils incomplets : Fabrikao), « patron » (compétence requise du patron, client),
 -- « extrait du client » (d'emblée) ou « relevé direct » (maître relevé) ; yellow, grey = seuils jaune et gris du client (réserve seule ; vert = (jaune +
 -- gris) / 2) ; source = « d'emblée », « maître », « patron vendu », « retirée » ou « inconnue » (où l'apprendre),
--- source_provenance = « extrait du client » ou « source externe » (cMaNGOS Classic) ; pattern_price = prix du patron
+-- source_provenance = « extrait du client », « source externe » (Fabrikao) ou « relevé direct » (maître de l'atelier) ; pattern_price = prix du patron
 -- vendu (cuivre, nil sans) ; cooldown = temps de recharge (secondes, 0 sans). level, level_provenance, source, source_provenance,
 -- pattern_price et cooldown viennent de la réserve, même pour une recette vue qu'elle connaît. lot.provenance :
 -- « relevé direct » dès qu'une recette est vue, sinon le lot de la
