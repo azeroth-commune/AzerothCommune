@@ -214,6 +214,10 @@ AC.ChercherObjets(texte, max)        -- { { id, name, fabricable }, … } : les 
                                      -- s'il est là) et ceux que fabrique la base des recettes (jamais vus : par le nom de leur
                                      -- recette) ; fabricables d'abord, puis ceux qui commencent par texte.
                                      -- Lit « objets » et « base des recettes » : l'add-on qui cherche y souscrit.
+AC.RechercheObjets(parent, qty, onPick, w) -- la barre de recherche (champ, validation) : suggestions de ChercherObjets,
+                                     -- flèches, Entrée ou Tab, clic ; Entrée sans suggestion : TrouverObjet ; objet déposé
+                                     -- choisi aussitôt ; onPick(id, quantité lue dans l'EditBox qty) ; w : 280 par défaut
+AC.RecevoirObjet(cadre, onObjet)     -- un objet des sacs déposé sur le cadre : rendu à son sac, onObjet(id)
 AC.Capturer(cadre, libellé), AC.BoutonCapture(cadre, libellé, x, y) -- photo de l'écran avec repères magenta
 AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs (tools/crop_captures.py)
 ```

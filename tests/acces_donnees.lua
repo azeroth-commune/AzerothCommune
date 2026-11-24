@@ -5,7 +5,7 @@ local API = { "Lire", "Souscrire", "QuandReleve", "Signaler", "Personnage", "Des
     "Build", "Sondes", "RelancerSondes", "DeclarerSonde", "Sonder", "Conteneurs", "EstSac", "EstBanque", "Fusionner",
     "PrixAchat", "PrixMarchands", "Fenetre", "Tableau", "TrierLignes", "Argent", "ArgentCourt", "ArgentSigne", "NomObjet",
     "RetenirObjet", "TrouverObjet", "ChercherObjets", "Capturer", "BoutonCapture", "Exporter", "JsonSur", "Regrouper", "Exports",
-    "MaitresDuMetier", "Ecarts" }
+    "MaitresDuMetier", "Ecarts", "RechercheObjets", "RecevoirObjet" }
 
 test("le global AzerothCommune porte l'API publique ; plus de LibCommune ni de GameDataAPI", function()
     assertType("table", AzerothCommune)
