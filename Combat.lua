@@ -86,7 +86,8 @@ local function relire(lecture)
   -- ==) rappellera à chaque relecture, sans comparer.
   if v == s.valeur then return end
   s.valeur = v
-  for _, fn in ipairs(s) do rappeler(fn, v) end
+  -- Sur une copie : un suiveur qui part (ou arrive) pendant un rappel ne fait sauter (ni rappeler deux fois) personne.
+  for _, fn in ipairs({ unpack(s) }) do rappeler(fn, v) end
 end
 
 -- ponytail: tout événement relit toutes les lectures suivies (une relecture sans changement ne rappelle personne).
@@ -117,7 +118,7 @@ function lib:NePlusSuivre(lecture, fn)
   if #s == 0 then
     -- ponytail: une seule lecture ; quand deux écouteront le même événement, ne le retirer que si plus aucune lecture
     -- suivie ne l'écoute.
-    for _, ev in ipairs(l.evenements) do cadre:UnregisterEvent(ev) end
+    for _, ev in ipairs(l.evenements) do pcall(cadre.UnregisterEvent, cadre, ev) end
     if s.relecture then s.relecture:Cancel() end
     suivis[lecture] = nil
   end
