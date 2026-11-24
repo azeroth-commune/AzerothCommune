@@ -37,7 +37,7 @@ local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", 
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 11, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52)")
+assert(#fichiersCharges("AzerothCommune") == 12, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, l'état de combat, #98)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end

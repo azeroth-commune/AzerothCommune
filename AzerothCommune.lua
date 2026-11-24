@@ -40,6 +40,8 @@
 -- Sondés aussi : sacs (AC.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
 -- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
 -- Pour les autres fichiers du socle : AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...).
+-- État de combat (Combat.lua, ADR 0003 de l'atelier) : AC:Suivre(lecture, fn), AC:NePlusSuivre(lecture, fn) ; chaque lecture
+-- a sa sonde, dans le même registre.
 -- Le global ne porte rien d'autre que l'API publique et des champs documentés à côté de leur code : les relevés de
 -- recettes (AC:ReleverRecettes, AC:RangerRecettes, AC:ReleverRecettesSansFenetre, ci-dessous), AC:Signaler, les
 -- fournisseurs (AC.fournisseurs, AC:LireParFournisseurs, AC:ChampsARelever : Fournisseurs.lua), AC.regroupes

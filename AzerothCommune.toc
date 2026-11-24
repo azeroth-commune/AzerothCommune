@@ -18,3 +18,4 @@ CatalogueObjets.lua
 Commerce.lua
 Souscriptions.lua
 VendorData.lua
+Combat.lua

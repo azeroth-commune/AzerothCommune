@@ -13,7 +13,7 @@ for all of them, and groups them under one minimap button and one options entry.
   les prix de l'hôtel des ventes (avec Auctionator, TSM ou AuctionDB s'ils sont là). Seulement ce que tes add-ons
   demandent.
 - **Un seul bouton de minicarte** et **une seule entrée dans les options** pour tous les add-ons Azeroth Commune.
-- **Il prévient dans le chat** quand le jeu répond quelque chose d'inattendu à un relevé.
+- **Il prévient dans le chat** quand le jeu répond quelque chose d'inattendu à un relevé ou à une lecture de combat.
 - Commande : `/ac` (le résumé ; `/ac souscriptions` pour voir quelles données sont relevées).
 
 **Installation** : avec le client CurseForge, installe l'add-on qui t'intéresse et Azeroth Commune, puis clic droit sur
@@ -35,7 +35,8 @@ de Fabrikao. Une compétence à 0 veut dire inconnue.
 
 Le socle des add-ons Azeroth Commune (WoW Forever), requis par chacun (`## Dependencies: AzerothCommune`) : il fait
 tout le relevé des données du jeu, tient la base des données relevées, et offre son API sur un seul global,
-`AzerothCommune` (fenêtres et tableaux, montants, noms d'objets, capture et export, accès aux données relevées, sondes),
+`AzerothCommune` (fenêtres et tableaux, montants, noms d'objets, capture et export, accès aux données relevées, suivi de
+l'état de combat, sondes),
 les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de GameData et de la lib commune LibCommune
 (ADR 0002 de l'atelier, 21/11/2026) ; les historiques des deux sont dans ce repo.
 
@@ -52,6 +53,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
+| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible) et leurs sondes |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
@@ -139,14 +141,41 @@ un nom de famille.
 
 ### Sondes
 
-Chaque relevé déclare sa sonde et la vérifie à chaque fois ; une sonde rouge prévient dans le chat une fois par session,
-sans rien corriger (pas de mode dégradé : on débugge). Rien n'est sauvegardé.
+Chaque relevé et chaque lecture d'état de combat déclarent leur sonde et la vérifient à chaque fois ; une sonde rouge
+prévient dans le chat une fois par session, sans rien corriger (pas de mode dégradé : on débugge). Rien n'est sauvegardé.
+Les sondes de combat sont dans le même registre, après celles du relevé.
 
 ```lua
 AC.Sondes()            -- { { nom, attente, etat = "vert" | "rouge" | "pas encore vue", valeur, heure, build }, … }, aussi par nom
 AC.RelancerSondes()    -- refait les relevés sans contexte (aussi à la connexion) ; rend AC.Sondes()
 AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...) -- pour un relevé du socle
 ```
+
+### Suivi (état de combat)
+
+L'état de combat, ce que le jeu dit à l'instant (portée de la cible…), se lit aussi par le socle (ADR 0003 de l'atelier) :
+un add-on **suit** une lecture, le socle le rappelle à chaque changement et sonde chaque lecture. Distinct de la
+souscription : rien n'est relevé ni gardé, le suivi ne dure que la session.
+
+```lua
+AC:Suivre("portée", function(valeur) end) -- fn(valeur) tout de suite, puis à chaque changement ; true, ou nil, « lecture inconnue »
+AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn que pour Suivre) ; true, ou nil, « lecture inconnue »
+```
+
+- **nil = inconnu, jamais « non »** : pas de cible, une réponse qui ne tranche pas, une API absente ou en erreur.
+- **Une valeur secrète** (`issecretvalue`) ne sert jamais à un calcul. Une lecture qui la rend la passe telle quelle, pour
+  l'affichage seulement ; la portée, elle, est calculée : une réponse secrète y donne nil, et la sonde la note « secret ».
+- **La session seulement** : rien n'est sauvegardé. Le socle n'écoute le jeu (événements, relecture périodique) que pour
+  les lectures suivies ; le dernier suiveur parti, il cesse.
+- Un rappel qui plante ne prive pas les autres (erreur rendue au gestionnaire du jeu).
+
+| Lecture | Valeurs | Comment le socle la lit |
+|---|---|---|
+| `portée` | `"tir"`, `"zone morte"`, `"mêlée"`, `"trop loin"`, nil | le test de portée natif du swing timer, activé au premier suivi (`C_SwingTimer.EnableRangeCheck` pour la mêlée et le tir : sans lui, il ne répond pas), relu à `PLAYER_SWING_RANGE_UPDATE`, au changement de cible et toutes les 0,2 s ; replis quand il ne dit rien : la portée de Coupure d'ailes pour la mêlée (jamais l'Attaque du raptor, qui répond « à portée » à distance de tir), celle du Tir automatique pour le tir ; ni mêlée ni tir : le test « suivre » (`CheckInteractDistance`, 28 m) sépare zone morte et trop loin. Sans cible attaquable : nil. Les replis sont des sorts de chasseur : pour une autre classe, sans le natif, nil |
+
+Sonde `portée` : les sept réponses du jeu (cible, attaquable, natif mêlée, natif tir, Coupure d'ailes, Tir automatique,
+« suivre ») sont oui, non ou nil, ni secrètes ni en erreur ; `valeur` les note dans cet ordre. Elle se relance aussi
+sans suivi (`AC.RelancerSondes()`, Diagnostic) : cible un monstre pour voir ce que le jeu répond.
 
 ### Fournisseurs (cours de l'HV)
 
