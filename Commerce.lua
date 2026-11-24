@@ -100,7 +100,9 @@ end
 -- « Horde », nil : les deux ou inconnue) } d'après la table des PNJ de la réserve (ns.recettesPNJ). Depuis #81, la provenance
 -- de la compétence pour l'apprendre (level_provenance, 17e champ) : « règle » (la règle du décalage), « incertaine » (recette
 -- ajoutée par Forever ou seuils incomplets : Fabrikao), « patron » (la compétence requise de l'objet patron, dans le client),
--- « extrait du client » (d'emblée) ; nil dans une réserve d'avant #81.
+-- « extrait du client » (d'emblée) ; nil dans une réserve d'avant #81. Depuis #83, les relevés directs de l'atelier : une recette
+-- vue chez un maître de l'atelier a sa compétence, la source « maître », source_provenance et level_provenance « relevé direct »
+-- et la date du relevé (level_date, 18e champ, « AAAA-MM-JJ hh:mm:ss » ; nil sans) ; les marchands vus complètent ceux de Fabrikao.
 local reserve, brute
 local function fichePNJ(id) -- un PNJ hors de la table garde son ID, sans nom ni position
   local p = ns.recettesPNJ and ns.recettesPNJ[id] or {}
@@ -128,14 +130,14 @@ local function reserveRecettes()
     brute, reserve = ns.recettesClassic, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
     --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans),
-    --   marchands du patron ({ PNJ, prix, … }, nil sans), provenance de la compétence }
+    --   marchands du patron ({ PNJ, prix, … }, nil sans), provenance de la compétence, date du relevé direct }
     for k, c in pairs(brute or {}) do
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
         level = c[7], yellow = c[8], grey = c[9], source = c[10], source_provenance = c[11],
         pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], patron = c[15],
-        marchands = c[16] and marchandsDe(c[16]), level_provenance = c[17], provenance = "extrait du client" }
+        marchands = c[16] and marchandsDe(c[16]), level_provenance = c[17], level_date = c[18], provenance = "extrait du client" }
     end
   end
   return reserve
@@ -156,7 +158,8 @@ end
 
 -- Le relevé des maîtres de métier passe devant la réserve (#72) : pour chaque service d'un maître relevé (AzerothCommuneDB.trainers),
 -- la recette qu'il enseigne prend level = la compétence demandée (skill_rank), source « maître », source_provenance et
--- level_provenance « relevé direct » et prix_maitre = son prix (cuivre) ; le client et cMaNGOS se trompent parfois de 25 points (#68).
+-- level_provenance « relevé direct », level_date = la date de ce relevé (seen du maître, #83) et prix_maitre = son prix (cuivre) ;
+-- le client et cMaNGOS se trompent parfois de 25 points (#68).
 -- Rapprochement, dans le métier du service (service.skill, le nom du métier) : par l'objet enseigné (service.item = output de
 -- la recette) quand une seule recette du métier le produit, sinon par le nom exact (un enchantement n'a pas d'objet : par
 -- son nom). Un service qui ne rapproche rien (« Minage d'apprenti », une compétence de classe) est ignoré. Plusieurs maîtres
@@ -185,7 +188,7 @@ local function appliquerMaitres(d)
       end
     end
   end
-  local meilleur = {} -- clé -> service retenu
+  local meilleur, quand = {}, {} -- clé -> service retenu, date du relevé de son maître
   for _, t in pairs(AzerothCommuneDB.trainers or {}) do
     for _, sv in ipairs(t.services or {}) do
       local m, cles = sv.skill, nil
@@ -198,7 +201,7 @@ local function appliquerMaitres(d)
         for _, k in ipairs(cles or {}) do
           local b = meilleur[k]
           if not b or sv.skill_rank < b.skill_rank or (sv.skill_rank == b.skill_rank and (sv.cost or 0) < (b.cost or 0)) then
-            meilleur[k] = sv
+            meilleur[k], quand[k] = sv, t.seen
           end
         end
       end
@@ -209,7 +212,7 @@ local function appliquerMaitres(d)
     local copie = {}
     for f, v in pairs(d[k]) do copie[f] = v end
     copie.level, copie.source, copie.source_provenance, copie.prix_maitre = sv.skill_rank, "maître", "relevé direct", sv.cost
-    copie.level_provenance = "relevé direct"
+    copie.level_provenance, copie.level_date = "relevé direct", quand[k]
     if copie.condition == "plus enseignée" then copie.condition = nil end -- un maître l'enseigne : elle l'est encore
     d[k] = copie
     n = n + 1
@@ -229,7 +232,7 @@ ns.lire["base des recettes"] = function()
   for k, r in pairs(vues) do
     local c = res[k]
     if c and r.level == nil then
-      local copie = { level = c.level, level_provenance = c.level_provenance, yellow = c.yellow, grey = c.grey, source = c.source,
+      local copie = { level = c.level, level_provenance = c.level_provenance, level_date = c.level_date, yellow = c.yellow, grey = c.grey, source = c.source,
         source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition, patron = c.patron,
         marchands = c.marchands }
       for f, v in pairs(r) do copie[f] = v end
