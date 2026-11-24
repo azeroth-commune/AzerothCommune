@@ -4,7 +4,7 @@
 --   AzerothCommuneDB.chars[GUID]      : chaque perso, sous son GUID (UnitGUID, LibCommune#19), avec son nom
 --                                       (« Prénom Nom ») ; fiche, équipement, sacs, banque, courrier, monnaies,
 --                                       réputations, métiers, compétences, recettes connues, quêtes.
---   AzerothCommuneDB.recipes / trainers / vendors, AzerothCommuneMarket : voir Commerce.lua.
+--   AzerothCommuneDB.recipes / trainers / vendors / ecarts, AzerothCommuneMarket : voir Commerce.lua.
 --   AzerothCommuneDB.addons           : les add-ons installés (titre, version, auteur, dépendances, état).
 --   AzerothCommuneItems.items[itemID] : tous les objets du jeu.
 -- Un perso n'est lisible que connecté : chaque perso apparaît après une connexion. La banque, le courrier
@@ -295,7 +295,7 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
   if event == "ADDON_LOADED" then
     if a1 ~= "AzerothCommune" then return end
     AzerothCommuneDB = AzerothCommuneDB or {}
-    for _, k in ipairs({ "chars", "recipes", "trainers", "vendors", "errors", "lots" }) do AzerothCommuneDB[k] = AzerothCommuneDB[k] or {} end
+    for _, k in ipairs({ "chars", "recipes", "trainers", "vendors", "ecarts", "errors", "lots" }) do AzerothCommuneDB[k] = AzerothCommuneDB[k] or {} end
     AzerothCommuneMarket = AzerothCommuneMarket or {}
     if AzerothCommuneDB.item_scan == nil then AzerothCommuneDB.item_scan = true end
     AzerothCommuneItems = AzerothCommuneItems or {}
