@@ -97,7 +97,9 @@ local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription :
 -- une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue. races, classes : masques du client, 0 : toutes.
 -- prerequis : quêtes à avoir toutes terminées ; prerequis_un : il suffit d'en avoir terminé une. suites : la suite de
 -- QuestieDB et les quêtes qui ont celle-ci en prérequis ; amorces : quêtes facultatives qui y mènent (pas des prérequis).
--- Listes de questID (de la réserve), nil quand vides. donneur = { pnj ou objet (son ID ; un objet du monde : coffre, stèle…),
+-- Listes de questID, nil quand vides ; suites, amorces : de la réserve ; prerequis, prerequis_un : tels quels dans
+-- QuestieDB (une quête de la Horde, absente de la réserve, peut y être : d[p] nil ; un ID négatif dans 2 quêtes).
+-- donneur = { pnj ou objet (son ID ; un objet du monde : coffre, stèle…),
 -- nom, carte (uiMapID), x, y (pourcentage de la carte) } : le premier donneur, un PNJ amical pour l'Alliance d'abord, à sa
 -- première apparition dans la zone de la quête (sinon la première listée ; x, y nil dans une instance) ; nil sans donneur.
 -- objet : l'objet qui donne la quête (nil sans).
