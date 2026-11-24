@@ -352,3 +352,17 @@ test("gain de compétence : les métiers relus aussitôt et signalés", function
     GetProfessions, GetProfessionInfo = gp, gpi
     assert(ok, err)
 end)
+
+-- #70, #71 : la réserve porte le temps d'incantation et les outils demandés, extraits du client.
+test("base des recettes : temps d'incantation et outils demandés (Ceinture runique en cuivre : 8 s, marteau de forgeron)", function()
+    local lib = AzerothCommune
+    assertTrue(lib:Souscrire("base des recettes"))
+    local r = lib:Lire("base des recettes")[2666]
+    assertNotNil(r, "Ceinture runique en cuivre")
+    assertEquals(8, r.cast)
+    assertNotNil(r.outils, "outils")
+    assertEquals("Marteau de forgeron", r.outils[1].nom)
+    local marteau = false
+    for _, o in ipairs(r.outils[1].objets) do marteau = marteau or o == 5956 end
+    assertTrue(marteau, "le marteau de forgeron (5956) convient")
+end)

@@ -104,6 +104,8 @@ end
 -- « extrait du client » (d'emblée) ; nil dans une réserve d'avant #81. Depuis #83, les relevés directs de l'atelier : une recette
 -- vue chez un maître de l'atelier a sa compétence, la source « maître », source_provenance et level_provenance « relevé direct »
 -- et la date du relevé (level_date, 18e champ, « AAAA-MM-JJ hh:mm:ss » ; nil sans) ; les marchands vus complètent ceux de Fabrikao.
+-- Depuis #70, le temps d'incantation (cast, 19e champ, secondes, du client ; nil sans) ; depuis #71, les outils demandés
+-- (outils, 20e champ : des clés de ns.recettesOutils, rendues { { nom, objets = { objet qui convient, … } }, … } ; nil sans).
 local reserve, brute
 local function fichePNJ(id) -- un PNJ hors de la table garde son ID, sans nom ni position
   local p = ns.recettesPNJ and ns.recettesPNJ[id] or {}
@@ -126,19 +128,29 @@ local function marchandsDe(liste)
   end
   return out
 end
+local function outilsDe(cles)
+  local out = {}
+  for _, k in ipairs(cles) do
+    local o = ns.recettesOutils and ns.recettesOutils[k]
+    if o then out[#out + 1] = { nom = o[1], objets = o[2] } end
+  end
+  return out
+end
 local function reserveRecettes()
   if reserve == nil or brute ~= ns.recettesClassic then
     brute, reserve = ns.recettesClassic, {}
     -- { objet, produit min, produit max, métier, nom, { composant, quantité, … }, compétence, jaune, gris, source,
     --   provenance de la source, prix du patron, recharge, condition (nil sans), objet patron (nil sans),
-    --   marchands du patron ({ PNJ, prix, … }, nil sans), provenance de la compétence, date du relevé direct }
+    --   marchands du patron ({ PNJ, prix, … }, nil sans), provenance de la compétence, date du relevé direct,
+    --   temps d'incantation, outils demandés }
     for k, c in pairs(brute or {}) do
       local reagents = {}
       for i = 1, #c[6], 2 do reagents[#reagents + 1] = { id = c[6][i], qty = c[6][i + 1] } end
       reserve[k] = { output = c[1], made_min = c[2], made_max = c[3], profession = c[4], name = c[5], reagents = reagents,
         level = c[7], yellow = c[8], grey = c[9], source = c[10], source_provenance = c[11],
         pattern_price = c[12] ~= 0 and c[12] or nil, cooldown = c[13], condition = c[14], patron = c[15],
-        marchands = c[16] and marchandsDe(c[16]), level_provenance = c[17], level_date = c[18], provenance = "extrait du client" }
+        marchands = c[16] and marchandsDe(c[16]), level_provenance = c[17], level_date = c[18], cast = c[19],
+        outils = c[20] and outilsDe(c[20]), provenance = "extrait du client" }
     end
   end
   return reserve
@@ -232,8 +244,8 @@ end
 
 -- Lu par AzerothCommune:Lire (type « base des recettes ») : les recettes vues, puis la réserve pour les objets qu'aucune
 -- recette vue ne fabrique. Une recette vue que la réserve connaît aussi en prend la compétence pour l'apprendre (et sa provenance), les seuils
--- jaune et gris, la source, le prix du patron, le temps de recharge, la condition, le patron et ses marchands (la fenêtre
--- de métier ne les donne pas), sur une copie.
+-- jaune et gris, la source, le prix du patron, le temps de recharge, la condition, le patron et ses marchands, le temps
+-- d'incantation et les outils (la fenêtre de métier ne les donne pas), sur une copie.
 -- Puis les maîtres relevés (appliquerMaitres) l'emportent sur les deux. Lot : relevé direct dès qu'une recette est vue ou
 -- qu'un maître en a donné une ; la réserve seule, comme le catalogue des objets : le lot de la réserve (extrait du client),
 -- peut-être périmé sous un autre build ou sans lot.
@@ -244,7 +256,7 @@ ns.lire["base des recettes"] = function()
     if c and r.level == nil then
       local copie = { level = c.level, level_provenance = c.level_provenance, level_date = c.level_date, yellow = c.yellow, grey = c.grey, source = c.source,
         source_provenance = c.source_provenance, pattern_price = c.pattern_price, cooldown = c.cooldown, condition = c.condition, patron = c.patron,
-        marchands = c.marchands }
+        marchands = c.marchands, cast = c.cast, outils = c.outils }
       for f, v in pairs(r) do copie[f] = v end
       r = copie
     end
