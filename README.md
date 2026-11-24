@@ -48,7 +48,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | Fichier | Rôle |
 |---|---|
 | `AzerothCommune.lua` | crée le global ; catalogue des types de données, `Souscrire`, `Lire`, `QuandReleve`, sondes, identité (personnage, royaume, faction, maison de l'HV, build), sacs, relevé des recettes, prix d'achat |
-| `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets |
+| `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
@@ -214,6 +214,10 @@ AC.ChercherObjets(texte, max)        -- { { id, name, fabricable }, … } : les 
                                      -- s'il est là) et ceux que fabrique la base des recettes (jamais vus : par le nom de leur
                                      -- recette) ; fabricables d'abord, puis ceux qui commencent par texte.
                                      -- Lit « objets » et « base des recettes » : l'add-on qui cherche y souscrit.
+AC.RechercheObjets(parent, qty, onPick, w) -- la barre de recherche (champ, validation) : suggestions de ChercherObjets,
+                                     -- flèches, Entrée ou Tab, clic ; Entrée sans suggestion : TrouverObjet ; objet déposé
+                                     -- choisi aussitôt ; onPick(id, quantité lue dans l'EditBox qty) ; w : 280 par défaut
+AC.RecevoirObjet(cadre, onObjet)     -- un objet des sacs déposé sur le cadre : rendu à son sac, onObjet(id)
 AC.Capturer(cadre, libellé), AC.BoutonCapture(cadre, libellé, x, y) -- photo de l'écran avec repères magenta
 AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs (tools/crop_captures.py)
 ```

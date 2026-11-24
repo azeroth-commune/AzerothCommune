@@ -30,6 +30,8 @@
 -- Gardés dans la base, sans doublon ; le relevé du joueur l'emporte déjà, rien d'autre n'est corrigé (Commerce.lua).
 -- Recherche d'objets : AC.ChercherObjets(texte, max) parmi les objets (relevés, puis le catalogue extrait du client) et les
 -- objets fabriqués de la base des recettes (Interface.lua) ; l'add-on qui cherche souscrit à « objets » et à « base des recettes ».
+-- Sa barre de recherche (suggestions, objet déposé) : AC.RechercheObjets(parent, qty, onPick, w) ; un objet déposé sur un
+-- cadre : AC.RecevoirObjet(cadre, onObjet) (Interface.lua, #60).
 -- Identité, chaque relevé sondé : AC.Royaume() (le numéro de serveur du GUID, « 6942 »), AC.MaisonHV() (« 6942-Alliance »,
 -- clé des scans de l'HV), AC.Faction(), AC.Build() (nombre).
 -- Sondes : AC.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
