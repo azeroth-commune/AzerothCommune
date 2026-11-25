@@ -1,36 +1,87 @@
 -- Azeroth Commune : fenêtres, tableaux triables, montants et noms d'objets, pour tous les add-ons.
 -- Appel avec un point (AzerothCommune.Argent(c), pas :Argent) : ces fonctions servent aussi telles quelles de fmt à un
--- tableau. Rien n'est sauvegardé ici : ce qui doit durer (tri d'un tableau, base des objets) est une table de l'add-on,
+-- tableau. Seule la géométrie des fenêtres (place et taille, de l'interface) est sauvegardée ici, dans
+-- AzerothCommuneDB.fenetres ; le reste de ce qui doit durer (tri d'un tableau, base des objets) est une table de l'add-on,
 -- passée en paramètre (opts.store, objets, garde).
 local lib = AzerothCommune
 
 ---------------------------------------------------------------------------------------------------
--- Une fenêtre sombre, bord lavande, déplaçable, fermée par Échap, avec titre, croix et bouton capture.
+-- Une fenêtre au look du jeu (ButtonFrameTemplate sans portrait : son titre, sa croix), déplaçable, fermée par Échap,
+-- avec poignée de redimensionnement et bouton capture. f.title est le titre du gabarit.
+-- La taille de création est la taille de départ et le minimum ; une largeur ou une hauteur fixée ensuite par l'add-on
+-- (f:SetWidth(largeur du tableau + 50), f:SetHeight d'après le contenu) relève le minimum, et la taille retenue, si elle
+-- est plus grande, l'emporte.
+-- Place et taille retenues pour le compte dans AzerothCommuneDB.fenetres[name] (la géométrie d'une fenêtre est de
+-- l'interface), retrouvées à la création ; pas par le jeu (SetUserPlaced(false)). Base pas encore chargée : rien n'est
+-- lu ni retenu cette fois.
+-- opts (facultatif) : { redimensionnable = false (pas de poignée, taille gérée par l'add-on, seule la place est retenue,
+-- si le joueur l'a déplacée), place = { "TOPRIGHT", Minimap, "TOPLEFT", -12, -20 } (tant que rien n'est retenu ; le
+-- centre sinon) }. Une fenêtre qui se place elle-même après coup (ClearAllPoints, SetPoint) garde sa place.
 -- Bouton capture : seulement si un add-on l'a demandé (lib.captureDansLesFenetres, posé par Diagnostic, l'add-on de debug, Diagnostic#7).
-function lib.Fenetre(name, title, w, h)
-  local f = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-  f:SetSize(w, h)
-  f:SetPoint("CENTER")
+function lib.Fenetre(name, title, w, h, opts)
+  opts = opts or {}
+  local redim = opts.redimensionnable ~= false
+  local f = CreateFrame("Frame", name, UIParent, "ButtonFrameTemplate")
+  ButtonFrameTemplate_HidePortrait(f)
+  ButtonFrameTemplate_HideAttic(f)
+  ButtonFrameTemplate_HideButtonBar(f)
+  f:SetTitle(title)
+  f.title = f:GetTitleText()
+  local g = AzerothCommuneDB and AzerothCommuneDB.fenetres and AzerothCommuneDB.fenetres[name]
+  local voulue = redim and g and g.w and { g.w, g.h } -- la taille choisie par le joueur
+  f:SetSize(voulue and math.max(w, voulue[1]) or w, voulue and math.max(h, voulue[2]) or h)
+  if g and g.x then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", g.x, g.y)
+  elseif opts.place then f:SetPoint(unpack(opts.place))
+  else f:SetPoint("CENTER") end
   f:SetFrameStrata("HIGH")
-  f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-  f:SetBackdropColor(0.06, 0.06, 0.08, 0.96)
-  f:SetBackdropBorderColor(0.66, 0.56, 1.00, 0.35)
   f:EnableMouse(true)
   f:SetMovable(true)
   f:SetClampedToScreen(true)
   -- Deux fenêtres au même niveau mélangeaient leurs textes (18/11/2026) : celle qu'on ouvre ou qu'on clique passe devant.
   f:SetToplevel(true)
   f:HookScript("OnShow", function(self) self:Raise() end)
+  local function retenir()
+    f:StopMovingOrSizing()
+    f:SetUserPlaced(false) -- c'est nous qui retenons la place, pas le jeu
+    if not AzerothCommuneDB then return end
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    local r = { x = math.floor(f:GetLeft() + 0.5), y = math.floor(f:GetTop() + 0.5) }
+    if redim then r.w, r.h = math.floor(f:GetWidth() + 0.5), math.floor(f:GetHeight() + 0.5) end
+    AzerothCommuneDB.fenetres[name] = r
+  end
   f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", f.StartMoving)
-  f:SetScript("OnDragStop", f.StopMovingOrSizing)
+  f:SetScript("OnDragStop", retenir)
+  if redim then
+    local minW, minH = w, h
+    f:SetResizable(true)
+    f:SetResizeBounds(minW, minH)
+    local poignee = CreateFrame("Button", nil, f, "PanelResizeButtonTemplate")
+    poignee:SetPoint("BOTTOMRIGHT", -4, 4)
+    poignee:Init(f, minW, minH)
+    f.ResizeButton = poignee
+    poignee.resizeStoppedCallback = function()
+      f:SetSize(math.max(minW, f:GetWidth()), math.max(minH, f:GetHeight())) -- le jeu borne déjà ; au cas où
+      voulue = { f:GetSize() }
+      retenir()
+    end
+    -- La largeur ou la hauteur fixée par l'add-on relève le minimum (pas pendant que le joueur tire la poignée : la
+    -- borne du gabarit passe aussi par SetWidth).
+    local function relever(lw, lh)
+      if poignee:IsActive() then return end
+      minW, minH = math.max(minW, lw or 0), math.max(minH, lh or 0)
+      f:SetResizeBounds(minW, minH)
+      poignee:SetMinWidth(minW)
+      poignee:SetMinHeight(minH)
+      if voulue then f:SetSize(math.max(f:GetWidth(), voulue[1]), math.max(f:GetHeight(), voulue[2])) end
+    end
+    hooksecurefunc(f, "SetWidth", function(_, v) relever(v, nil) end)
+    hooksecurefunc(f, "SetHeight", function(_, v) relever(nil, v) end)
+  end
   table.insert(UISpecialFrames, name) -- Échap ferme la fenêtre
-  f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  f.title:SetPoint("TOPLEFT", 14, -12)
-  f.title:SetText(title)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", 2, 2)
-  if lib.captureDansLesFenetres and lib.BoutonCapture then lib.BoutonCapture(f, title, -30, -8) end
+  if lib.captureDansLesFenetres and lib.BoutonCapture then -- dans la barre de titre, au niveau de la croix (sinon sous le cadre)
+    lib.BoutonCapture(f, title, -28, -3):SetFrameLevel(f.CloseButton:GetFrameLevel())
+  end
   f:Hide()
   return f
 end
