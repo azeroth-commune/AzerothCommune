@@ -313,6 +313,9 @@ local f = AC.Fenetre("MonAddonFrame", "Titre", 600, 400)      -- cadre du jeu sa
 f:SetWidth(largeur + 50)             -- une largeur fixée après coup (d'après un tableau) relève le minimum ; une hauteur est prise telle quelle
 AC.Fenetre("MonAddonListe", "Liste", 290, 80, { redimensionnable = false,   -- pas de poignée, taille gérée par l'add-on,
   place = { "TOPRIGHT", Minimap, "TOPLEFT", -12, -20 } })    -- place retenue si déplacée ; sinon place (le centre par défaut)
+local l = AC.Fenetre("MonAddonSuivi", nil, 270, 80, { cadre = false, place = … }) -- un affichage informatif (pas une
+                                     -- fenêtre) : cadre nu, sans titre, croix, poignée ni Échap ; seule la place est retenue
+l:DeplacePar(entete)                 -- glisser cet enfant (l'en-tête, une ligne) déplace le cadre et retient sa place
 local t, largeur = AC.Tableau(f, colonnes, { name = "objets", sort = "prix", store = MonAddonDB.sort })
 t:SetData(lignes)                                              -- en-têtes cliquables, tri gardé dans store[name]
                                      -- colonne { …, extensible = true } (une au plus) : prend la largeur libre de la fenêtre

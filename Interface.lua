@@ -16,17 +16,23 @@ local lib = AzerothCommune
 -- lu ni retenu cette fois.
 -- opts (facultatif) : { redimensionnable = false (pas de poignée, taille gérée par l'add-on, seule la place est retenue,
 -- si le joueur l'a déplacée), place = { "TOPRIGHT", Minimap, "TOPLEFT", -12, -20 } (tant que rien n'est retenu ; le
--- centre sinon) }. Une fenêtre qui se place elle-même après coup (ClearAllPoints, SetPoint) garde sa place.
+-- centre sinon), cadre = false (un affichage informatif, pas une fenêtre : cadre nu, sans gabarit, titre, croix, poignée
+-- ni Échap ; seule la place est retenue, comme redimensionnable = false ; l'add-on dessine son en-tête et le désigne par
+-- f:DeplacePar(entete)) }. Une fenêtre qui se place elle-même après coup (ClearAllPoints, SetPoint) garde sa place.
+-- f:DeplacePar(enfant) : glisser cet enfant déplace f et retient sa place (une ligne du contenu, l'en-tête d'un cadre nu).
 -- Bouton capture : seulement si un add-on l'a demandé (lib.captureDansLesFenetres, posé par Diagnostic, l'add-on de debug, Diagnostic#7).
 function lib.Fenetre(name, title, w, h, opts)
   opts = opts or {}
-  local redim = opts.redimensionnable ~= false
-  local f = CreateFrame("Frame", name, UIParent, "ButtonFrameTemplate")
-  ButtonFrameTemplate_HidePortrait(f)
-  ButtonFrameTemplate_HideAttic(f)
-  ButtonFrameTemplate_HideButtonBar(f)
-  f:SetTitle(title)
-  f.title = f:GetTitleText()
+  local nu = opts.cadre == false
+  local redim = not nu and opts.redimensionnable ~= false
+  local f = CreateFrame("Frame", name, UIParent, not nu and "ButtonFrameTemplate" or nil)
+  if not nu then
+    ButtonFrameTemplate_HidePortrait(f)
+    ButtonFrameTemplate_HideAttic(f)
+    ButtonFrameTemplate_HideButtonBar(f)
+    f:SetTitle(title)
+    f.title = f:GetTitleText()
+  end
   local g = AzerothCommuneDB and AzerothCommuneDB.fenetres and AzerothCommuneDB.fenetres[name]
   -- La taille choisie par le joueur (à la poignée), jamais plus grande que l'écran ; ne sert qu'à la création.
   local voulue = redim and g and g.w and g.h and { math.min(g.w, UIParent:GetWidth()), math.min(g.h, UIParent:GetHeight()) }
@@ -36,7 +42,7 @@ function lib.Fenetre(name, title, w, h, opts)
   elseif opts.place then f:SetPoint(unpack(opts.place))
   else f:SetPoint("CENTER") end
   f:SetFrameStrata("HIGH")
-  f:EnableMouse(true)
+  f:EnableMouse(not nu) -- un cadre nu laisse passer les clics entre ses lignes, comme le suivi des quêtes du jeu
   f:SetMovable(true)
   f:SetClampedToScreen(true)
   -- Deux fenêtres au même niveau mélangeaient leurs textes (18/11/2026) : celle qu'on ouvre ou qu'on clique passe devant.
@@ -53,9 +59,13 @@ function lib.Fenetre(name, title, w, h, opts)
     if avecTaille then r.w, r.h = math.floor(f:GetWidth() + 0.5), math.floor(f:GetHeight() + 0.5) end
     AzerothCommuneDB.fenetres[name] = r
   end
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", f.StartMoving)
-  f:SetScript("OnDragStop", function() retenir(false) end)
+  function f:DeplacePar(poignee)
+    poignee:EnableMouse(true)
+    poignee:RegisterForDrag("LeftButton")
+    poignee:SetScript("OnDragStart", function() f:StartMoving() end)
+    poignee:SetScript("OnDragStop", function() retenir(false) end)
+  end
+  if not nu then f:DeplacePar(f) end
   if redim then
     local minW, minH = w, h
     f:SetResizable(true)
@@ -79,8 +89,8 @@ function lib.Fenetre(name, title, w, h, opts)
       if voulue and not f:IsShown() and voulue[1] > v then f:SetSize(voulue[1], f:GetHeight()) end
     end)
   end
-  table.insert(UISpecialFrames, name) -- Échap ferme la fenêtre
-  if lib.captureDansLesFenetres and lib.BoutonCapture then -- dans la barre de titre, au niveau de la croix (sinon sous le cadre)
+  if not nu then table.insert(UISpecialFrames, name) end -- Échap ferme la fenêtre
+  if not nu and lib.captureDansLesFenetres and lib.BoutonCapture then -- dans la barre de titre, au niveau de la croix (sinon sous le cadre)
     lib.BoutonCapture(f, title, -28, -3):SetFrameLevel(f.CloseButton:GetFrameLevel())
   end
   f:Hide()

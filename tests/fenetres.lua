@@ -140,6 +140,41 @@ test("fenêtre non redimensionnable : pas de poignée, place par défaut, place 
     AzerothCommuneDB.fenetres.AzerothCommuneTestFixe = nil
 end)
 
+test("cadre nu (cadre = false) : sans gabarit, titre, croix ni poignée, pas d'Échap ; déplacé par son en-tête, place retenue sans taille", function()
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    AzerothCommuneDB.fenetres.AzerothCommuneTestNu = nil
+    local opts = { cadre = false, place = { "TOPLEFT", UIParent, "BOTTOMLEFT", 60, 620 } }
+    local f = lib.Fenetre("AzerothCommuneTestNu", "Nu", 270, 80, opts)
+    assertNil(f.NineSlice, "pas de cadre de fenêtre")
+    assertNil(f.title, "pas de titre")
+    assertNil(f.CloseButton, "pas de croix")
+    assertNil(f.ResizeButton, "pas de poignée")
+    assertTrue(not f:IsMouseEnabled(), "les clics passent entre les lignes")
+    for _, n in ipairs(UISpecialFrames) do assertTrue(n ~= "AzerothCommuneTestNu", "Échap ne le ferme pas") end
+    f:Show()
+    assertEquals(60, math.floor(f:GetLeft() + 0.5), "place par défaut")
+    local entete = CreateFrame("Frame", nil, f)
+    entete:SetSize(260, 32)
+    entete:SetPoint("TOPLEFT")
+    f:DeplacePar(entete)
+    entete:GetScript("OnDragStart")(entete, "LeftButton")
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", 310, 480)
+    entete:GetScript("OnDragStop")(entete)
+    f:SetHeight(150) -- la taille suit le contenu, gérée par l'add-on
+    f:Hide()
+    local g = AzerothCommuneDB.fenetres.AzerothCommuneTestNu
+    assertEquals(310, g.x)
+    assertTrue(g.w == nil and g.h == nil, "seule la place est retenue")
+    f = lib.Fenetre("AzerothCommuneTestNu", "Nu", 270, 80, opts)
+    f:Show()
+    assertEquals(310, math.floor(f:GetLeft() + 0.5))
+    assertEquals(480, math.floor(f:GetTop() + 0.5))
+    assertEquals(80, math.floor(f:GetHeight() + 0.5))
+    f:Hide()
+    AzerothCommuneDB.fenetres.AzerothCommuneTestNu = nil
+end)
+
 -- Asynchrone : le jeu (et le simulateur) signale un changement de taille (OnSizeChanged) à l'image suivante.
 local function ensuite(done, fn)
     C_Timer.After(0.05, function()
