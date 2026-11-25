@@ -53,7 +53,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
-| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible, familier) et leurs sondes |
+| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible, familier, Tir auto) et leurs sondes |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
@@ -200,6 +200,7 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 |---|---|---|
 | `portée` | `"tir"`, `"zone morte"`, `"mêlée"`, `"trop loin"`, nil | le test de portée natif du swing timer, activé à chaque suivi et réarmé à chaque changement de cible tant qu'elle est suivie (`C_SwingTimer.EnableRangeCheck` pour la mêlée et le tir : sans lui, il ne répond pas ; la barre de swing du jeu ou un autre add-on peut le couper), relu à `PLAYER_SWING_RANGE_UPDATE`, au changement de cible et toutes les 0,2 s ; replis quand il ne dit rien : la portée de Coupure d'ailes pour la mêlée (jamais l'Attaque du raptor, qui répond « à portée » à distance de tir), celle du Tir automatique pour le tir ; ni mêlée ni tir : le test « suivre » (`CheckInteractDistance`, 28 m) sépare zone morte et trop loin. Sans cible attaquable : nil. Les replis sont des sorts de chasseur : pour une autre classe, sans le natif, nil |
 | `familier` | `{ present, mort, humeur, nourritures }`, nil | `present` : `UnitExists("pet")` ; `mort` : `UnitIsDead("pet")`, seulement si le familier est là (absent, il peut être renvoyé ou mort sans corps : le jeu ne le dit pas, `mort` reste nil) ; `humeur` : 1er retour de `C_PetInfo.GetPetHappiness`, 1 (mécontent), 2 (content) ou 3 (heureux) ; `nourritures` : `C_PetInfo.GetPetFoodTypes`, les types qu'il mange, noms du client (« Viande »…). Relu à `UNIT_PET`, `UNIT_HAPPINESS`, `PET_UI_UPDATE` et toutes les secondes (la mort n'a pas d'événement sûr). Chaque champ nil quand sa réponse ne tranche pas ; la lecture entière nil quand le jeu ne dit pas si le familier est là |
+| `swing` | nil tant que rien n'est venu, puis une table neuve à chaque changement (jamais modifiée ensuite) : `actif` (true au début du tir répété, false à sa fin : Tab, cible morte… ; nil avant), `tir` (`GetTime()` du dernier tir parti), `duree` (secondes jusqu'au tir suivant, corrigées de la hâte par le jeu ; secrète : passée telle quelle), `immobile` (secondes, à la fin de `duree`, où il faut rester immobile : 0,5 s à la vitesse de base de l'arme, réduite par la hâte ; nil si inconnue), `preparation` (`GetTime()` du dernier envoi du Tir auto) | `PLAYER_SWING` (seulement le type Tir), `UNIT_SPELLCAST_SENT` du Tir automatique (75 : Forever n'envoie pas de début de sort pour lui), `START_AUTOREPEAT_SPELL` et `STOP_AUTOREPEAT_SPELL` ; la vitesse de base est le nombre au bout d'une ligne de droite de l'infobulle de l'arme à distance (`C_TooltipInfo.GetInventoryItem`, emplacement 18). Pas d'auto-calibrage de la latence |
 
 Sonde `portée` : les sept réponses du jeu (cible, attaquable, natif mêlée, natif tir, Coupure d'ailes, Tir automatique,
 « suivre ») sont oui, non ou nil : ni absentes (une fonction du jeu disparue, notée « absente »), ni secrètes, ni en erreur ;
@@ -209,6 +210,11 @@ sans suivi (`AC.RelancerSondes()`, Diagnostic) : cible un monstre pour voir ce q
 Sonde `familier` : `UnitExists` et `UnitIsDead` sur le familier rendent oui, non ou nil ; `GetPetHappiness` une humeur de
 1 à 3 ou rien ; `GetPetFoodTypes` une liste de noms (notée `{ n, … }`) ou rien : ni absents, ni secrets, ni en erreur.
 Relançable sans suivi : familier appelé, mort, puis renvoyé.
+
+Sonde `swing` : à chaque coup suivi, la durée et le type de `PLAYER_SWING`, puis (pour un tir) la vitesse de base de
+l'arme ; verte sur une durée positive, un type 0, 1 ou 2 et une vitesse positive ; rouge sur une valeur secrète (notée
+« secret »), une vitesse « illisible », une fonction « absente » ou en erreur. Elle demande un coup : « pas encore vue »
+d'ici là, `RelancerSondes` ne la relance pas.
 
 ### Fournisseurs (cours de l'HV)
 

@@ -7,6 +7,8 @@
 -- valeur : nil = inconnu, jamais « non » ; une valeur secrète passe telle quelle, pour l'affichage seulement (la portée
 -- et le familier, calculés, n'en rendent jamais : une réponse secrète y donne nil). Une table rendue est partagée entre
 -- les suiveurs : la lire, jamais la modifier.
+-- Lectures : « portée » (une chaîne, voir portee), « familier » (une table, voir familier) et « swing » (une table,
+-- voir surSwing).
 local lib = AzerothCommune
 
 local TIR, MELEE = 2, 0 -- Enum.PlayerSwingType.Ranged, .MainHand
@@ -102,6 +104,77 @@ lib.DeclarerSonde("familier",
     return true
   end, function() familier() end)
 
+-- Le Tir auto (BeAGoodPal#26) : l'événement de swing natif de Forever (PLAYER_SWING, seulement le type Tir), l'envoi du
+-- Tir automatique (UNIT_SPELLCAST_SENT : Forever n'envoie pas de début de sort pour lui) et le début et la fin du tir
+-- répété. Valeur : nil tant que rien n'est venu, puis une table neuve à chaque changement (jamais modifiée ensuite) :
+--   actif       true après START_AUTOREPEAT_SPELL, false après STOP_AUTOREPEAT_SPELL (Tab, cible morte…), nil avant
+--   tir         GetTime() du dernier tir parti
+--   duree       secondes de ce tir au suivant, déjà corrigées de la hâte par le jeu ; secrète : passée telle quelle
+--   immobile    secondes, à la fin de duree, où il faut rester immobile : 0,5 s à la vitesse de base de l'arme, réduite
+--               par la hâte (0,5 × duree / vitesse de base) ; nil si la vitesse de base est illisible ou la durée secrète
+--   preparation GetTime() du dernier envoi du Tir auto (le premier tir se prépare dès l'envoi ; un envoi pendant le
+--               rechargement, une touche martelée, ne change rien au tir)
+-- ponytail: pas d'auto-calibrage de la latence (YaHT) ni des nouvelles tentatives quand on bouge (UNIT_SPELLCAST_FAILED_QUIET).
+local EMPLACEMENT_DISTANCE = INVSLOT_RANGED or 18
+local function secret(v) return issecretvalue and issecretvalue(v) end
+local function est(v, x) return not secret(v) and v == x end -- pas même == sur une valeur secrète
+local function noter(v) if secret(v) then return "secret" end return v end
+
+-- La vitesse de base de l'arme à distance, sans hâte : le nombre au bout du texte de droite d'une ligne de son infobulle
+-- (« Vitesse 2,80 », « Speed 2.80 » : quelle que soit la langue). Rend la vitesse ou nil, puis ce qu'en note la sonde.
+-- ponytail: relue à chaque tir (une infobulle toutes les 2 à 3 s) ; un cache par objet si ça pèse un jour.
+local function vitesseDeBase()
+  if not (C_TooltipInfo and C_TooltipInfo.GetInventoryItem) then return nil, "absente" end
+  local ok, v = pcall(function()
+    local donnees = C_TooltipInfo.GetInventoryItem("player", EMPLACEMENT_DISTANCE)
+    for _, ligne in ipairs(donnees and donnees.lines or {}) do
+      local texte = ligne.rightText
+      if secret(texte) then return "secret" end
+      local n = type(texte) == "string" and texte:match("(%d+[.,]%d+)%s*$")
+      if n then return tonumber((n:gsub(",", "."))) end
+    end
+  end)
+  if not ok then return nil, "erreur : " .. tostring(v) end
+  if type(v) == "number" and v > 0 then return v, v end
+  return nil, v == "secret" and "secret" or "illisible"
+end
+
+local swing
+local function changerSwing() -- une copie de la valeur, à remplir : l'ancienne, déjà rendue, ne bouge plus
+  local t = {}
+  for k, v in pairs(swing or {}) do t[k] = v end
+  swing = t
+  return t
+end
+
+local function surSwing(ev, ...)
+  if ev == "PLAYER_SWING" then
+    local duree, genre = ...
+    local tir = est(genre, TIR)
+    local base, noteBase
+    if tir then base, noteBase = vitesseDeBase() end
+    lib.Sonder("swing", noter(duree), noter(genre), noteBase)
+    if not tir then return end
+    local lisible = not secret(duree) and type(duree) == "number" and duree > 0
+    local t = changerSwing()
+    t.tir = GetTime()
+    t.duree = (lisible or secret(duree)) and duree or nil
+    t.immobile = lisible and base and 0.5 * duree / base or nil
+  elseif ev == "UNIT_SPELLCAST_SENT" then
+    local unite, _, _, sort = ...
+    if est(unite, "player") and est(sort, TIR_AUTOMATIQUE) then changerSwing().preparation = GetTime() end
+  elseif ev == "START_AUTOREPEAT_SPELL" then changerSwing().actif = true
+  elseif ev == "STOP_AUTOREPEAT_SPELL" then changerSwing().actif = false
+  end
+end
+lib.DeclarerSonde("swing",
+  "à chaque coup, PLAYER_SWING rend une durée positive et un type de swing (0, 1 ou 2), ni secrets ; pour un tir, "
+    .. "l'infobulle de l'arme à distance donne sa vitesse de base",
+  function(duree, genre, base)
+    return type(duree) == "number" and duree > 0 and (genre == 0 or genre == 1 or genre == 2)
+      and (base == nil or type(base) == "number" and base > 0)
+  end) -- pas de relevé sans contexte : il faut un coup (« pas encore vue » d'ici là)
+
 local LECTURES = {
   ["portée"] = {
     lire = portee,
@@ -122,6 +195,11 @@ local LECTURES = {
     -- ponytail: relu toutes les secondes, la mort du familier n'ayant pas d'événement sûr (UNIT_HEALTH et UNIT_FLAGS
     -- arrivent pour toutes les unités et relancent toutes les lectures) ; un événement sûr trouvé en jeu le remplacera.
     periode = 1,
+  },
+  ["swing"] = {
+    lire = function() return swing end,
+    evenements = { "PLAYER_SWING", "UNIT_SPELLCAST_SENT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL" },
+    evenement = surSwing, -- reçoit chaque événement écouté (et ses données) avant la relecture
   },
 }
 
@@ -154,10 +232,11 @@ local function relire(lecture)
 end
 
 -- ponytail: tout événement relit toutes les lectures suivies (une relecture sans changement ne rappelle personne).
-cadre:SetScript("OnEvent", function(_, ev)
+cadre:SetScript("OnEvent", function(_, ev, ...)
   for lecture in pairs(suivis) do
     local l = LECTURES[lecture]
     if ev == "PLAYER_TARGET_CHANGED" and l.demarrer then l.demarrer() end
+    if l.evenement then l.evenement(ev, ...) end
     relire(lecture)
   end
 end)
