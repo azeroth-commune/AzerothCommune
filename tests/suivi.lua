@@ -120,6 +120,24 @@ test("portée, natif absent : replis Coupure d'ailes (mêlée), Tir automatique 
     assertEquals("tir", porteeAvec(r { natif = { [MELEE] = false }, coupure = true, tirAuto = true }))
 end)
 
+test("portée en combat : CheckInteractDistance jamais appelé (le jeu le bloque), ni tir ni mêlée donne nil", function()
+    local r = { cible = true, attaquable = true, coupure = false, tirAuto = false, suivre = true }
+    local appels = 0
+    local j = jeu(r)
+    j.CheckInteractDistance = function() appels = appels + 1 return true end
+    j.InCombatLockdown = function() return true end
+    local recu, fn = suiveur()
+    avec(j, function()
+        assertTrue(AzerothCommune:Suivre("portée", fn))
+        AzerothCommune:NePlusSuivre("portée", fn)
+    end)
+    assertEquals(0, appels, "CheckInteractDistance appelé en combat")
+    assertEquals("nil", recu[1], "en combat, ni tir ni mêlée : on ne sait pas")
+    j.InCombatLockdown = function() return true end
+    r.tirAuto = true
+    assertEquals("tir", (function() local rr, f = suiveur(); avec(j, function() AzerothCommune:Suivre("portée", f); AzerothCommune:NePlusSuivre("portée", f) end) return rr[1] end)())
+end)
+
 test("la même fonction suivie deux fois : inscrite une fois, rappelée tout de suite à chaque Suivre, une fois par changement", function()
     local AC = AzerothCommune
     local r = { cible = true, attaquable = true, natif = { [TIR] = true, [MELEE] = false } }
