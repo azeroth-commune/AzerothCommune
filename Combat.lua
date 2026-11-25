@@ -9,8 +9,8 @@
 -- le familier, les munitions et l'aspect, calculés, n'en rendent jamais : une réponse secrète y donne nil). Une table
 -- rendue est partagée entre les suiveurs : la lire, jamais la modifier.
 -- Lectures : « portée » (une chaîne, voir portee), « familier » (une table, voir familier), « swing » (une table,
--- voir surSwing), « munitions » (un nombre ou false, voir munitions), « aspect » (une chaîne, voir aspect) et « pv du
--- familier » (un nombre ou une valeur secrète, voir pvDuFamilier).
+-- voir surSwing), « munitions » (un nombre ou false, voir munitions), « aspect » (une chaîne, voir aspect), « pv du
+-- familier » (un nombre ou une valeur secrète, voir pvDuFamilier) et « déplacement » (true ou false, voir deplacement).
 local lib = AzerothCommune
 
 local TIR, MELEE = 2, 0 -- Enum.PlayerSwingType.Ranged, .MainHand
@@ -395,6 +395,16 @@ lib.DeclarerSonde("aspect",
     return true
   end, function() aspect() end)
 
+-- Déplacement du joueur (BeAGoodPal#32) : IsPlayerMoving, true ou false (lisible en combat, sans drapeau secret dans la
+-- doc Forever), nil quand la réponse ne tranche pas. La sonde note la réponse.
+local function deplacement()
+  local v, note = demander(IsPlayerMoving)
+  lib.Sonder("déplacement", note)
+  return v
+end
+lib.DeclarerSonde("déplacement", "IsPlayerMoving() rend oui ou non : ni absente, ni secrète, ni en erreur",
+  function(note) return type(note) == "boolean" end, function() deplacement() end)
+
 local LECTURES = {
   ["portée"] = {
     lire = portee,
@@ -436,6 +446,7 @@ local LECTURES = {
   munitions = { lire = munitions, evenements = { "BAG_UPDATE", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED" },
     unite = "player" },
   aspect = { lire = aspect, evenements = { "UNIT_AURA", "PLAYER_REGEN_ENABLED" }, unite = "player" },
+  ["déplacement"] = { lire = deplacement, evenements = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" } },
   ["pv du familier"] = {
     lire = function() return pvDuFamilier() end,
     evenements = { "UNIT_HEALTH", "UNIT_MAXHEALTH" },
