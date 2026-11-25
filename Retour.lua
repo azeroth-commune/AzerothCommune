@@ -77,7 +77,10 @@ function ns.rapportRetour()
     tostring(UnitLevel("player")), tostring(classe)))
   local dossiers = nos_dossiers()
   local v = {}
-  for _, d in ipairs(dossiers) do v[#v + 1] = d .. " " .. tostring(C_AddOns.GetAddOnMetadata(d, "Version")) end
+  for _, d in ipairs(dossiers) do -- sans version : un dossier qui n'est pas un add-on (Be a Good Pal) ou une TOC sans Version
+    local ver = C_AddOns.GetAddOnMetadata(d, "Version")
+    v[#v + 1] = ver and (d .. " " .. ver) or d
+  end
   dire("Add-ons : " .. table.concat(v, ", "))
 
   local rouges = {}
