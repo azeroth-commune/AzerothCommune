@@ -37,7 +37,7 @@ local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", 
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 12, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, l'état de combat, #98)")
+assert(#fichiersCharges("AzerothCommune") == 13, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
@@ -194,7 +194,7 @@ print("Azeroth Commune : sondes, royaume vide OK")
 
 -- Catalogue : les types que la base relève (leur accesseur privé : plus bas, avec la base).
 local attendus = { "inventaires", "réputations", "métiers et compétences", "quêtes terminées", "recettes connues",
-  "base des recettes", "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
+  "base des recettes", "base des quêtes", "maîtres de métier", "marchands", "prix des vols", "add-ons installés", "cours de l'HV", "objets" }
 local nTypes = 0
 for _ in pairs(lib.types) do nTypes = nTypes + 1 end
 assert(nTypes == #attendus, "catalogue : " .. nTypes .. " types")
@@ -1835,5 +1835,24 @@ do (function() -- une fonction : le fichier a atteint 200 locales
   assert(src == "marchand" and c == 20, "prix d'achat d'un objet hors artisanat : 10 pc les 200")
   assert(pmv[2447] == nil and gns.VENDOR_DB[2447] == nil, "Pacifique, vendu seulement en stock limité (cMaNGOS) : pas de prix marchand")
   print("Azeroth Commune : base des marchands par catégorie et prix d'achat OK")
+end)() end
+
+-- La base des quêtes (#43) : la réserve générée depuis QuestieDB Forever (QuetesReserve.lua), rien sans souscription.
+do (function()
+  AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = {} }, nil, nil
+  gns, glib = session("Alice")
+  charger("QuetesReserve", gns)
+  local d, raison = glib:Lire("base des quêtes")
+  assert(d == nil and raison == "pas encore relevé", "sans souscription : rien")
+  assert(glib:Souscrire("base des quêtes"))
+  local lot
+  d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "source externe" and lot.source == "QuestieDB Forever" and lot.version and lot.date, "lot : provenance")
+  local q = d[952] -- Bosquet des Anciens, à Sombrivage ; prérequis : Teldrassil (940), à Teldrassil
+  assert(q.zone == 148 and q.prerequis_un[1] == 940 and d[940].zone == 141, "952 : zone et prérequis")
+  assert(q.donneur.pnj == 3516 and q.donneur.objet == nil and d[940].donneur.objet == 673378, "donneur : PNJ, ou objet (ID négatif)")
+  assert(d[93963].races[1] == 95 and #d[93963].races == 1 and q.races[1] == 1 and q.races[5] == 95, "races : raceID, Skyborne 95")
+  assert(d[729].amorces[1] == 730 and d[729].prerequis == nil and d[729].prerequis_un == nil, "730 : une amorce de 729, pas un prérequis")
+  print("Azeroth Commune : base des quêtes OK")
 end)() end
 end

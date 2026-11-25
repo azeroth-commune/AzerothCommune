@@ -25,7 +25,7 @@ chacun → *Release type* : **Beta**. À la main : dézippe `AzerothCommune` dan
 
 **Licence** : GPL-3.0 ou ultérieure (voir [`LICENSE`](LICENSE)). La liste des marchands vient de
 [Fabrikao](https://github.com/LechuckThePirate/Fabrikao) (GPL-3.0, LechuckThePirate) pour les patrons des recettes, et de
-[QuestieDB](https://github.com/Questie/QuestieDB) (GPL-3.0) pour les autres objets ; le stock limité, de
+[QuestieDB](https://github.com/Questie/QuestieDB) (GPL-3.0) pour les autres objets ; la base des quêtes, de QuestieDB ; le stock limité, de
 [cMaNGOS](https://github.com/cmangos/classic-db) (GPL-3.0) ; le catalogue des objets et la réserve des recettes sont extraits du
 client du jeu, avec leurs conditions (spécialisation, réputation) ; la source « maître » ou « patron vendu » vient de
 Fabrikao ; la compétence pour apprendre (rang et seuil jaune de Classic Era, Wowhead pour les recettes de Forever) vient
@@ -58,6 +58,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
 | `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, commité (le socle est sous GPL-3.0) ; sans lui, le type « objets » rend les seuls objets relevés |
+| `QuetesReserve.lua` | la réserve de la base des quêtes, privée au socle : générée par `tools/build_quest_data.py` de l'atelier depuis QuestieDB Forever (GPL-3.0), seulement les quêtes de l'Alliance et des deux factions, commitée |
 | `RecettesReserve.lua` | la réserve de la base des recettes, privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, commitée (le socle est sous GPL-3.0) ; sans elle, la base des recettes rend les seules recettes vues |
 
 ## Accès aux données relevées
@@ -89,6 +90,23 @@ local b, lot = AC:Lire("base des recettes")
 -- réserve (extrait du client, build, version, date ; perime sous un autre build). Souscrite seule, la fenêtre de métier relève les recettes vues, pas les connues du perso. Le
 -- relevé des recettes connues sans fenêtre de métier interroge les recettes vues et la réserve ; aucun add-on ne remet
 -- rien au socle. Une recette vue n'a pas de champ provenance (relevé direct, comme une ligne de tête de lib.Fusionner).
+AC:Souscrire("base des quêtes")                    -- les quêtes que l'Alliance peut prendre, non liées à un perso (#43)
+local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription : nil, « pas encore relevé »
+-- q = { [questID] = { nom, zone, niveau, niveau_requis, races, classes, prerequis, prerequis_un, suites, amorces, donneur,
+--   objet } } : la réserve générée depuis QuestieDB Forever, seule (rien n'est relevé en jeu) ; lot = { provenance =
+--   « source externe », source = « QuestieDB Forever », version, date (de la génération) }.
+-- nom : français (traductions de QuestieDB), sinon anglais. zone : l'areaID (C_Map.GetAreaInfo pour son nom) ; négative :
+-- une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue (avec les corrections de zone que QuestieDB fait en
+-- jeu pour l'Alliance). races : liste des raceID (select(3, UnitRace("player")) ; 95 : Skyborne de l'Alliance), classes :
+-- liste des classID (select(3, UnitClass("player"))), nil : toutes ; toute l'Alliance : {1, 3, 4, 7, 95}.
+-- prerequis : quêtes à avoir toutes terminées ; prerequis_un : il suffit d'en avoir terminé une. suites : la suite de
+-- QuestieDB et les quêtes qui ont celle-ci en prérequis ; amorces : quêtes facultatives qui y mènent (pas des prérequis).
+-- Listes de questID, nil quand vides ; suites, amorces : de la réserve ; prerequis, prerequis_un : tels quels dans
+-- QuestieDB (une quête de la Horde, absente de la réserve, peut y être : d[p] nil ; un ID négatif dans 2 quêtes).
+-- donneur = { pnj ou objet (son ID ; un objet du monde : coffre, stèle…),
+-- nom, carte (uiMapID), x, y (pourcentage de la carte) } : le premier donneur, un PNJ amical pour l'Alliance d'abord, à sa
+-- première apparition dans la zone de la quête (sinon la première listée ; x, y nil dans une instance) ; nil sans donneur.
+-- objet : l'objet qui donne la quête (nil sans).
 AC.Ecarts()                                        -- { { genre, recette, nom, attendu, vu, pnj, pnjNom, patron, date }, … } :
 -- chaque maître ou marchand vu en jeu qui contredit la réserve des recettes (« compétence », « patron absent », « marchand
 -- inconnu ») ; gardés dans la base sans doublon (un écart revu prend la date du relevé), rien d'autre n'est corrigé
@@ -115,7 +133,7 @@ AC:PrixMarchands()                                  -- { [itemID] = prix unitair
 ```
 
 Types de données (`AC.types`) : inventaires, réputations, métiers et compétences, quêtes terminées, recettes connues
-(par personnage) ; base des recettes, maîtres de métier, marchands, prix des vols, add-ons installés, cours de l'HV, objets (pour le joueur).
+(par personnage) ; base des recettes, base des quêtes, maîtres de métier, marchands, prix des vols, add-ons installés, cours de l'HV, objets (pour le joueur).
 « objets » : les objets relevés en jeu, puis, pour les autres, le catalogue des objets livré avec le socle (provenance
 « extrait du client » sur chaque ligne : `name`, `quality`) ; un objet relevé l'emporte dès qu'il a son nom.
 

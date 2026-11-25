@@ -18,6 +18,7 @@ local RANGEMENT = {
   ["quêtes terminées"] = { persos = { "quests_done" } },
   ["recettes connues"] = { persos = { "recipes" }, base = { "recipes", "trade_seen" } },
   ["base des recettes"] = { base = { "recipes" } }, -- les recettes vues, partagées avec les recettes connues ; la réserve n'est pas relevée
+  ["base des quêtes"] = {}, -- rien de relevé : la réserve seule (#43)
   ["maîtres de métier"] = { base = { "trainers" } },
   marchands = { base = { "vendors" } },
   ["prix des vols"] = { base = { "taxi" } },
@@ -134,6 +135,25 @@ lire.objets = function()
   -- ponytail: GetBuildInfo est toujours là en jeu ; le garde sert aux check.lua des add-ons qui ne le bouchonnent pas.
   lot.provenance, lot.perime = "extrait du client", GetBuildInfo and lot.build ~= lib.Build() or nil
   return fusion.d, lot
+end
+-- Base des quêtes (#43) : la réserve QuetesReserve.lua seule, générée par tools/build_quest_data.py de l'atelier depuis
+-- QuestieDB Forever (GPL-3.0) et commitée, mise en forme une fois (champs nommés, AzerothCommune.lua) ; rien sans souscription
+-- (le type n'a rien à relever : la souscription dit seulement qu'un add-on la lit). Lot : une copie de ns.quetesReserveLot.
+local quetes, quetesBrutes
+lire["base des quêtes"] = function()
+  if not ns.souscrit("base des quêtes") or not ns.quetesReserve then return nil end
+  if quetesBrutes ~= ns.quetesReserve then
+    quetesBrutes, quetes = ns.quetesReserve, {}
+    for id, c in pairs(quetesBrutes) do
+      local d = c[11] -- { ID (négatif : un objet du monde), nom, carte, x, y } ; races, classes : listes d'IDs, nil : toutes
+      quetes[id] = { nom = c[1], zone = c[2], niveau = c[3], niveau_requis = c[4], races = c[5], classes = c[6],
+        prerequis = c[7], prerequis_un = c[8], suites = c[9], amorces = c[10], objet = c[12],
+        donneur = d and { pnj = d[1] > 0 and d[1] or nil, objet = d[1] < 0 and -d[1] or nil, nom = d[2], carte = d[3], x = d[4], y = d[5] } }
+    end
+  end
+  local lot = {}
+  for f, v in pairs(ns.quetesReserveLot or {}) do lot[f] = v end
+  return quetes, lot
 end
 -- Lu par AzerothCommune.Personnage(guid) : le nom d'un perso du joueur, gardé dans sa fiche à chaque connexion.
 function ns.personnage(guid)

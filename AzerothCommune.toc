@@ -14,6 +14,7 @@ Regroupement.lua
 Fournisseurs.lua
 Base.lua
 RecettesReserve.lua
+QuetesReserve.lua
 CatalogueObjets.lua
 Commerce.lua
 Souscriptions.lua
