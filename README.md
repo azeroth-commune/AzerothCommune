@@ -53,7 +53,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
-| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible, familier, Tir auto, mana, coût des formes, pas assez de mana, munitions, aspect) et leurs sondes |
+| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, `PVDuFamilier`, les lectures (portée de la cible, familier, PV du familier, Tir auto, mana, coût des formes, pas assez de mana, munitions, aspect) et leurs sondes |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
@@ -181,6 +181,8 @@ souscription : rien n'est relevé ni gardé, le suivi ne dure que la session.
 AC:Suivre("portée", function(valeur) end) -- fn(valeur) tout de suite, puis à chaque changement ; true, ou false et la raison
                                           -- (« lecture inconnue », « pas une fonction » : rien n'est suivi)
 AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn que pour Suivre) ; true, ou false, « lecture inconnue »
+AC:PVDuFamilier(courbe)                  -- les PV du familier passés par courbe (C_CurveUtil.CreateCurve), évaluée par le jeu :
+                                         -- un nombre ou une valeur secrète, tel quel (pour SetAlpha…) ; nil sans familier
 ```
 
 - **nil = inconnu, jamais « non »** : pas de cible, une réponse qui ne tranche pas, une API absente ou en erreur.
@@ -199,7 +201,7 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 | Lecture | Valeurs | Comment le socle la lit |
 |---|---|---|
 | `portée` | `"tir"`, `"zone morte"`, `"mêlée"`, `"trop loin"`, nil | le test de portée natif du swing timer, activé à chaque suivi et réarmé à chaque changement de cible tant qu'elle est suivie (`C_SwingTimer.EnableRangeCheck` pour la mêlée et le tir : sans lui, il ne répond pas ; la barre de swing du jeu ou un autre add-on peut le couper), relu à `PLAYER_SWING_RANGE_UPDATE`, au changement de cible et toutes les 0,2 s ; replis quand il ne dit rien : la portée de Coupure d'ailes pour la mêlée (jamais l'Attaque du raptor, qui répond « à portée » à distance de tir), celle du Tir automatique pour le tir ; ni mêlée ni tir : le test « suivre » (`CheckInteractDistance`, 28 m) sépare zone morte et trop loin. Sans cible attaquable : nil. Les replis sont des sorts de chasseur : pour une autre classe, sans le natif, nil |
-| `familier` | `{ present, mort, humeur, nourritures }`, nil | `present` : `UnitExists("pet")` ; `mort` : `UnitIsDead("pet")`, seulement si le familier est là (absent, il peut être renvoyé ou mort sans corps : le jeu ne le dit pas, `mort` reste nil) ; `humeur` : 1er retour de `C_PetInfo.GetPetHappiness`, 1 (mécontent), 2 (content) ou 3 (heureux) ; `nourritures` : `C_PetInfo.GetPetFoodTypes`, les types qu'il mange, noms du client (« Viande »…). Relu à `UNIT_PET`, `UNIT_HAPPINESS`, `PET_UI_UPDATE` et toutes les secondes (la mort n'a pas d'événement sûr). Chaque champ nil quand sa réponse ne tranche pas ; la lecture entière nil quand le jeu ne dit pas si le familier est là |
+| `familier` | `{ present, mort, humeur, nourritures, grondement }`, nil | `present` : `UnitExists("pet")` ; `mort` : `UnitIsDead("pet")`, seulement si le familier est là (absent, il peut être renvoyé ou mort sans corps : le jeu ne le dit pas, `mort` reste nil) ; `humeur` : 1er retour de `C_PetInfo.GetPetHappiness`, 1 (mécontent), 2 (content) ou 3 (heureux) ; `nourritures` : `C_PetInfo.GetPetFoodTypes`, les types qu'il mange, noms du client (« Viande »…) ; `grondement` : le lancement automatique du Grondement, 6e retour de `GetPetActionInfo` sur la case de la barre du familier qui porte son nom (nil s'il n'y est pas). Relu à `UNIT_PET`, `UNIT_HAPPINESS`, `PET_UI_UPDATE`, `PET_BAR_UPDATE` et toutes les secondes (la mort n'a pas d'événement sûr). Chaque champ nil quand sa réponse ne tranche pas ; la lecture entière nil quand le jeu ne dit pas si le familier est là |
 | `swing` | nil tant que rien n'est venu, puis une table neuve à chaque changement (jamais modifiée ensuite) : `actif` (true au début du tir répété, false à sa fin : Tab, cible morte… ; nil avant), `tir` (`GetTime()` du dernier tir parti), `duree` (secondes jusqu'au tir suivant, corrigées de la hâte par le jeu ; secrète : passée telle quelle), `immobile` (secondes, à la fin de `duree`, où il faut rester immobile : 0,5 s à la vitesse de base de l'arme, réduite par la hâte ; nil si inconnue), `preparation` (`GetTime()` du dernier envoi du Tir auto) | `PLAYER_SWING` (seulement le type Tir), `UNIT_SPELLCAST_SENT` du Tir automatique (75 : Forever n'envoie pas de début de sort pour lui), `START_AUTOREPEAT_SPELL` et `STOP_AUTOREPEAT_SPELL` ; la vitesse de base est le nombre au bout d'une ligne de droite de l'infobulle de l'arme à distance (`C_TooltipInfo.GetInventoryItem`, emplacement 18). Pas d'auto-calibrage de la latence |
 | `mana` | un nombre, une valeur secrète (en combat), nil | `UnitPower("player", 0)`, relu à `UNIT_POWER_FREQUENT` du joueur. Secrète, elle passe telle quelle (pour un `StatusBar:SetValue`, jamais un calcul) et rappelle à chaque relecture, sans être comparée |
 | `mana max` | un nombre, une valeur secrète, nil | `UnitPowerMax("player", 0)`, relu à `UNIT_MAXPOWER` du joueur ; secrète, comme `mana` |
@@ -207,9 +209,10 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 | `pas assez de mana` | `{ [ID du sort] = true / false }` | pour les mêmes sorts, le 2e retour de `C_Spell.IsSpellUsable` (le jeu dit « pas assez de mana »), relu à `SPELL_UPDATE_USABLE`, `SPELLS_CHANGED` et `UNIT_POWER_FREQUENT` du joueur. Un sort manque : pas connu, ou réponse qui ne tranche pas (secrète…) |
 | `munitions` | le compte (nombre), `0` sans munitions placées, `false` si l'arme n'en utilise pas, nil | `UnitUsesAmmo("player")`, puis le compte de l'emplacement de munitions (`GetInventoryItemCount`) ; s'il ne répond pas ou répond 1, celui de cet objet dans les sacs (`C_Item.GetItemCount`). Relue à `BAG_UPDATE`, `PLAYER_EQUIPMENT_CHANGED` et `UNIT_INVENTORY_CHANGED` du joueur |
 | `aspect` | `"faucon"`, `"singe"`, `"guépard"`, `"meute"`, `"bête"`, `"nature"`, `"aucun"`, nil | chaque aspect cherché par son nom (celui du client, par l'ID de son premier rang : tous les rangs) dans tes auras (`C_UnitAuras.GetAuraDataBySpellName`, filtre `HELPFUL\|PLAYER`). Rien trouvé : `"aucun"` hors combat, ou en combat si `C_Secrets.ShouldSpellAuraBeSecret` dit non pour chaque aspect ; sinon nil. Relue à `UNIT_AURA` du joueur et à la fin du combat. Vipère et Faucon du dragon : pas lus (non confirmés sur Forever) |
+| `pv du familier` | un nombre de 0 à 100, ou une valeur secrète (en combat comme hors combat), nil | `UnitHealthPercent("pet", true, courbe)` avec une courbe 0 → 0, 1 → 100 : le pourcentage, calculé par le jeu (`CurveConstants.ScaleTo100` n'existe pas sur Forever), passé tel quel, pour l'affichage seulement (`SetFormattedText`) ; nil sans familier (`UnitExists("pet")`) ou quand le jeu ne répond pas. Écouté à `UNIT_HEALTH` et `UNIT_MAXHEALTH` du familier seul, et relu toutes les secondes (familier appelé ou renvoyé). Un seuil se fait par `AC:PVDuFamilier(courbe)` : la courbe du suiveur, évaluée par le jeu, rendue telle quelle (pour `SetAlpha`) |
 
 Un événement partagé par deux lectures reste écouté tant que l'une d'elles est suivie ; les événements `UNIT_*` des
-lectures du joueur ne sont écoutés que pour lui.
+lectures du joueur (du familier pour ses PV) ne sont écoutés que pour lui.
 
 Sondes `mana` et `mana max` : un nombre, ou « secret » (noté ainsi, jamais la valeur) : vertes ; absente, en erreur ou
 autre chose : rouges. Sondes `coût des formes` et `pas assez de mana` : une note par sort, dans l'ordre ci-dessus (Ours…
@@ -224,7 +227,12 @@ sans suivi (`AC.RelancerSondes()`, Diagnostic) : cible un monstre pour voir ce q
 
 Sonde `familier` : `UnitExists` et `UnitIsDead` sur le familier rendent oui, non ou nil ; `GetPetHappiness` une humeur de
 1 à 3 ou rien ; `GetPetFoodTypes` une liste de noms (notée `{ n, … }`) ou rien : ni absents, ni secrets, ni en erreur.
-Relançable sans suivi : familier appelé, mort, puis renvoyé.
+Relançable sans suivi : familier appelé, mort, puis renvoyé. Elle note aussi le lancement automatique du Grondement (oui,
+non ou rien).
+
+Sonde `pv du familier` : `UnitExists("pet")` rend oui, non ou nil ; le familier là, `UnitHealthPercent` rend un nombre ou
+une valeur secrète (notée « secret », verte : c'est attendu) : ni absente, ni en erreur, ni sans courbe (`C_CurveUtil`).
+Vérifiée aussi à chaque `PVDuFamilier`. Relançable sans suivi : familier appelé, en combat et hors combat.
 
 Sonde `swing` : à chaque coup suivi, la durée et le type de `PLAYER_SWING`, puis (pour un tir) la vitesse de base de
 l'arme ; verte sur une durée positive, un type 0, 1 ou 2 et une vitesse positive ; rouge sur une valeur secrète (notée

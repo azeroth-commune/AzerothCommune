@@ -4,11 +4,13 @@
 --   AC:Suivre(lecture, fn)      : fn(valeur) tout de suite, puis à chaque changement ; true, ou false et la raison
 --                                 (« lecture inconnue », « pas une fonction »). La même fn suivie deux fois : inscrite une fois.
 --   AC:NePlusSuivre(lecture, fn) : fn n'est plus rappelé ; le dernier suiveur parti, le socle cesse d'écouter le jeu.
+--   AC:PVDuFamilier(courbe)     : les PV du familier passés par une courbe (C_CurveUtil) que le jeu évalue, tels quels.
 -- valeur : nil = inconnu, jamais « non » ; une valeur secrète passe telle quelle, pour l'affichage seulement (la portée,
 -- le familier, les munitions et l'aspect, calculés, n'en rendent jamais : une réponse secrète y donne nil). Une table
 -- rendue est partagée entre les suiveurs : la lire, jamais la modifier.
 -- Lectures : « portée » (une chaîne, voir portee), « familier » (une table, voir familier), « swing » (une table,
--- voir surSwing), « munitions » (un nombre ou false, voir munitions) et « aspect » (une chaîne, voir aspect).
+-- voir surSwing), « munitions » (un nombre ou false, voir munitions), « aspect » (une chaîne, voir aspect) et « pv du
+-- familier » (un nombre ou une valeur secrète, voir pvDuFamilier).
 local lib = AzerothCommune
 
 local TIR, MELEE = 2, 0 -- Enum.PlayerSwingType.Ranged, .MainHand
@@ -65,17 +67,32 @@ lib.DeclarerSonde("portée",
     .. "puis du Tir automatique, et le test « suivre » (28 m) rendent oui, non ou nil : ni absents, ni secrets, ni en erreur",
   ouiNonOuNil, function() portee() end)
 
--- Le familier : { present, mort, humeur, nourritures }, nil quand le jeu ne dit pas s'il est là. present : UnitExists ;
+-- Grondement en lancement automatique : le 6e retour de GetPetActionInfo sur la case de la barre du familier qui porte
+-- son nom (celui du rang 1, le même pour tous les rangs, dans la langue du client) ; nil s'il n'y est pas.
+local GRONDEMENT = 2649
+local function grondementAuto()
+  local nom, info = brut(C_Spell and C_Spell.GetSpellName, GRONDEMENT), GetPetActionInfo
+  return demander(info and type(nom) == "string" and function()
+    for i = 1, NUM_PET_ACTION_SLOTS or 10 do
+      local n, _, _, _, _, auto = info(i)
+      if not (issecretvalue and issecretvalue(n)) and n == nom then return auto end
+    end
+  end)
+end
+
+-- Le familier : { present, mort, humeur, nourritures, grondement }, nil quand le jeu ne dit pas s'il est là. present : UnitExists ;
 -- mort (UnitIsDead) seulement s'il est là (absent, il peut être renvoyé ou mort sans corps : le jeu ne le dit pas) ;
--- humeur 1 (mécontent), 2 (content), 3 (heureux) ; nourritures : les types qu'il mange, noms du client (« Viande »…).
+-- humeur 1 (mécontent), 2 (content), 3 (heureux) ; nourritures : les types qu'il mange, noms du client (« Viande »…) ;
+-- grondement : son lancement automatique (BeAGoodPal#29), vrai ou faux.
 -- Chaque champ nil quand sa réponse ne tranche pas (secrète, en erreur, hors de ce qu'on attend). La sonde note les
--- quatre réponses ; les types en { n, … } pour se lire dans Diagnostic.
+-- cinq réponses ; les types en { n, … } pour se lire dans Diagnostic.
 local function familier()
   local pet = C_PetInfo or {}
   local present, a = demander(UnitExists, "pet")
   local mort, b = demander(UnitIsDead, "pet")
   local humeur, c = brut(pet.GetPetHappiness)
   local types, d = brut(pet.GetPetFoodTypes)
+  local grondement, e = grondementAuto()
   local nourritures
   if type(types) == "table" then
     nourritures, d = {}, { n = #types }
@@ -86,17 +103,18 @@ local function familier()
       if nourritures then nourritures[i] = t end
     end
   end
-  lib.Sonder("familier", a, b, c, d)
+  lib.Sonder("familier", a, b, c, d, e)
   if present == nil then return nil end
   if humeur ~= 1 and humeur ~= 2 and humeur ~= 3 then humeur = nil end
   if not present then return { present = false } end
-  return { present = true, mort = mort, humeur = humeur, nourritures = nourritures or nil }
+  return { present = true, mort = mort, humeur = humeur, nourritures = nourritures or nil, grondement = grondement }
 end
 lib.DeclarerSonde("familier",
   "UnitExists et UnitIsDead sur le familier rendent oui, non ou nil ; C_PetInfo.GetPetHappiness une humeur de 1 à 3 ou "
-    .. "rien, et GetPetFoodTypes une liste de noms ou rien : ni absents, ni secrets, ni en erreur",
-  function(a, b, c, d)
-    if not ouiNonOuNil(a, b) then return false end
+    .. "rien, GetPetFoodTypes une liste de noms ou rien, et le lancement automatique du Grondement dans la barre du "
+    .. "familier (GetPetActionInfo) oui, non ou rien : ni absents, ni secrets, ni en erreur",
+  function(a, b, c, d, e)
+    if not ouiNonOuNil(a, b, e) then return false end
     if c ~= nil and c ~= 1 and c ~= 2 and c ~= 3 then return false end
     if d == nil then return true end
     if type(d) ~= "table" then return false end
@@ -188,6 +206,35 @@ local function affichable(fn, ...)
   return v, v
 end
 local function nombreOuSecret(note) return type(note) == "number" or note == "secret" end
+
+-- Les PV du familier (BeAGoodPal#29), secrets en combat comme hors combat : jamais comparés ni calculés, ici comme
+-- chez qui les suit. UnitHealthPercent("pet", true, courbe) : le jeu évalue lui-même la courbe sur la part de vie (0 à 1)
+-- et rend le résultat, un nombre ou une valeur secrète, passé tel quel (affichable) ; nil sans familier, ou quand le jeu
+-- ne répond pas. Sans courbe : le pourcentage, de 0 à 100 (CurveConstants.ScaleTo100 n'existe pas sur Forever). La
+-- sonde note l'existence du familier puis la réponse (« secret », attendu : verte).
+local centPourCent
+local function pvDuFamilier(courbe)
+  if not courbe then
+    if not centPourCent and C_CurveUtil and C_CurveUtil.CreateCurve and Enum.LuaCurveType then
+      centPourCent = C_CurveUtil.CreateCurve()
+      centPourCent:SetType(Enum.LuaCurveType.Linear)
+      centPourCent:AddPoint(0, 0); centPourCent:AddPoint(1, 100)
+    end
+    courbe = centPourCent
+  end
+  local present, a = demander(UnitExists, "pet")
+  local v, b
+  if present and not courbe then b = "courbe absente"
+  elseif present then v, b = affichable(UnitHealthPercent, "pet", true, courbe) end
+  lib.Sonder("pv du familier", a, b)
+  return v
+end
+lib.DeclarerSonde("pv du familier",
+  "UnitExists(\"pet\") rend oui, non ou nil ; familier là, UnitHealthPercent(\"pet\", true, courbe) rend un nombre ou une "
+    .. "valeur secrète : ni absente, ni en erreur",
+  function(a, b) return ouiNonOuNil(a) and (b == nil or nombreOuSecret(b)) end,
+  function() pvDuFamilier() end)
+function lib:PVDuFamilier(courbe) return pvDuFamilier(courbe) end
 local function mana()
   local v, note = affichable(UnitPower, "player", MANA)
   lib.Sonder("mana", note)
@@ -358,7 +405,7 @@ local LECTURES = {
   },
   familier = {
     lire = familier,
-    evenements = { "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" },
+    evenements = { "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE", "PET_BAR_UPDATE" },
     -- ponytail: relu toutes les secondes, la mort du familier n'ayant pas d'événement sûr ; un événement trouvé en jeu
     -- (UNIT_HEALTH ou UNIT_FLAGS, avec unite = "pet") le remplacera.
     periode = 1,
@@ -383,6 +430,14 @@ local LECTURES = {
   munitions = { lire = munitions, evenements = { "BAG_UPDATE", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED" },
     unite = "player" },
   aspect = { lire = aspect, evenements = { "UNIT_AURA", "PLAYER_REGEN_ENABLED" }, unite = "player" },
+  ["pv du familier"] = {
+    lire = function() return pvDuFamilier() end,
+    evenements = { "UNIT_HEALTH", "UNIT_MAXHEALTH" },
+    unite = "pet",
+    -- ponytail: relu toutes les secondes, le familier appelé ou renvoyé n'ayant pas d'événement de vie (UNIT_PET vient du
+    -- joueur, pas du familier) ; secrets, ils sont rappelés à chaque relecture (jamais comparés).
+    periode = 1,
+  },
 }
 
 -- Deux valeurs pareilles : égales, ou deux tables aux mêmes champs (les lectures rendent une table neuve à chaque fois).

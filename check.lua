@@ -969,7 +969,7 @@ function verifierGlobalDocumente(lib)
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
     Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres
-    MaitresDuMetier Ecarts RechercheObjets RecevoirObjet Suivre NePlusSuivre]]):gmatch("%S+") do
+    MaitresDuMetier Ecarts RechercheObjets RecevoirObjet Suivre NePlusSuivre PVDuFamilier]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end

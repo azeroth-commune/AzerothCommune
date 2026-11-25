@@ -20,8 +20,9 @@ local function avec(jeu, fn)
     assert(ok, err)
 end
 
--- Les réponses du jeu, lues dans r à chaque appel. r = { la, mort, humeur, nourritures } ; une valeur fonction est
--- appelée (pour lever une erreur).
+-- Les réponses du jeu, lues dans r à chaque appel. r = { la, mort, humeur, nourritures, grondement } ; une valeur
+-- fonction est appelée (pour lever une erreur). grondement : le lancement automatique de la case du Grondement dans la
+-- barre du familier (case 4, après Attaquer, Suivre et Rester) ; nil : pas de Grondement dans la barre.
 local function jeu(r)
     local function rendre(v) if type(v) == "function" then return v() end return v end
     return {
@@ -31,6 +32,12 @@ local function jeu(r)
             GetPetHappiness = function() return rendre(r.humeur), 0, 0 end,
             GetPetFoodTypes = function() return rendre(r.nourritures) end,
         },
+        GetPetActionInfo = function(i)
+            if i == 1 then return "PET_ACTION_ATTACK", nil, true, false, false, false end
+            if i == 4 and r.grondement ~= nil then return "Grondement", nil, false, false, true, rendre(r.grondement), 14921 end
+            if i == 5 then return "Morsure", nil, false, false, true, true, 17253 end
+        end,
+        ["C_Spell.GetSpellName"] = function(id) if id == 2649 then return "Grondement" end end,
         issecretvalue = function(v) return v == SECRET end,
     }
 end
@@ -57,6 +64,28 @@ test("familier : là, vivant, humeur et types de nourriture tels que le jeu les 
     assertEquals(true, f.mort)
     assertEquals(1, f.humeur)
     assertEquals(0, #f.nourritures)
+end)
+
+test("familier : le Grondement en lancement automatique, lu dans la barre du familier ; nil s'il n'y est pas", function()
+    assertEquals(true, familierAvec({ la = true, mort = false, grondement = true }).grondement)
+    assertEquals(false, familierAvec({ la = true, mort = false, grondement = false }).grondement)
+    assertNil(familierAvec({ la = true, mort = false }).grondement, "pas de Grondement dans la barre : inconnu")
+    assertNil(familierAvec({ la = true, mort = false, grondement = SECRET }).grondement, "secret : inconnu")
+    assertEquals("rouge", AzerothCommune.Sondes()["familier"].etat, "un lancement automatique secret : sonde rouge")
+    assertNil(familierAvec({ la = false, grondement = true }).grondement, "familier absent : rien d'autre")
+end)
+
+test("familier : rappelé quand le lancement automatique du Grondement change (PET_BAR_UPDATE)", function()
+    local r = { la = true, mort = false, humeur = 2, nourritures = {}, grondement = true }
+    avec(jeu(r), function()
+        local recu = {}
+        local function fn(v) recu[#recu + 1] = v end
+        assertTrue(AzerothCommune:Suivre("familier", fn))
+        r.grondement = false
+        FireEvent("PET_BAR_UPDATE")
+        assertEquals(false, recu[2].grondement)
+        AzerothCommune:NePlusSuivre("familier", fn)
+    end)
 end)
 
 test("familier absent : present faux, et rien d'autre (mort inconnue : renvoyé ou mort sans corps)", function()
