@@ -158,7 +158,8 @@ local function surSwing(ev, ...)
     local lisible = not secret(duree) and type(duree) == "number" and duree > 0
     local t = changerSwing()
     t.tir = GetTime()
-    t.duree = (lisible or secret(duree)) and duree or nil
+    -- Pas de « x and duree or nil » : le « or » ferait un test booléen sur la valeur secrète, refusé par le jeu.
+    if lisible or secret(duree) then t.duree = duree else t.duree = nil end
     t.immobile = lisible and base and 0.5 * duree / base or nil
   elseif ev == "UNIT_SPELLCAST_SENT" then
     local unite, _, _, sort = ...
@@ -198,13 +199,16 @@ local LECTURES = {
   },
   ["swing"] = {
     lire = function() return swing end,
+    oublier = function() swing = nil end, -- plus suivie, plus écoutée : la valeur gardée deviendrait fausse
     evenements = { "PLAYER_SWING", "UNIT_SPELLCAST_SENT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL" },
     evenement = surSwing, -- reçoit chaque événement écouté (et ses données) avant la relecture
   },
 }
 
 -- Deux valeurs pareilles : égales, ou deux tables aux mêmes champs (les lectures rendent une table neuve à chaque fois).
+-- Une valeur secrète n'est jamais comparée (pas même ==) : pas pareille, on rappelle.
 local function pareil(a, b)
+  if secret(a) or secret(b) then return false end
   if a == b then return true end
   if type(a) ~= "table" or type(b) ~= "table" then return false end
   for k, v in pairs(a) do if not pareil(v, b[k]) then return false end end
@@ -269,11 +273,15 @@ function lib:NePlusSuivre(lecture, fn)
   if not s then return true end
   for i = #s, 1, -1 do if s[i] == fn then table.remove(s, i) break end end
   if #s == 0 then
-    -- ponytail: les lectures ne partagent aucun événement ; quand deux en partageront un, ne le retirer que si plus
-    -- aucune lecture suivie ne l'écoute.
-    for _, ev in ipairs(l.evenements) do pcall(cadre.UnregisterEvent, cadre, ev) end
     if s.relecture then s.relecture:Cancel() end
     suivis[lecture] = nil
+    if l.oublier then l.oublier() end
+    -- Un événement qu'une autre lecture suivie écoute aussi reste écouté.
+    local garde = {}
+    for autre in pairs(suivis) do for _, ev in ipairs(LECTURES[autre].evenements) do garde[ev] = true end end
+    for _, ev in ipairs(l.evenements) do
+      if not garde[ev] then pcall(cadre.UnregisterEvent, cadre, ev) end
+    end
   end
   return true
 end

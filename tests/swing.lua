@@ -191,3 +191,26 @@ test("sonde swing rangée avec les autres, après la portée", function()
     assertNotNil(swing, "sonde de combat « swing »")
     assertTrue(swing > portee)
 end)
+
+test("swing : le dernier suiveur parti, rien n'est gardé ; une valeur secrète n'est pas comparée (rappel à chaque relecture)", function()
+    local AC = AzerothCommune
+    local r = { heure = 500, vitesse = "Vitesse 3,00" }
+    avec(jeu(r), function()
+        local recu, fn = suiveur()
+        assertTrue(AC:Suivre("swing", fn))
+        FireEvent("START_AUTOREPEAT_SPELL")
+        FireEvent("PLAYER_SWING", 3.0, TIR)
+        AC:NePlusSuivre("swing", fn)
+        -- STOP_AUTOREPEAT_SPELL, s'il vient maintenant, n'est plus écouté : « actif » gardé serait faux.
+        recu, fn = suiveur()
+        assertTrue(AC:Suivre("swing", fn))
+        assertEquals("nil", recu[1], "suivi repris : inconnu, pas l'ancien tir répété")
+        FireEvent("START_AUTOREPEAT_SPELL")
+        FireEvent("PLAYER_SWING", SECRET, TIR)
+        local n = #recu
+        FireEvent("START_AUTOREPEAT_SPELL") -- rien ne change, mais la durée secrète ne se compare pas
+        assertEquals(n + 1, #recu, "valeur secrète : rappelée sans comparaison")
+        assertTrue(recu[#recu].duree == SECRET)
+        AC:NePlusSuivre("swing", fn)
+    end)
+end)

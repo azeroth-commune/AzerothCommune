@@ -187,8 +187,8 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 - **Une valeur secrète** (`issecretvalue`) ne sert jamais à un calcul. Une lecture qui la rend la passe telle quelle, pour
   l'affichage seulement ; la portée et le familier, eux, sont calculés : une réponse secrète y donne nil, et la sonde la
   note « secret ».
-- **Une table rendue** (le familier) est partagée entre les suiveurs : la lire, jamais la modifier. Elle n'est rappelée
-  que si un de ses champs change.
+- **Une table rendue** (le familier, le swing) est partagée entre les suiveurs : la lire, jamais la modifier. Elle n'est
+  rappelée que si un de ses champs change ; un champ secret ne se compare pas : rappelée à chaque relecture.
 - **La session seulement** : rien n'est sauvegardé. Le socle n'écoute le jeu (événements, relecture périodique) que pour
   les lectures suivies ; le dernier suiveur parti, il cesse.
 - **La valeur du moment** : chaque `Suivre` relit le jeu, il ne rend pas une valeur gardée d'avant.
