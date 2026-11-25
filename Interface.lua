@@ -241,13 +241,10 @@ function lib.RechercheObjets(parent, qty, onPick, w)
   name:SetSize(w, 22)
   name:SetAutoFocus(false)
   name.recherche = true
-  local drop = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  local drop = CreateFrame("Frame", nil, parent, "TooltipBackdropTemplate") -- le fond des bulles d'aide du jeu
   drop:SetPoint("TOPLEFT", name, "BOTTOMLEFT", -6, -2)
   drop:SetSize(w + 40, 10)
   drop:SetFrameStrata("DIALOG")
-  drop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-  drop:SetBackdropColor(0.08, 0.08, 0.10, 0.98)
-  drop:SetBackdropBorderColor(0.66, 0.56, 1.00, 0.35)
   drop:Hide()
   local buttons, hits, sel = {}, {}, 1
   local function qtyValue() return math.max(1, tonumber(qty:GetText()) or 1) end
@@ -263,10 +260,11 @@ function lib.RechercheObjets(parent, qty, onPick, w)
   for i = 1, 8 do
     local b = CreateFrame("Button", nil, drop)
     b:SetSize(w + 36, 20)
-    b:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 20)
+    b:SetPoint("TOPLEFT", 2, -4 - (i - 1) * 20)
     b.hl = b:CreateTexture(nil, "BACKGROUND")
     b.hl:SetAllPoints()
-    b.hl:SetColorTexture(0.66, 0.56, 1.00, 0.18)
+    b.hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight") -- la surbrillance des listes du jeu
+    b.hl:SetBlendMode("ADD")
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetSize(16, 16)
     b.icon:SetPoint("LEFT", 4, 0)
@@ -289,7 +287,7 @@ function lib.RechercheObjets(parent, qty, onPick, w)
         b.text:SetText(e.name .. (e.fabricable and "  |cffe6a640fabricable|r" or ""))
       end
     end
-    drop:SetHeight(4 + 20 * #hits)
+    drop:SetHeight(8 + 20 * #hits)
     drop:SetShown(#hits > 0)
     paint()
   end
@@ -338,7 +336,8 @@ end
 -- alternées, défilement.
 --   cols : { key, title, w, get = function(ligne) → valeur de tri, fmt = function(valeur, ligne) → texte,
 --            align = "LEFT"/"RIGHT", asc = true (premier clic croissant), icon = function(ligne) → texture,
---            button = function(ligne) → libellé, click = function(ligne), tip = "aide de l'en-tête" }
+--            button = function(ligne) → libellé, click = function(ligne), tip = "aide de l'en-tête",
+--            extensible = true (une colonne au plus : elle prend la largeur libre, et s'élargit avec la fenêtre) }
 --   opts : { name, sort = clé par défaut, desc, store, top, bottom, rowH, tooltip = function(ligne, GameTooltip),
 --            onClick = function(ligne, bouton) }
 -- Renvoie le tableau (t:SetData(liste)) et sa largeur, pour dimensionner la fenêtre.
@@ -362,13 +361,10 @@ function lib.Tableau(parent, cols, opts)
       end
     end
   end
-  local x = 0
   for _, c in ipairs(cols) do
-    c.x = x
     if c.get then
       local b = CreateFrame("Button", nil, header)
-      b:SetPoint("TOPLEFT", x, 0)
-      b:SetSize(c.w, 18)
+      b:SetHeight(18)
       b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
       b.text:SetAllPoints()
       b.text:SetJustifyH(c.align or "LEFT")
@@ -399,48 +395,74 @@ function lib.Tableau(parent, cols, opts)
       end
       c.head = b
     end
-    x = x + c.w + GAP
   end
   local line = header:CreateTexture(nil, "ARTWORK")
-  line:SetColorTexture(0.66, 0.56, 1, 0.3)
+  line:SetColorTexture(1, 1, 1, 0.15)
   line:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -1)
-  line:SetSize(width, 1)
+  line:SetHeight(1)
   local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
   scroll:SetPoint("BOTTOMRIGHT", -32, opts.bottom or 30)
   local content = CreateFrame("Frame", nil, scroll)
-  content:SetSize(width, 1)
+  content:SetHeight(1)
   scroll:SetScrollChild(content)
   t.header, t.scroll = header, scroll
 
+  -- La colonne extensible prend la largeur libre du défilement (ancré au bord droit du parent) : elle s'élargit avec la
+  -- fenêtre, les autres gardent la leur. c.x, c.lw : place et largeur du moment.
+  local total = width
+  local function placer(r)
+    r:SetWidth(total)
+    for k, c in ipairs(cols) do
+      local cell = r.cells[k]
+      if c.button then
+        cell:SetWidth(c.lw)
+        cell:SetPoint("LEFT", c.x, 0)
+      else
+        local left = c.x
+        if c.icon then r["icon" .. k]:SetPoint("LEFT", left, 0); left = left + rowH end
+        cell:SetPoint("LEFT", left, 0)
+        cell:SetWidth(c.lw - (left - c.x))
+      end
+    end
+  end
+  local function disposer()
+    local libre, x = math.max(0, math.floor(scroll:GetWidth() - width)), 0
+    for _, c in ipairs(cols) do
+      c.x, c.lw = x, c.w + (c.extensible and libre or 0)
+      if c.head then c.head:SetPoint("TOPLEFT", x, 0); c.head:SetWidth(c.lw) end
+      x = x + c.lw + GAP
+    end
+    total = x
+    header:SetWidth(total)
+    line:SetWidth(total)
+    content:SetWidth(total)
+    for _, r in ipairs(t.rows) do placer(r) end
+  end
+  disposer()
+
   local function makeRow()
     local r = CreateFrame("Frame", nil, content)
-    r:SetSize(width, rowH)
+    r:SetHeight(rowH)
     r:EnableMouse(true)
     r.bg = r:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
     r.hl = r:CreateTexture(nil, "HIGHLIGHT")
     r.hl:SetAllPoints()
-    r.hl:SetColorTexture(0.66, 0.56, 1, 0.12)
+    r.hl:SetColorTexture(1, 1, 1, 0.08)
     r.cells = {}
     for k, c in ipairs(cols) do
       if c.button then
         local b = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
-        b:SetSize(c.w, rowH - 2)
-        b:SetPoint("LEFT", c.x, 0)
+        b:SetHeight(rowH - 2)
         b:SetScript("OnClick", function() c.click(r.item) end)
         r.cells[k] = b
       else
-        local left = c.x
         if c.icon then
           r["icon" .. k] = r:CreateTexture(nil, "ARTWORK")
           r["icon" .. k]:SetSize(rowH - 4, rowH - 4)
-          r["icon" .. k]:SetPoint("LEFT", left, 0)
-          left = left + rowH
         end
         local fs = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        fs:SetPoint("LEFT", left, 0)
-        fs:SetWidth(c.w - (left - c.x))
         fs:SetJustifyH(c.align or "LEFT")
         fs:SetWordWrap(false)
         r.cells[k] = fs
@@ -455,6 +477,7 @@ function lib.Tableau(parent, cols, opts)
       end)
       r:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
+    placer(r)
     return r
   end
 
@@ -491,7 +514,7 @@ function lib.Tableau(parent, cols, opts)
     for slot = shown + 1, #t.rows do t.rows[slot]:Hide() end
   end
   scroll:HookScript("OnVerticalScroll", render)
-  scroll:HookScript("OnSizeChanged", render)
+  scroll:HookScript("OnSizeChanged", function() disposer(); render() end)
 
   function t:Refresh()
     arrows()

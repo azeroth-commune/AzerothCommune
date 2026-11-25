@@ -98,3 +98,55 @@ test("fenêtre non redimensionnable : pas de poignée, place par défaut, place 
     f:Hide()
     AzerothCommuneDB.fenetres.AzerothCommuneTestFixe = nil
 end)
+
+-- Asynchrone : le jeu (et le simulateur) signale un changement de taille (OnSizeChanged) à l'image suivante.
+local function ensuite(done, fn)
+    C_Timer.After(0.05, function()
+        local ok, err = pcall(fn)
+        if not ok then done(function() error(err, 0) end) end
+    end)
+end
+
+async_test("tableau : la colonne extensible prend la largeur gagnée par la fenêtre, les autres non ; plus haute, plus de lignes", function(done)
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    AzerothCommuneDB.fenetres.AzerothCommuneTestExtensible = nil
+    local cols = {
+        { key = "nom", title = "Nom", w = 120, extensible = true, get = function(r) return r.nom end },
+        { key = "prix", title = "Prix", w = 80, align = "RIGHT", get = function(r) return r.prix end },
+    }
+    local f = lib.Fenetre("AzerothCommuneTestExtensible", "Extensible", 300, 300)
+    local t, largeur = lib.Tableau(f, cols, { name = "ext", sort = "prix" })
+    f:SetWidth(largeur + 50)
+    f:Show()
+    local lignes = {}
+    for i = 1, 60 do lignes[i] = { nom = "objet " .. i, prix = i } end
+    t:SetData(lignes)
+    local function visibles()
+        local n = 0
+        for _, r in ipairs(t.rows) do if r:IsShown() then n = n + 1 end end
+        return n
+    end
+    ensuite(done, function()
+        local nomW, prixW, celluleW, avant = cols[1].head:GetWidth(), cols[2].head:GetWidth(), t.rows[1].cells[1]:GetWidth(), visibles()
+        agrandir(f, largeur + 50 + 200, 500)
+        ensuite(done, function()
+            done(function()
+                assertEquals(math.floor(nomW + 200 + 0.5), math.floor(cols[1].head:GetWidth() + 0.5), "l'en-tête extensible s'élargit")
+                assertEquals(math.floor(prixW + 0.5), math.floor(cols[2].head:GetWidth() + 0.5), "les autres gardent leur largeur")
+                assertEquals(math.floor(celluleW + 200 + 0.5), math.floor(t.rows[1].cells[1]:GetWidth() + 0.5), "les lignes déjà créées suivent")
+                assertTrue(visibles() > avant, "plus haute : plus de lignes")
+                f:Hide()
+                AzerothCommuneDB.fenetres.AzerothCommuneTestExtensible = nil
+            end)
+        end)
+    end)
+end)
+
+test("recherche d'objets : la liste prend le fond des bulles d'aide du jeu", function()
+    local f = lib.Fenetre("AzerothCommuneTestBulle", "Bulle", 400, 300)
+    local qty = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    lib.RechercheObjets(f, qty, function() end)
+    local liste
+    for _, c in ipairs({ f:GetChildren() }) do if c.layoutType == "TooltipDefaultLayout" then liste = c end end
+    assertNotNil(liste, "la liste est un TooltipBackdropTemplate")
+end)

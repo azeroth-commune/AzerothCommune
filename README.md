@@ -304,12 +304,18 @@ Commande `/ac` :
 ## Outils communs
 
 Appel avec un point (ce sont des fonctions, pas des méthodes : elles servent telles quelles de `fmt` à un tableau).
-Rien n'est gardé par le socle : ce qui doit durer est une table de l'add-on, passée en paramètre.
+Le socle ne garde que la place et la taille des fenêtres (`AzerothCommuneDB.fenetres[nom]`, pour le compte) ; le reste
+de ce qui doit durer est une table de l'add-on, passée en paramètre.
 
 ```lua
-local f = AC.Fenetre("MonAddonFrame", "Titre", 600, 400)      -- sombre, bord lavande, Échap, croix (cachée)
+local f = AC.Fenetre("MonAddonFrame", "Titre", 600, 400)      -- cadre du jeu sans portrait, titre, croix, Échap (cachée)
+                                     -- poignée en bas à droite ; 600 × 400 = départ et minimum ; place et taille retenues
+f:SetWidth(largeur + 50)             -- une taille fixée après coup (d'après un tableau) relève le minimum
+AC.Fenetre("MonAddonListe", "Liste", 290, 80, { redimensionnable = false,   -- pas de poignée, taille gérée par l'add-on,
+  place = { "TOPRIGHT", Minimap, "TOPLEFT", -12, -20 } })    -- place retenue si déplacée ; sinon place (le centre par défaut)
 local t, largeur = AC.Tableau(f, colonnes, { name = "objets", sort = "prix", store = MonAddonDB.sort })
 t:SetData(lignes)                                              -- en-têtes cliquables, tri gardé dans store[name]
+                                     -- colonne { …, extensible = true } (une au plus) : prend la largeur libre de la fenêtre
 AC.TrierLignes(lignes, colonnes, { key = "prix", desc = true }) -- vides en bas, égalités dans l'ordre d'arrivée
 AC.Argent(c), AC.ArgentCourt(c), AC.ArgentSigne(c)           -- montants (court : pour une case de tableau)
 AC.NomObjet(id, objets, garde)       -- lien ou nom ; inconnu : demandé au serveur, retenu dans garde à l'arrivée
