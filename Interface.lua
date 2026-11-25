@@ -28,9 +28,10 @@ function lib.Fenetre(name, title, w, h, opts)
   f:SetTitle(title)
   f.title = f:GetTitleText()
   local g = AzerothCommuneDB and AzerothCommuneDB.fenetres and AzerothCommuneDB.fenetres[name]
-  local voulue = redim and g and g.w and { g.w, g.h } -- la taille choisie par le joueur
+  local voulue = redim and g and g.w and g.h and { g.w, g.h } -- la taille choisie par le joueur
   f:SetSize(voulue and math.max(w, voulue[1]) or w, voulue and math.max(h, voulue[2]) or h)
-  if g and g.x then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", g.x, g.y)
+  f:ClearAllPoints()
+  if g and g.x and g.y then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", g.x, g.y)
   elseif opts.place then f:SetPoint(unpack(opts.place))
   else f:SetPoint("CENTER") end
   f:SetFrameStrata("HIGH")
