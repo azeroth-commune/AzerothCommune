@@ -4,23 +4,28 @@
 --   AC:Suivre(lecture, fn)      : fn(valeur) tout de suite, puis à chaque changement ; true, ou false et la raison
 --                                 (« lecture inconnue », « pas une fonction »). La même fn suivie deux fois : inscrite une fois.
 --   AC:NePlusSuivre(lecture, fn) : fn n'est plus rappelé ; le dernier suiveur parti, le socle cesse d'écouter le jeu.
--- valeur : nil = inconnu, jamais « non » ; une valeur secrète passe telle quelle, pour l'affichage seulement (la portée,
--- calculée, n'en rend jamais : une réponse secrète y donne nil).
+-- valeur : nil = inconnu, jamais « non » ; une valeur secrète passe telle quelle, pour l'affichage seulement (la portée
+-- et le familier, calculés, n'en rendent jamais : une réponse secrète y donne nil). Une table rendue est partagée entre
+-- les suiveurs : la lire, jamais la modifier.
 local lib = AzerothCommune
 
 local TIR, MELEE = 2, 0 -- Enum.PlayerSwingType.Ranged, .MainHand
 local COUPURE_D_AILES, TIR_AUTOMATIQUE = 2974, 75 -- par leur ID : la langue du client n'y fait rien
 
--- Une réponse du jeu : true ou false, sinon nil (fonction absente, erreur, secret, autre chose) ; puis ce qu'en note la
+-- brut : la première réponse du jeu, nil si absente, en erreur ou secrète ; demander : la même, true ou false, sinon nil (fonction absente, erreur, secret, autre chose) ; puis ce qu'en note la
 -- sonde : la réponse elle-même, « absente », « secret » ou « erreur : … » (jamais une valeur secrète, qu'aucun calcul ne
 -- doit toucher).
-local function demander(fn, ...)
+local function brut(fn, ...)
   if not fn then return nil, "absente" end
   local ok, v = pcall(fn, ...)
   if not ok then return nil, "erreur : " .. tostring(v) end
   if issecretvalue and issecretvalue(v) then return nil, "secret" end
-  if type(v) ~= "boolean" then return nil, v end
   return v, v
+end
+local function demander(fn, ...)
+  local v, note = brut(fn, ...)
+  if type(v) ~= "boolean" then return nil, note end
+  return v, note
 end
 
 local function ouiNonOuNil(...)
@@ -58,6 +63,45 @@ lib.DeclarerSonde("portée",
     .. "puis du Tir automatique, et le test « suivre » (28 m) rendent oui, non ou nil : ni absents, ni secrets, ni en erreur",
   ouiNonOuNil, function() portee() end)
 
+-- Le familier : { present, mort, humeur, nourritures }, nil quand le jeu ne dit pas s'il est là. present : UnitExists ;
+-- mort (UnitIsDead) seulement s'il est là (absent, il peut être renvoyé ou mort sans corps : le jeu ne le dit pas) ;
+-- humeur 1 (mécontent), 2 (content), 3 (heureux) ; nourritures : les types qu'il mange, noms du client (« Viande »…).
+-- Chaque champ nil quand sa réponse ne tranche pas (secrète, en erreur, hors de ce qu'on attend). La sonde note les
+-- quatre réponses ; les types en { n, … } pour se lire dans Diagnostic.
+local function familier()
+  local pet = C_PetInfo or {}
+  local present, a = demander(UnitExists, "pet")
+  local mort, b = demander(UnitIsDead, "pet")
+  local humeur, c = brut(pet.GetPetHappiness)
+  local types, d = brut(pet.GetPetFoodTypes)
+  local nourritures
+  if type(types) == "table" then
+    nourritures, d = {}, { n = #types }
+    for i, t in ipairs(types) do
+      if issecretvalue and issecretvalue(t) then t = "secret" end
+      d[i] = t
+      if type(t) ~= "string" or t == "secret" then nourritures = false end
+      if nourritures then nourritures[i] = t end
+    end
+  end
+  lib.Sonder("familier", a, b, c, d)
+  if present == nil then return nil end
+  if humeur ~= 1 and humeur ~= 2 and humeur ~= 3 then humeur = nil end
+  if not present then return { present = false } end
+  return { present = true, mort = mort, humeur = humeur, nourritures = nourritures or nil }
+end
+lib.DeclarerSonde("familier",
+  "UnitExists et UnitIsDead sur le familier rendent oui, non ou nil ; C_PetInfo.GetPetHappiness une humeur de 1 à 3 ou "
+    .. "rien, et GetPetFoodTypes une liste de noms ou rien : ni absents, ni secrets, ni en erreur",
+  function(a, b, c, d)
+    if not ouiNonOuNil(a, b) then return false end
+    if c ~= nil and c ~= 1 and c ~= 2 and c ~= 3 then return false end
+    if d == nil then return true end
+    if type(d) ~= "table" then return false end
+    for i = 1, d.n do if type(d[i]) ~= "string" or d[i] == "secret" then return false end end
+    return true
+  end, function() familier() end)
+
 local LECTURES = {
   ["portée"] = {
     lire = portee,
@@ -72,7 +116,23 @@ local LECTURES = {
       pcall(natif.EnableRangeCheck, MELEE, true)
     end,
   },
+  familier = {
+    lire = familier,
+    evenements = { "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" },
+    -- ponytail: relu toutes les secondes, la mort du familier n'ayant pas d'événement sûr (UNIT_HEALTH et UNIT_FLAGS
+    -- arrivent pour toutes les unités et relancent toutes les lectures) ; un événement sûr trouvé en jeu le remplacera.
+    periode = 1,
+  },
 }
+
+-- Deux valeurs pareilles : égales, ou deux tables aux mêmes champs (les lectures rendent une table neuve à chaque fois).
+local function pareil(a, b)
+  if a == b then return true end
+  if type(a) ~= "table" or type(b) ~= "table" then return false end
+  for k, v in pairs(a) do if not pareil(v, b[k]) then return false end end
+  for k in pairs(b) do if a[k] == nil then return false end end
+  return true
+end
 
 local suivis = {} -- [lecture] = { fn, …, valeur = la dernière rendue, relecture = son C_Timer }
 local cadre = CreateFrame("Frame")
@@ -85,9 +145,9 @@ end
 local function relire(lecture)
   local s = suivis[lecture]
   local v = LECTURES[lecture].lire()
-  -- ponytail: comparée telle quelle ; une lecture qui rendra une valeur secrète (qu'aucun calcul ne doit toucher, pas même
-  -- ==) rappellera à chaque relecture, sans comparer.
-  if v == s.valeur then return end
+  -- ponytail: comparée telle quelle (une table champ à champ) ; une lecture qui rendra une valeur secrète (qu'aucun calcul
+  -- ne doit toucher, pas même ==) rappellera à chaque relecture, sans comparer.
+  if pareil(v, s.valeur) then return end
   s.valeur = v
   -- Sur une copie : un suiveur qui part (ou arrive) pendant un rappel ne fait sauter (ni rappeler deux fois) personne.
   for _, fn in ipairs({ unpack(s) }) do rappeler(fn, v) end
@@ -130,8 +190,8 @@ function lib:NePlusSuivre(lecture, fn)
   if not s then return true end
   for i = #s, 1, -1 do if s[i] == fn then table.remove(s, i) break end end
   if #s == 0 then
-    -- ponytail: une seule lecture ; quand deux écouteront le même événement, ne le retirer que si plus aucune lecture
-    -- suivie ne l'écoute.
+    -- ponytail: les lectures ne partagent aucun événement ; quand deux en partageront un, ne le retirer que si plus
+    -- aucune lecture suivie ne l'écoute.
     for _, ev in ipairs(l.evenements) do pcall(cadre.UnregisterEvent, cadre, ev) end
     if s.relecture then s.relecture:Cancel() end
     suivis[lecture] = nil

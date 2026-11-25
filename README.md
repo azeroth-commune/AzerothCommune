@@ -53,7 +53,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
-| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible) et leurs sondes |
+| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible, familier) et leurs sondes |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
@@ -183,7 +183,10 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 
 - **nil = inconnu, jamais « non »** : pas de cible, une réponse qui ne tranche pas, une API absente ou en erreur.
 - **Une valeur secrète** (`issecretvalue`) ne sert jamais à un calcul. Une lecture qui la rend la passe telle quelle, pour
-  l'affichage seulement ; la portée, elle, est calculée : une réponse secrète y donne nil, et la sonde la note « secret ».
+  l'affichage seulement ; la portée et le familier, eux, sont calculés : une réponse secrète y donne nil, et la sonde la
+  note « secret ».
+- **Une table rendue** (le familier) est partagée entre les suiveurs : la lire, jamais la modifier. Elle n'est rappelée
+  que si un de ses champs change.
 - **La session seulement** : rien n'est sauvegardé. Le socle n'écoute le jeu (événements, relecture périodique) que pour
   les lectures suivies ; le dernier suiveur parti, il cesse.
 - **La valeur du moment** : chaque `Suivre` relit le jeu, il ne rend pas une valeur gardée d'avant.
@@ -194,11 +197,16 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 | Lecture | Valeurs | Comment le socle la lit |
 |---|---|---|
 | `portée` | `"tir"`, `"zone morte"`, `"mêlée"`, `"trop loin"`, nil | le test de portée natif du swing timer, activé à chaque suivi et réarmé à chaque changement de cible tant qu'elle est suivie (`C_SwingTimer.EnableRangeCheck` pour la mêlée et le tir : sans lui, il ne répond pas ; la barre de swing du jeu ou un autre add-on peut le couper), relu à `PLAYER_SWING_RANGE_UPDATE`, au changement de cible et toutes les 0,2 s ; replis quand il ne dit rien : la portée de Coupure d'ailes pour la mêlée (jamais l'Attaque du raptor, qui répond « à portée » à distance de tir), celle du Tir automatique pour le tir ; ni mêlée ni tir : le test « suivre » (`CheckInteractDistance`, 28 m) sépare zone morte et trop loin. Sans cible attaquable : nil. Les replis sont des sorts de chasseur : pour une autre classe, sans le natif, nil |
+| `familier` | `{ present, mort, humeur, nourritures }`, nil | `present` : `UnitExists("pet")` ; `mort` : `UnitIsDead("pet")`, seulement si le familier est là (absent, il peut être renvoyé ou mort sans corps : le jeu ne le dit pas, `mort` reste nil) ; `humeur` : 1er retour de `C_PetInfo.GetPetHappiness`, 1 (mécontent), 2 (content) ou 3 (heureux) ; `nourritures` : `C_PetInfo.GetPetFoodTypes`, les types qu'il mange, noms du client (« Viande »…). Relu à `UNIT_PET`, `UNIT_HAPPINESS`, `PET_UI_UPDATE` et toutes les secondes (la mort n'a pas d'événement sûr). Chaque champ nil quand sa réponse ne tranche pas ; la lecture entière nil quand le jeu ne dit pas si le familier est là |
 
 Sonde `portée` : les sept réponses du jeu (cible, attaquable, natif mêlée, natif tir, Coupure d'ailes, Tir automatique,
 « suivre ») sont oui, non ou nil : ni absentes (une fonction du jeu disparue, notée « absente »), ni secrètes, ni en erreur ;
 `valeur` les note dans cet ordre. Elle se relance aussi
 sans suivi (`AC.RelancerSondes()`, Diagnostic) : cible un monstre pour voir ce que le jeu répond.
+
+Sonde `familier` : `UnitExists` et `UnitIsDead` sur le familier rendent oui, non ou nil ; `GetPetHappiness` une humeur de
+1 à 3 ou rien ; `GetPetFoodTypes` une liste de noms (notée `{ n, … }`) ou rien : ni absents, ni secrets, ni en erreur.
+Relançable sans suivi : familier appelé, mort, puis renvoyé.
 
 ### Fournisseurs (cours de l'HV)
 
