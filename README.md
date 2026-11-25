@@ -310,7 +310,7 @@ de ce qui doit durer est une table de l'add-on, passée en paramètre.
 ```lua
 local f = AC.Fenetre("MonAddonFrame", "Titre", 600, 400)      -- cadre du jeu sans portrait, titre, croix, Échap (cachée)
                                      -- poignée en bas à droite ; 600 × 400 = départ et minimum ; place et taille retenues
-f:SetWidth(largeur + 50)             -- une taille fixée après coup (d'après un tableau) relève le minimum
+f:SetWidth(largeur + 50)             -- une largeur fixée après coup (d'après un tableau) relève le minimum ; une hauteur est prise telle quelle
 AC.Fenetre("MonAddonListe", "Liste", 290, 80, { redimensionnable = false,   -- pas de poignée, taille gérée par l'add-on,
   place = { "TOPRIGHT", Minimap, "TOPLEFT", -12, -20 } })    -- place retenue si déplacée ; sinon place (le centre par défaut)
 local t, largeur = AC.Tableau(f, colonnes, { name = "objets", sort = "prix", store = MonAddonDB.sort })

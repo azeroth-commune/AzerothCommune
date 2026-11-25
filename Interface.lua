@@ -8,9 +8,9 @@ local lib = AzerothCommune
 ---------------------------------------------------------------------------------------------------
 -- Une fenêtre au look du jeu (ButtonFrameTemplate sans portrait : son titre, sa croix), déplaçable, fermée par Échap,
 -- avec poignée de redimensionnement et bouton capture. f.title est le titre du gabarit.
--- La taille de création est la taille de départ et le minimum ; une largeur ou une hauteur fixée ensuite par l'add-on
--- (f:SetWidth(largeur du tableau + 50), f:SetHeight d'après le contenu) relève le minimum, et la taille retenue, si elle
--- est plus grande, l'emporte.
+-- La taille de création est la taille de départ et le minimum ; une largeur fixée ensuite par l'add-on
+-- (f:SetWidth(largeur du tableau + 50)) relève le minimum, et à la création (fenêtre pas encore montrée) la largeur
+-- retenue, si elle est plus grande, l'emporte. Une hauteur fixée par l'add-on (d'après son contenu) est prise telle quelle.
 -- Place et taille retenues pour le compte dans AzerothCommuneDB.fenetres[name] (la géométrie d'une fenêtre est de
 -- l'interface), retrouvées à la création ; pas par le jeu (SetUserPlaced(false)). Base pas encore chargée : rien n'est
 -- lu ni retenu cette fois.
@@ -28,7 +28,8 @@ function lib.Fenetre(name, title, w, h, opts)
   f:SetTitle(title)
   f.title = f:GetTitleText()
   local g = AzerothCommuneDB and AzerothCommuneDB.fenetres and AzerothCommuneDB.fenetres[name]
-  local voulue = redim and g and g.w and g.h and { g.w, g.h } -- la taille choisie par le joueur
+  -- La taille choisie par le joueur (à la poignée), jamais plus grande que l'écran ; ne sert qu'à la création.
+  local voulue = redim and g and g.w and g.h and { math.min(g.w, UIParent:GetWidth()), math.min(g.h, UIParent:GetHeight()) }
   f:SetSize(voulue and math.max(w, voulue[1]) or w, voulue and math.max(h, voulue[2]) or h)
   f:ClearAllPoints()
   if g and g.x and g.y then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", g.x, g.y)
@@ -41,18 +42,20 @@ function lib.Fenetre(name, title, w, h, opts)
   -- Deux fenêtres au même niveau mélangeaient leurs textes (18/11/2026) : celle qu'on ouvre ou qu'on clique passe devant.
   f:SetToplevel(true)
   f:HookScript("OnShow", function(self) self:Raise() end)
-  local function retenir()
+  -- Un déplacement retient la place seule ; la poignée, la place et la taille (une taille retenue avant reste).
+  local function retenir(avecTaille)
     f:StopMovingOrSizing()
     f:SetUserPlaced(false) -- c'est nous qui retenons la place, pas le jeu
     if not AzerothCommuneDB then return end
     AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
-    local r = { x = math.floor(f:GetLeft() + 0.5), y = math.floor(f:GetTop() + 0.5) }
-    if redim then r.w, r.h = math.floor(f:GetWidth() + 0.5), math.floor(f:GetHeight() + 0.5) end
+    local r = AzerothCommuneDB.fenetres[name] or {}
+    r.x, r.y = math.floor(f:GetLeft() + 0.5), math.floor(f:GetTop() + 0.5)
+    if avecTaille then r.w, r.h = math.floor(f:GetWidth() + 0.5), math.floor(f:GetHeight() + 0.5) end
     AzerothCommuneDB.fenetres[name] = r
   end
   f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", f.StartMoving)
-  f:SetScript("OnDragStop", retenir)
+  f:SetScript("OnDragStop", function() retenir(false) end)
   if redim then
     local minW, minH = w, h
     f:SetResizable(true)
@@ -63,21 +66,18 @@ function lib.Fenetre(name, title, w, h, opts)
     f.ResizeButton = poignee
     poignee.resizeStoppedCallback = function()
       f:SetSize(math.max(minW, f:GetWidth()), math.max(minH, f:GetHeight())) -- le jeu borne déjà ; au cas où
-      voulue = { f:GetSize() }
-      retenir()
+      retenir(true)
     end
-    -- La largeur ou la hauteur fixée par l'add-on relève le minimum (pas pendant que le joueur tire la poignée : la
-    -- borne du gabarit passe aussi par SetWidth).
-    local function relever(lw, lh)
+    -- La largeur fixée par l'add-on relève le minimum (pas pendant que le joueur tire la poignée : la borne du gabarit
+    -- passe aussi par SetWidth). Pas la hauteur : celle d'un contenu doit pouvoir redescendre.
+    f:HookScript("OnShow", function() voulue = nil end) -- la taille retenue ne sert qu'à la création
+    hooksecurefunc(f, "SetWidth", function(_, v)
       if poignee:IsActive() then return end
-      minW, minH = math.max(minW, lw or 0), math.max(minH, lh or 0)
+      minW = math.max(minW, v)
       f:SetResizeBounds(minW, minH)
       poignee:SetMinWidth(minW)
-      poignee:SetMinHeight(minH)
-      if voulue then f:SetSize(math.max(f:GetWidth(), voulue[1]), math.max(f:GetHeight(), voulue[2])) end
-    end
-    hooksecurefunc(f, "SetWidth", function(_, v) relever(v, nil) end)
-    hooksecurefunc(f, "SetHeight", function(_, v) relever(nil, v) end)
+      if voulue and not f:IsShown() and voulue[1] > v then f:SetSize(voulue[1], f:GetHeight()) end
+    end)
   end
   table.insert(UISpecialFrames, name) -- Échap ferme la fenêtre
   if lib.captureDansLesFenetres and lib.BoutonCapture then -- dans la barre de titre, au niveau de la croix (sinon sous le cadre)
@@ -518,6 +518,7 @@ function lib.Tableau(parent, cols, opts)
   scroll:HookScript("OnSizeChanged", function() disposer(); render() end)
 
   function t:Refresh()
+    disposer() -- un onglet caché pendant que la fenêtre changeait de taille se remet en place
     arrows()
     lib.TrierLignes(self.data, cols, self.sort)
     content:SetHeight(math.max(1, #self.data * rowH))

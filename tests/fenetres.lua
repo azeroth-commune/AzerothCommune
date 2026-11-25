@@ -43,15 +43,56 @@ test("fenêtre : agrandie et déplacée puis recréée, elle retrouve sa place e
     assertEquals(520, g.w)
     assertEquals(380, g.h)
     local f2 = lib.Fenetre("AzerothCommuneTestPlace", "Place", 400, 300)
+    f2:SetWidth(450) -- à la création, l'add-on se règle sur son tableau : la taille retenue, plus grande, l'emporte
     f2:Show()
     assertEquals(520, math.floor(f2:GetWidth() + 0.5))
     assertEquals(380, math.floor(f2:GetHeight() + 0.5))
     assertEquals(100, math.floor(f2:GetLeft() + 0.5))
     assertEquals(700, math.floor(f2:GetTop() + 0.5))
-    f2:SetWidth(450) -- l'add-on se règle sur son tableau : la taille retenue, plus grande, l'emporte
-    assertEquals(520, math.floor(f2:GetWidth() + 0.5))
+    f2:SetWidth(460) -- ouverte, la taille retenue n'est plus un plancher
+    assertEquals(460, math.floor(f2:GetWidth() + 0.5))
     f2:Hide()
     AzerothCommuneDB.fenetres.AzerothCommuneTestPlace = nil
+end)
+
+test("fenêtre : un déplacement retient la place seule ; la taille retenue garde celle de la poignée", function()
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    AzerothCommuneDB.fenetres.AzerothCommuneTestDeplace = nil
+    local f = lib.Fenetre("AzerothCommuneTestDeplace", "Déplacée", 400, 300)
+    f:Show()
+    deplacer(f, 120, 650)
+    local g = AzerothCommuneDB.fenetres.AzerothCommuneTestDeplace
+    assertEquals(120, g.x)
+    assertTrue(g.w == nil and g.h == nil, "un déplacement n'écrit pas w/h")
+    agrandir(f, 500, 350)
+    deplacer(f, 140, 640)
+    g = AzerothCommuneDB.fenetres.AzerothCommuneTestDeplace
+    assertEquals(140, g.x)
+    assertEquals(500, g.w, "la taille de la poignée reste retenue après un déplacement")
+    f:Hide()
+    AzerothCommuneDB.fenetres.AzerothCommuneTestDeplace = nil
+end)
+
+test("fenêtre : une hauteur qui suit le contenu redescend, le minimum reste celui de la création", function()
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    AzerothCommuneDB.fenetres.AzerothCommuneTestContenu = nil
+    local f = lib.Fenetre("AzerothCommuneTestContenu", "Contenu", 300, 100)
+    f:Show()
+    f:SetHeight(400)
+    f:SetHeight(150)
+    assertEquals(150, math.floor(f:GetHeight() + 0.5))
+    local _, minH = f:GetResizeBounds()
+    assertEquals(100, math.floor(minH + 0.5))
+    f:Hide()
+end)
+
+test("fenêtre : une taille retenue plus grande que l'écran est ramenée à l'écran", function()
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    AzerothCommuneDB.fenetres.AzerothCommuneTestEcran = { x = 0, y = 500, w = 99999, h = 99999 }
+    local f = lib.Fenetre("AzerothCommuneTestEcran", "Écran", 400, 300)
+    assertTrue(f:GetWidth() <= UIParent:GetWidth() + 0.5, "largeur dans l'écran")
+    assertTrue(f:GetHeight() <= UIParent:GetHeight() + 0.5, "hauteur dans l'écran")
+    AzerothCommuneDB.fenetres.AzerothCommuneTestEcran = nil
 end)
 
 test("fenêtre : la taille de création est le minimum ; une largeur fixée d'après un tableau le relève", function()
@@ -149,4 +190,24 @@ test("recherche d'objets : la liste prend le fond des bulles d'aide du jeu", fun
     local liste
     for _, c in ipairs({ f:GetChildren() }) do if c.layoutType == "TooltipDefaultLayout" then liste = c end end
     assertNotNil(liste, "la liste est un TooltipBackdropTemplate")
+end)
+
+test("tableau : un onglet caché pendant que la fenêtre s'élargit se remet en place au rafraîchissement", function()
+    local cols = {
+        { key = "nom", title = "Nom", w = 120, extensible = true, get = function(r) return r.nom end },
+        { key = "prix", title = "Prix", w = 80, get = function(r) return r.prix end },
+    }
+    local f = lib.Fenetre("AzerothCommuneTestOnglet", "Onglet", 300, 300)
+    local onglet = CreateFrame("Frame", nil, f)
+    onglet:SetAllPoints()
+    local t = lib.Tableau(onglet, cols, { name = "onglet", sort = "prix" })
+    f:Show()
+    t:SetData({ { nom = "a", prix = 1 } })
+    local avant = cols[1].head:GetWidth()
+    onglet:Hide()
+    f:SetSize(500, 300) -- le joueur élargit pendant qu'un autre onglet est affiché
+    onglet:Show()
+    t:Refresh()
+    assertEquals(math.floor(avant + 200 + 0.5), math.floor(cols[1].head:GetWidth() + 0.5))
+    f:Hide()
 end)
