@@ -1226,7 +1226,7 @@ forge[1].nom = "touché"
 assert(AzerothCommune.MaitresDuMetier("Forge")[1].nom == "Maître" and AzerothCommune.MaitresDuMetier("Pêche") == nil, "copies ; métier inconnu : nil")
 -- L'état de combat (Combat.lua, #98 ; testé au simulateur, tests/suivi.lua) : chargé ici pour le global documenté.
 charger("Combat")
-assert(AzerothCommune:Suivre("portée", nil) == false and AzerothCommune:Suivre("mana", noop) == false, "Suivre : garde de type")
+assert(AzerothCommune:Suivre("portée", nil) == false and AzerothCommune:Suivre("lecture inconnue", noop) == false, "Suivre : garde de type")
 verifierGlobalDocumente(AzerothCommune) -- la base chargée : MaitresDuMetier, Suivre et NePlusSuivre sont documentés
 ns.recettesPNJ, ns.recettesMaitres, ns.recettesMarchandsLot = nil, nil, nil
 assert(AzerothCommune.MaitresDuMetier("Forge") == nil, "sans réserve : nil")

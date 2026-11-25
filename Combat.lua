@@ -176,6 +176,96 @@ lib.DeclarerSonde("swing",
       and (base == nil or type(base) == "number" and base > 0)
   end) -- pas de relevé sans contexte : il faut un coup (« pas encore vue » d'ici là)
 
+-- La mana (BeAGoodPal#30) : une valeur affichable, un nombre ou une valeur secrète (en combat) passée telle quelle, pour
+-- l'affichage seulement ; nil sinon. La sonde note le nombre, ou « secret » (attendu en combat : verte).
+local MANA = 0 -- Enum.PowerType.Mana
+local function affichable(fn, ...)
+  if not fn then return nil, "absente" end
+  local ok, v = pcall(fn, ...)
+  if not ok then return nil, "erreur : " .. tostring(v) end
+  if secret(v) then return v, "secret" end
+  if type(v) ~= "number" then return nil, v end
+  return v, v
+end
+local function nombreOuSecret(note) return type(note) == "number" or note == "secret" end
+local function mana()
+  local v, note = affichable(UnitPower, "player", MANA)
+  lib.Sonder("mana", note)
+  return v
+end
+local function manaMax()
+  local v, note = affichable(UnitPowerMax, "player", MANA)
+  lib.Sonder("mana max", note)
+  return v
+end
+lib.DeclarerSonde("mana", "UnitPower(\"player\", 0) rend un nombre, ou une valeur secrète (en combat)", nombreOuSecret,
+  function() mana() end)
+lib.DeclarerSonde("mana max", "UnitPowerMax(\"player\", 0) rend un nombre, ou une valeur secrète (en combat)", nombreOuSecret,
+  function() manaMax() end)
+
+-- Les formes du druide et Shifting Power, par leur ID, dans l'ordre des notes de leurs sondes : Ours, Ours redoutable,
+-- Félin, Voyage, Aquatique, Sélénien, Shifting Power.
+local FORMES = { 5487, 9634, 768, 783, 1066, 24858, 1322605 }
+-- Pour chaque forme, sa réponse (fn(id) : valeur, note), ou nil et « pas connue » si le joueur ne la connaît pas ; rend
+-- { [id] = valeur } (les réponses nil manquent) et les notes { n, … } de la sonde.
+local function parForme(fn)
+  local t, notes = {}, { n = #FORMES }
+  for i, id in ipairs(FORMES) do
+    local connu, note = demander(IsPlayerSpell, id)
+    if connu then t[id], note = fn(id) elseif connu == false then note = "pas connue" end
+    notes[i] = note
+  end
+  return t, notes
+end
+local function notesAttendues(estAttendue)
+  return function(notes)
+    for i = 1, notes.n do if notes[i] ~= "pas connue" and not estAttendue(notes[i]) then return false end end
+    return true
+  end
+end
+
+-- Coût des formes : { [id] = coût en mana }, lu hors combat seulement (le jeu peut le rendre secret en combat) et gardé
+-- pour le combat, la session seulement. Une forme manque : pas connue, ou coût illisible (secret, sans mana, erreur).
+local coutsGardes
+local function coutDe(id)
+  local liste, note = brut(C_Spell and C_Spell.GetSpellPowerCost, id)
+  if type(liste) ~= "table" then return nil, liste == nil and note or "sans mana" end
+  for _, c in ipairs(liste) do
+    if not secret(c) and type(c) == "table" and not secret(c.type) and c.type == MANA then
+      if secret(c.cost) then return nil, "secret" end
+      if type(c.cost) == "number" then return c.cost, c.cost end
+    end
+  end
+  return nil, "sans mana"
+end
+local function coutsDesFormes()
+  if InCombatLockdown() then return coutsGardes or {} end
+  local t, notes = parForme(coutDe)
+  lib.Sonder("coût des formes", notes)
+  coutsGardes = t
+  return t
+end
+lib.DeclarerSonde("coût des formes",
+  "hors combat, C_Spell.GetSpellPowerCost rend un coût en mana numérique pour chaque forme connue (et Shifting Power) : "
+    .. "ni absent, ni secret, ni en erreur",
+  notesAttendues(function(n) return type(n) == "number" end), function() coutsDesFormes() end)
+
+-- Pas assez de mana : { [id] = oui ou non }, le 2e retour de C_Spell.IsSpellUsable pour chaque forme connue (et Shifting
+-- Power). Une forme manque : pas connue, ou réponse qui ne tranche pas (secrète, absente, en erreur).
+local function manqueDe(id)
+  local utilisable = C_Spell and C_Spell.IsSpellUsable
+  return demander(utilisable and function(x) return select(2, utilisable(x)) end, id)
+end
+local function pasAssezDeMana()
+  local t, notes = parForme(manqueDe)
+  lib.Sonder("pas assez de mana", notes)
+  return t
+end
+lib.DeclarerSonde("pas assez de mana",
+  "C_Spell.IsSpellUsable rend en 2e retour oui ou non (« pas assez de mana ») pour chaque forme connue (et Shifting Power) : "
+    .. "ni absent, ni secret, ni en erreur",
+  notesAttendues(function(n) return type(n) == "boolean" end), function() pasAssezDeMana() end)
+
 local LECTURES = {
   ["portée"] = {
     lire = portee,
@@ -193,8 +283,8 @@ local LECTURES = {
   familier = {
     lire = familier,
     evenements = { "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" },
-    -- ponytail: relu toutes les secondes, la mort du familier n'ayant pas d'événement sûr (UNIT_HEALTH et UNIT_FLAGS
-    -- arrivent pour toutes les unités et relancent toutes les lectures) ; un événement sûr trouvé en jeu le remplacera.
+    -- ponytail: relu toutes les secondes, la mort du familier n'ayant pas d'événement sûr ; un événement trouvé en jeu
+    -- (UNIT_HEALTH ou UNIT_FLAGS, avec unite = "pet") le remplacera.
     periode = 1,
   },
   ["swing"] = {
@@ -202,6 +292,17 @@ local LECTURES = {
     oublier = function() swing = nil end, -- plus suivie, plus écoutée : la valeur gardée deviendrait fausse
     evenements = { "PLAYER_SWING", "UNIT_SPELLCAST_SENT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL" },
     evenement = surSwing, -- reçoit chaque événement écouté (et ses données) avant la relecture
+  },
+  -- unite : ses événements UNIT_* écoutés pour cette unité seulement (le joueur, pas le groupe ni la cible).
+  -- ponytail: une unité par événement (RegisterUnitEvent remplace la précédente) ; deux lectures qui voudront le même
+  -- événement UNIT_* pour deux unités : l'enregistrer pour les deux, et trier par unité dans OnEvent.
+  mana = { lire = mana, evenements = { "UNIT_POWER_FREQUENT" }, unite = "player" },
+  ["mana max"] = { lire = manaMax, evenements = { "UNIT_MAXPOWER" }, unite = "player" },
+  ["coût des formes"] = { lire = coutsDesFormes, evenements = { "SPELLS_CHANGED", "PLAYER_REGEN_ENABLED", "PLAYER_LEVEL_UP" } },
+  ["pas assez de mana"] = {
+    lire = pasAssezDeMana,
+    evenements = { "SPELL_UPDATE_USABLE", "SPELLS_CHANGED", "UNIT_POWER_FREQUENT" },
+    unite = "player",
   },
 }
 
@@ -216,6 +317,11 @@ local function pareil(a, b)
   return true
 end
 
+local function ecoute(l, ev)
+  for _, e in ipairs(l.evenements) do if e == ev then return true end end
+  return false
+end
+
 local suivis = {} -- [lecture] = { fn, …, valeur = la dernière rendue, relecture = son C_Timer }
 local cadre = CreateFrame("Frame")
 
@@ -226,18 +332,20 @@ end
 
 local function relire(lecture)
   local s = suivis[lecture]
+  if not s then return end -- plus suivie : un rappel l'a arrêtée
   local v = LECTURES[lecture].lire()
-  -- ponytail: comparée telle quelle (une table champ à champ) ; une lecture qui rendra une valeur secrète (qu'aucun calcul
-  -- ne doit toucher, pas même ==) rappellera à chaque relecture, sans comparer.
+  -- Une valeur secrète (la nouvelle ou la précédente) n'est jamais comparée (pareil) : rappelée à chaque relecture.
   if pareil(v, s.valeur) then return end
   s.valeur = v
   -- Sur une copie : un suiveur qui part (ou arrive) pendant un rappel ne fait sauter (ni rappeler deux fois) personne.
   for _, fn in ipairs({ unpack(s) }) do rappeler(fn, v) end
 end
 
--- ponytail: tout événement relit toutes les lectures suivies (une relecture sans changement ne rappelle personne).
+-- Un événement relit les lectures suivies qui l'écoutent (une relecture sans changement ne rappelle personne).
 cadre:SetScript("OnEvent", function(_, ev, ...)
-  for lecture in pairs(suivis) do
+  local aRelire = {} -- d'abord la liste : un rappel peut suivre ou arrêter une lecture
+  for lecture in pairs(suivis) do if ecoute(LECTURES[lecture], ev) then aRelire[#aRelire + 1] = lecture end end
+  for _, lecture in ipairs(aRelire) do
     local l = LECTURES[lecture]
     if ev == "PLAYER_TARGET_CHANGED" and l.demarrer then l.demarrer() end
     if l.evenement then l.evenement(ev, ...) end
@@ -251,7 +359,10 @@ function lib:Suivre(lecture, fn)
   if type(fn) ~= "function" then return false, "pas une fonction" end
   local s = suivis[lecture]
   if not s then
-    for _, ev in ipairs(l.evenements) do pcall(cadre.RegisterEvent, cadre, ev) end -- un événement que ce client n'a pas : sauté
+    for _, ev in ipairs(l.evenements) do -- un événement que ce client n'a pas : sauté
+      if l.unite and ev:find("^UNIT_") then pcall(cadre.RegisterUnitEvent, cadre, ev, l.unite)
+      else pcall(cadre.RegisterEvent, cadre, ev) end
+    end
     s = {}
     suivis[lecture] = s
     if l.periode then s.relecture = C_Timer.NewTicker(l.periode, function() relire(lecture) end) end
