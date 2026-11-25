@@ -396,11 +396,12 @@ function ns.exportCommand(what)
 end
 
 -- /ac : le résumé de la base ; /ac objets : scan des objets en marche ou en pause ; /ac export <clé> ;
--- /ac souscriptions | effacer <type> | souscrire <type|tout> (Souscriptions.lua). Le socle n'appelle aucun add-on.
+-- /ac souscriptions | effacer <type> | souscrire <type|tout> (Souscriptions.lua) ; /ac retour : signaler un problème (Retour.lua). Le socle n'appelle aucun add-on.
 SLASH_AZEROTHCOMMUNE1 = "/ac"
 SlashCmdList.AZEROTHCOMMUNE = function(msg)
   local cmd, rest = (msg or ""):match("^%s*(%S*)%s*(.-)$")
   if cmd:lower() == "export" then return ns.exportCommand(rest:lower()) end
+  if cmd:lower() == "retour" then return ns.ouvrirRetour() end
   if ns.souscriptionsCommand(cmd:lower(), rest) then return end
   msg = (msg or ""):lower()
   if msg == "objets" then
@@ -419,5 +420,5 @@ SlashCmdList.AZEROTHCOMMUNE = function(msg)
   print("  " .. ns.commerceStatus())
   for name, err in pairs(char().errors) do print("  erreur", name, err) end
   for name, err in pairs(AzerothCommuneDB.errors) do print("  erreur", name, err) end
-  print("  /reload pour écrire la base sur le disque. /ac souscriptions : ce qui est relevé. /ac export <clé> : photographier un export (sans clé : la liste).")
+  print("  /reload pour écrire la base sur le disque. /ac souscriptions : ce qui est relevé. /ac export <clé> : photographier un export (sans clé : la liste). /ac retour : signaler un problème.")
 end

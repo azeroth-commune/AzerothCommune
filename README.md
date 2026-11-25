@@ -19,7 +19,8 @@ for all of them, and groups them under one minimap button and one options entry.
 **Installation** : avec le client CurseForge, installe l'add-on qui t'intéresse et Azeroth Commune, puis clic droit sur
 chacun → *Release type* : **Beta**. À la main : dézippe `AzerothCommune` dans `_forever_\Interface\AddOns\`.
 
-**Un souci ?** Ouvre une [issue](https://github.com/azeroth-commune/AzerothCommune/issues).
+**Un souci ?** Tape `/ac retour` (ou bouton de minicarte → *Signaler un problème*) : copie le rapport et colle-le
+dans une [issue](https://github.com/azeroth-commune/AzerothCommune/issues) ou un commentaire sur la page CurseForge.
 
 **Soutenir** : ça te plaît ? Tu peux m'offrir un café sur [Ko-fi](https://ko-fi.com/virgile86017). ☕
 

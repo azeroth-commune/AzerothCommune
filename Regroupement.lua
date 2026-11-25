@@ -86,6 +86,7 @@ local function clic(b, bouton)
     end
     menu:CreateDivider()
     menu:CreateButton("Réglages", ouvrirReglages)
+    menu:CreateButton("Signaler un problème", ns.ouvrirRetour)
   end)
 end
 
