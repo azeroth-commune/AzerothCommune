@@ -396,10 +396,14 @@ lib.DeclarerSonde("aspect",
   end, function() aspect() end)
 
 -- Déplacement du joueur (BeAGoodPal#32) : IsPlayerMoving, true ou false (lisible en combat, sans drapeau secret dans la
--- doc Forever), nil quand la réponse ne tranche pas. La sonde note la réponse.
+-- doc Forever), nil quand la réponse ne tranche pas. La sonde note la réponse. Après PLAYER_STARTED_MOVING ou
+-- PLAYER_STOPPED_MOVING, l'événement fait foi : rien ne garantit qu'IsPlayerMoving y réponde déjà la nouvelle valeur
+-- (les add-ons de chasseur d'addons-src prennent tous le nom de l'événement).
+local mouvement -- le dernier événement de déplacement depuis le suivi : true (commencé), false (fini), nil (aucun)
 local function deplacement()
   local v, note = demander(IsPlayerMoving)
   lib.Sonder("déplacement", note)
+  if mouvement ~= nil then return mouvement end
   return v
 end
 lib.DeclarerSonde("déplacement", "IsPlayerMoving() rend oui ou non : ni absente, ni secrète, ni en erreur",
@@ -446,7 +450,8 @@ local LECTURES = {
   munitions = { lire = munitions, evenements = { "BAG_UPDATE", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED" },
     unite = "player" },
   aspect = { lire = aspect, evenements = { "UNIT_AURA", "PLAYER_REGEN_ENABLED" }, unite = "player" },
-  ["déplacement"] = { lire = deplacement, evenements = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" } },
+  ["déplacement"] = { lire = deplacement, evenements = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" },
+    evenement = function(ev) mouvement = ev == "PLAYER_STARTED_MOVING" end, oublier = function() mouvement = nil end },
   ["pv du familier"] = {
     lire = function() return pvDuFamilier() end,
     evenements = { "UNIT_HEALTH", "UNIT_MAXHEALTH" },

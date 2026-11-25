@@ -91,6 +91,23 @@ test("déplacement : relu au début et à la fin d'un déplacement, écoutés se
     end)
 end)
 
+test("déplacement : l'événement fait foi, même si IsPlayerMoving répond encore l'ancienne valeur ; oublié à la fin du suivi", function()
+    local AC = AzerothCommune
+    local r = { bouge = false }
+    avec(jeu(r), function()
+        local recu, fn = suiveur()
+        assertTrue(AC:Suivre("déplacement", fn))
+        assertEquals(false, recu[1])
+        FireEvent("PLAYER_STARTED_MOVING") -- IsPlayerMoving dit encore non
+        assertEquals(true, recu[2])
+        r.bouge = true
+        FireEvent("PLAYER_STOPPED_MOVING") -- IsPlayerMoving dit encore oui
+        assertEquals(false, recu[3])
+        assertTrue(AC:NePlusSuivre("déplacement", fn))
+    end)
+    assertEquals(true, lire { bouge = true }, "un nouveau suivi relit IsPlayerMoving")
+end)
+
 test("sonde déplacement : verte sur oui ou non ; rouge sur un secret, une erreur ou une fonction disparue ; relançable sans suivi", function()
     local AC = AzerothCommune
     local function etat(r) lire(r); return AC.Sondes()["déplacement"] end
