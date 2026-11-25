@@ -14,7 +14,8 @@ local function avec(jeu, fn)
         local t, k = _G, nom
         if champ ~= "" then t, k = _G[nom], champ end
         local avant = t[k]
-        t[k] = v ~= RIEN and v or nil
+        if v == RIEN then v = nil end -- false reste false
+        t[k] = v
         remettre[#remettre + 1] = function() t[k] = avant end
     end
     local ok, err = pcall(fn)
@@ -49,6 +50,12 @@ local function suiveur()
     return recu, function(v) recu[#recu + 1] = v == nil and "nil" or v end
 end
 
+-- Les tests du suivi, joués deux fois : d'abord sans autre suiveur, puis avec un suiveur déjà là et jamais parti (un
+-- add-on qui suit la portée dès le chargement, BeAGoodPal#25) ; deja le dit aux tests qui en dépendent.
+local testerUn = test
+local function lesTests(deja)
+local function test(nom, fn) testerUn(deja and nom .. " (un suiveur déjà là)" or nom, fn) end
+
 test("portée, natif présent : tir tout de suite, mêlée à l'événement du swing timer ; rien de rappelé sans changement", function()
     local AC = AzerothCommune
     local r = { cible = true, attaquable = true, natif = { [TIR] = true, [MELEE] = false } }
@@ -58,6 +65,11 @@ test("portée, natif présent : tir tout de suite, mêlée à l'événement du s
         assertEquals(true, r.actives[TIR], "test de portée natif activé pour le tir")
         assertEquals(true, r.actives[MELEE], "test de portée natif activé pour la mêlée")
         assertEquals("tir", recu[1])
+        r.actives = {} -- coupé par la barre de swing du jeu ou un autre add-on
+        FireEvent("PLAYER_TARGET_CHANGED")
+        assertEquals(true, r.actives[TIR], "test natif réarmé au changement de cible (tir)")
+        assertEquals(true, r.actives[MELEE], "test natif réarmé au changement de cible (mêlée)")
+        assertEquals(1, #recu, "même portée : pas de rappel")
         r.natif = { [TIR] = false, [MELEE] = true }
         FireEvent("PLAYER_SWING_RANGE_UPDATE", MELEE, true, true)
         assertEquals("mêlée", recu[2])
@@ -108,6 +120,24 @@ test("portée, natif absent : replis Coupure d'ailes (mêlée), Tir automatique 
     assertEquals("tir", porteeAvec(r { natif = { [MELEE] = false }, coupure = true, tirAuto = true }))
 end)
 
+test("la même fonction suivie deux fois : inscrite une fois, rappelée tout de suite à chaque Suivre, une fois par changement", function()
+    local AC = AzerothCommune
+    local r = { cible = true, attaquable = true, natif = { [TIR] = true, [MELEE] = false } }
+    avec(jeu(r), function()
+        local recu, fn = suiveur()
+        assertTrue(AC:Suivre("portée", fn))
+        assertTrue(AC:Suivre("portée", fn))
+        assertEquals(2, #recu)
+        r.natif = { [TIR] = false, [MELEE] = true }
+        FireEvent("PLAYER_SWING_RANGE_UPDATE", MELEE, true, true)
+        assertEquals(3, #recu, "un seul rappel au changement")
+        assertTrue(AC:NePlusSuivre("portée", fn))
+        r.natif = { [TIR] = true, [MELEE] = false }
+        FireEvent("PLAYER_SWING_RANGE_UPDATE", TIR, true, true)
+        assertEquals(3, #recu, "un seul NePlusSuivre l'arrête")
+    end)
+end)
+
 test("portée inconnue (nil, jamais « non ») : sans cible, cible pas attaquable, ou des réponses qui ne tranchent pas", function()
     assertNil(porteeAvec { cible = false, attaquable = true, natif = { [TIR] = true } })
     assertNil(porteeAvec { cible = true, attaquable = false, natif = { [TIR] = true } })
@@ -151,6 +181,11 @@ test("sonde de la portée : verte sur des oui, non ou nil ; une réponse secrèt
     -- De nouveau des réponses attendues : verte.
     assertEquals("trop loin", porteeAvec { cible = true, attaquable = true, natif = { [TIR] = false, [MELEE] = false }, suivre = false })
     assertEquals("vert", AC.Sondes()["portée"].etat)
+    -- Une fonction du jeu disparue (un patch retire C_SwingTimer) : rouge, notée « absente » ; la portée tient par les replis.
+    assertEquals("mêlée", porteeAvec { cible = true, attaquable = true, coupure = true, tirAuto = false })
+    s = AC.Sondes()["portée"]
+    assertEquals("rouge", s.etat)
+    assertTrue(noteParLaSonde(s, "absente"), "la sonde note la fonction absente")
 end)
 
 test("sondes de combat rangées avec celles du relevé (Sondes(), donc Diagnostic), après elles", function()
@@ -166,7 +201,6 @@ end)
 
 -- Espionne RegisterEvent et UnregisterEvent sur la table de méthodes partagée des cadres, le temps de fn(notes) ; chaque
 -- note : { cadre, événement, quoi = "+" ou "-", deja = l'événement était-il déjà enregistré sur ce cadre }.
--- Ce test suppose que personne d'autre ne suit la portée dans la session (aucun add-on chargé par le simulateur).
 local function espionnerEvenements(fn)
     local methodes = getmetatable(CreateFrame("Frame")).__index
     local reg, unreg, notes = methodes.RegisterEvent, methodes.UnregisterEvent, {}
@@ -191,6 +225,13 @@ test("sans suivi, le socle n'écoute aucun événement de combat ; le premier su
             local _, fn1 = suiveur()
             local _, fn2 = suiveur()
             assertTrue(AC:Suivre("portée", fn1))
+            if deja then
+                -- Le socle écoute déjà pour l'autre suiveur : rien de plus, et nos départs ne retirent rien.
+                assertEquals(0, #notes, "déjà écouté : rien de réenregistré")
+                assertTrue(AC:NePlusSuivre("portée", fn1))
+                assertEquals(0, #notes, "l'autre suiveur reste : rien de retiré")
+                return
+            end
             local cadre, evenements = nil, {}
             for _, n in ipairs(notes) do
                 assertEquals("+", n.quoi)
@@ -226,6 +267,11 @@ test("portée relue toute seule tant qu'elle est suivie (les replis n'ont pas d'
         local recu, fn = suiveur()
         assertTrue(AC:Suivre("portée", fn))
         assertEquals("tir", recu[1])
+        if deja then
+            assertEquals(0, #relectures, "la relecture déjà en place sert")
+            AC:NePlusSuivre("portée", fn)
+            return
+        end
         assertEquals(1, #relectures, "une relecture périodique")
         local t = relectures[1]
         assertTrue(t.periode > 0 and t.periode <= 0.5, "période " .. tostring(t.periode))
@@ -237,14 +283,24 @@ test("portée relue toute seule tant qu'elle est suivie (les replis n'ont pas d'
     end)
 end)
 
-test("lecture inconnue : nil et la raison, rien de suivi", function()
+test("lecture inconnue ou pas une fonction : false et la raison, rien de suivi ni démarré", function()
     local AC = AzerothCommune
-    local ok, raison = AC:Suivre("mana du familier", function() end)
-    assertNil(ok)
-    assertEquals("lecture inconnue", raison)
-    ok, raison = AC:NePlusSuivre("mana du familier", function() end)
-    assertNil(ok)
-    assertEquals("lecture inconnue", raison)
+    local relectures = 0
+    avec({ ["C_Timer.NewTicker"] = function() relectures = relectures + 1 end }, function()
+        local ok, raison = AC:Suivre("mana du familier", function() end)
+        assertEquals(false, ok)
+        assertEquals("lecture inconnue", raison)
+        ok, raison = AC:NePlusSuivre("mana du familier", function() end)
+        assertEquals(false, ok)
+        assertEquals("lecture inconnue", raison)
+        ok, raison = AC:Suivre("portée", nil)
+        assertEquals(false, ok)
+        assertEquals("pas une fonction", raison)
+        ok, raison = AC:Suivre("portée", "rappel")
+        assertEquals(false, ok)
+        assertEquals("pas une fonction", raison)
+    end)
+    assertEquals(0, relectures, "aucune relecture démarrée")
 end)
 
 test("un rappel qui plante ne prive pas les autres suiveurs (erreur rendue au gestionnaire du jeu)", function()
@@ -266,3 +322,12 @@ test("un rappel qui plante ne prive pas les autres suiveurs (erreur rendue au ge
         assertEquals(2, #erreurs, "l'erreur du rappel cassé, au suivi puis au changement")
     end)
 end)
+
+end -- lesTests
+
+lesTests(false)
+-- Un add-on qui suit la portée dès le chargement (BeAGoodPal#25) : il reste inscrit pour toute la suite des tests.
+test("un suiveur déjà là avant les tests (un add-on qui suit la portée dès le chargement)", function()
+    assertTrue(AzerothCommune:Suivre("portée", function() end))
+end)
+lesTests(true)

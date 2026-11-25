@@ -176,8 +176,9 @@ un add-on **suit** une lecture, le socle le rappelle à chaque changement et son
 souscription : rien n'est relevé ni gardé, le suivi ne dure que la session.
 
 ```lua
-AC:Suivre("portée", function(valeur) end) -- fn(valeur) tout de suite, puis à chaque changement ; true, ou nil, « lecture inconnue »
-AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn que pour Suivre) ; true, ou nil, « lecture inconnue »
+AC:Suivre("portée", function(valeur) end) -- fn(valeur) tout de suite, puis à chaque changement ; true, ou false et la raison
+                                          -- (« lecture inconnue », « pas une fonction » : rien n'est suivi)
+AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn que pour Suivre) ; true, ou false, « lecture inconnue »
 ```
 
 - **nil = inconnu, jamais « non »** : pas de cible, une réponse qui ne tranche pas, une API absente ou en erreur.
@@ -185,14 +186,18 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
   l'affichage seulement ; la portée, elle, est calculée : une réponse secrète y donne nil, et la sonde la note « secret ».
 - **La session seulement** : rien n'est sauvegardé. Le socle n'écoute le jeu (événements, relecture périodique) que pour
   les lectures suivies ; le dernier suiveur parti, il cesse.
+- **La valeur du moment** : chaque `Suivre` relit le jeu, il ne rend pas une valeur gardée d'avant.
+- **Une fonction suivie deux fois n'est inscrite qu'une fois** : un seul rappel par changement, un seul `NePlusSuivre`
+  pour l'arrêter ; chaque `Suivre` la rappelle tout de suite.
 - Un rappel qui plante ne prive pas les autres (erreur rendue au gestionnaire du jeu).
 
 | Lecture | Valeurs | Comment le socle la lit |
 |---|---|---|
-| `portée` | `"tir"`, `"zone morte"`, `"mêlée"`, `"trop loin"`, nil | le test de portée natif du swing timer, activé au premier suivi (`C_SwingTimer.EnableRangeCheck` pour la mêlée et le tir : sans lui, il ne répond pas), relu à `PLAYER_SWING_RANGE_UPDATE`, au changement de cible et toutes les 0,2 s ; replis quand il ne dit rien : la portée de Coupure d'ailes pour la mêlée (jamais l'Attaque du raptor, qui répond « à portée » à distance de tir), celle du Tir automatique pour le tir ; ni mêlée ni tir : le test « suivre » (`CheckInteractDistance`, 28 m) sépare zone morte et trop loin. Sans cible attaquable : nil. Les replis sont des sorts de chasseur : pour une autre classe, sans le natif, nil |
+| `portée` | `"tir"`, `"zone morte"`, `"mêlée"`, `"trop loin"`, nil | le test de portée natif du swing timer, activé à chaque suivi et réarmé à chaque changement de cible tant qu'elle est suivie (`C_SwingTimer.EnableRangeCheck` pour la mêlée et le tir : sans lui, il ne répond pas ; la barre de swing du jeu ou un autre add-on peut le couper), relu à `PLAYER_SWING_RANGE_UPDATE`, au changement de cible et toutes les 0,2 s ; replis quand il ne dit rien : la portée de Coupure d'ailes pour la mêlée (jamais l'Attaque du raptor, qui répond « à portée » à distance de tir), celle du Tir automatique pour le tir ; ni mêlée ni tir : le test « suivre » (`CheckInteractDistance`, 28 m) sépare zone morte et trop loin. Sans cible attaquable : nil. Les replis sont des sorts de chasseur : pour une autre classe, sans le natif, nil |
 
 Sonde `portée` : les sept réponses du jeu (cible, attaquable, natif mêlée, natif tir, Coupure d'ailes, Tir automatique,
-« suivre ») sont oui, non ou nil, ni secrètes ni en erreur ; `valeur` les note dans cet ordre. Elle se relance aussi
+« suivre ») sont oui, non ou nil : ni absentes (une fonction du jeu disparue, notée « absente »), ni secrètes, ni en erreur ;
+`valeur` les note dans cet ordre. Elle se relance aussi
 sans suivi (`AC.RelancerSondes()`, Diagnostic) : cible un monstre pour voir ce que le jeu répond.
 
 ### Fournisseurs (cours de l'HV)

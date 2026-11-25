@@ -969,7 +969,7 @@ function verifierGlobalDocumente(lib)
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
     Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres
-    MaitresDuMetier Ecarts RechercheObjets RecevoirObjet]]):gmatch("%S+") do
+    MaitresDuMetier Ecarts RechercheObjets RecevoirObjet Suivre NePlusSuivre]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
@@ -1224,7 +1224,10 @@ assert(#forge == 2 and forge[1].pnj == 7 and forge[1].nom == "Maître" and forge
   and forge[2].pnj == 5 and forge[2].carte == 1429 and forge[2].x == 41.8 and forge[2].y == 67, "maîtres de la Forge, dans l'ordre, avec position")
 forge[1].nom = "touché"
 assert(AzerothCommune.MaitresDuMetier("Forge")[1].nom == "Maître" and AzerothCommune.MaitresDuMetier("Pêche") == nil, "copies ; métier inconnu : nil")
-verifierGlobalDocumente(AzerothCommune) -- la base chargée : MaitresDuMetier est documenté
+-- L'état de combat (Combat.lua, #98 ; testé au simulateur, tests/suivi.lua) : chargé ici pour le global documenté.
+charger("Combat")
+assert(AzerothCommune:Suivre("portée", nil) == false and AzerothCommune:Suivre("mana", noop) == false, "Suivre : garde de type")
+verifierGlobalDocumente(AzerothCommune) -- la base chargée : MaitresDuMetier, Suivre et NePlusSuivre sont documentés
 ns.recettesPNJ, ns.recettesMaitres, ns.recettesMarchandsLot = nil, nil, nil
 assert(AzerothCommune.MaitresDuMetier("Forge") == nil, "sans réserve : nil")
 end
