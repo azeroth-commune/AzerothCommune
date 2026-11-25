@@ -53,7 +53,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `Interface.lua` | fenêtres, tableaux triables, montants, noms d'objets, barre de recherche d'objets |
 | `Capture.lua` | capture d'une fenêtre, export d'une table en grilles de couleurs |
 | `Regroupement.lua` | bouton de minicarte commun, entrée des options (la page du socle et une sous-page par add-on), exports |
-| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible, familier, Tir auto, mana, coût des formes, pas assez de mana) et leurs sondes |
+| `Combat.lua` | l'état de combat : `Suivre`, `NePlusSuivre`, les lectures (portée de la cible, familier, Tir auto, mana, coût des formes, pas assez de mana, munitions, aspect) et leurs sondes |
 | `Fournisseurs.lua` | cours de l'HV par le scan du socle et les autres add-ons (Auctionator, TSM, AuctionDB) |
 | `Base.lua`, `Commerce.lua`, `Souscriptions.lua` | la base (l'ex-GameData) : relevés des persos, des objets, du commerce, souscriptions, lots ; `/ac` |
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
@@ -205,6 +205,8 @@ AC:NePlusSuivre("portée", fn)            -- fn n'est plus rappelé (le même fn
 | `mana max` | un nombre, une valeur secrète, nil | `UnitPowerMax("player", 0)`, relu à `UNIT_MAXPOWER` du joueur ; secrète, comme `mana` |
 | `coût des formes` | `{ [ID du sort] = coût en mana }` | pour chaque forme du druide connue (Ours 5487, Ours redoutable 9634, Félin 768, Voyage 783, Aquatique 1066, Sélénien 24858) et Shifting Power (1322605), le coût en mana de `C_Spell.GetSpellPowerCost`, lu **hors combat seulement** (`SPELLS_CHANGED`, sortie de combat, gain de niveau) et gardé pour le combat, la session seulement. Une forme manque : pas connue, ou coût illisible. Un nombre, jamais secret : de quoi poser les bornes d'une barre |
 | `pas assez de mana` | `{ [ID du sort] = true / false }` | pour les mêmes sorts, le 2e retour de `C_Spell.IsSpellUsable` (le jeu dit « pas assez de mana »), relu à `SPELL_UPDATE_USABLE`, `SPELLS_CHANGED` et `UNIT_POWER_FREQUENT` du joueur. Un sort manque : pas connu, ou réponse qui ne tranche pas (secrète…) |
+| `munitions` | le compte (nombre), `0` sans munitions placées, `false` si l'arme n'en utilise pas, nil | `UnitUsesAmmo("player")`, puis le compte de l'emplacement de munitions (`GetInventoryItemCount`) ; s'il ne répond pas ou répond 1, celui de cet objet dans les sacs (`C_Item.GetItemCount`). Relue à `BAG_UPDATE`, `PLAYER_EQUIPMENT_CHANGED` et `UNIT_INVENTORY_CHANGED` du joueur |
+| `aspect` | `"faucon"`, `"singe"`, `"guépard"`, `"meute"`, `"bête"`, `"nature"`, `"aucun"`, nil | chaque aspect cherché par son nom (celui du client, par l'ID de son premier rang : tous les rangs) dans tes auras (`C_UnitAuras.GetAuraDataBySpellName`, filtre `HELPFUL\|PLAYER`). Rien trouvé : `"aucun"` hors combat, ou en combat si `C_Secrets.ShouldSpellAuraBeSecret` dit non pour chaque aspect ; sinon nil. Relue à `UNIT_AURA` du joueur et à la fin du combat. Vipère et Faucon du dragon : pas lus (non confirmés sur Forever) |
 
 Un événement partagé par deux lectures reste écouté tant que l'une d'elles est suivie ; les événements `UNIT_*` des
 lectures du joueur ne sont écoutés que pour lui.
@@ -228,6 +230,12 @@ Sonde `swing` : à chaque coup suivi, la durée et le type de `PLAYER_SWING`, pu
 l'arme ; verte sur une durée positive, un type 0, 1 ou 2 et une vitesse positive ; rouge sur une valeur secrète (notée
 « secret »), une vitesse « illisible », une fonction « absente » ou en erreur. Elle demande un coup : « pas encore vue »
 d'ici là, `RelancerSondes` ne la relance pas.
+
+Sonde `munitions` : `UnitUsesAmmo` (oui, non ou nil), puis l'ID et le compte de l'emplacement de munitions, et le compte
+de cet objet dans les sacs (un nombre ou rien). Sonde `aspect` : le combat (`InCombatLockdown`, oui ou non), puis pour
+chaque aspect, dans l'ordre du tableau, la réponse des auras (`true` : trouvé, nil : rien ; « pas de nom (ID) » quand le
+client ne connaît plus l'ID) et celle de `ShouldSpellAuraBeSecret` (oui ou non). Pour les deux : ni absentes, ni
+secrètes, ni en erreur.
 
 ### Fournisseurs (cours de l'HV)
 

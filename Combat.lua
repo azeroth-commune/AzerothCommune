@@ -4,11 +4,11 @@
 --   AC:Suivre(lecture, fn)      : fn(valeur) tout de suite, puis à chaque changement ; true, ou false et la raison
 --                                 (« lecture inconnue », « pas une fonction »). La même fn suivie deux fois : inscrite une fois.
 --   AC:NePlusSuivre(lecture, fn) : fn n'est plus rappelé ; le dernier suiveur parti, le socle cesse d'écouter le jeu.
--- valeur : nil = inconnu, jamais « non » ; une valeur secrète passe telle quelle, pour l'affichage seulement (la portée
--- et le familier, calculés, n'en rendent jamais : une réponse secrète y donne nil). Une table rendue est partagée entre
--- les suiveurs : la lire, jamais la modifier.
--- Lectures : « portée » (une chaîne, voir portee), « familier » (une table, voir familier) et « swing » (une table,
--- voir surSwing).
+-- valeur : nil = inconnu, jamais « non » ; une valeur secrète passe telle quelle, pour l'affichage seulement (la portée,
+-- le familier, les munitions et l'aspect, calculés, n'en rendent jamais : une réponse secrète y donne nil). Une table
+-- rendue est partagée entre les suiveurs : la lire, jamais la modifier.
+-- Lectures : « portée » (une chaîne, voir portee), « familier » (une table, voir familier), « swing » (une table,
+-- voir surSwing), « munitions » (un nombre ou false, voir munitions) et « aspect » (une chaîne, voir aspect).
 local lib = AzerothCommune
 
 local TIR, MELEE = 2, 0 -- Enum.PlayerSwingType.Ranged, .MainHand
@@ -266,6 +266,82 @@ lib.DeclarerSonde("pas assez de mana",
     .. "ni absent, ni secret, ni en erreur",
   notesAttendues(function(n) return type(n) == "boolean" end), function() pasAssezDeMana() end)
 
+-- Munitions : le compte des munitions placées, 0 sans munitions placées, false si l'arme n'en utilise pas
+-- (UnitUsesAmmo), nil quand le jeu ne le dit pas. Le compte de l'emplacement de munitions d'abord ; s'il ne répond
+-- pas ou répond 1 (certains clients y rendent la pile, pas le total), celui de cet objet dans les sacs. La sonde note
+-- les quatre réponses.
+local AMMO = INVSLOT_AMMO or 0
+local function munitions()
+  local utilise, a = demander(UnitUsesAmmo, "player")
+  local id, b = brut(GetInventoryItemID, "player", AMMO)
+  local compte, c = brut(GetInventoryItemCount, "player", AMMO)
+  local sacs, d
+  if type(id) == "number" then sacs, d = brut((C_Item or {}).GetItemCount, id) end
+  lib.Sonder("munitions", a, b, c, d)
+  if utilise == false then return false end
+  if utilise == nil then return nil end
+  if b == nil then return 0 end -- l'emplacement répond vide : rien à tirer
+  if type(id) ~= "number" then return nil end
+  if type(compte) == "number" and compte > 1 then return compte end
+  if type(sacs) == "number" then return sacs end
+  if type(compte) == "number" then return compte end
+end
+local function typesOuNil(...)
+  local types = { ... }
+  return function(...)
+    for i, t in ipairs(types) do
+      local v = select(i, ...)
+      if v ~= nil and type(v) ~= t then return false end
+    end
+    return true
+  end
+end
+lib.DeclarerSonde("munitions",
+  "UnitUsesAmmo rend oui, non ou nil ; GetInventoryItemID et GetInventoryItemCount sur l'emplacement de munitions, et "
+    .. "C_Item.GetItemCount de cet objet, un nombre ou rien : ni absents, ni secrets, ni en erreur",
+  typesOuNil("boolean", "number", "number", "number"), function() munitions() end)
+
+-- Aspect du chasseur : « faucon », « singe », « guépard », « meute », « bête », « nature », « aucun », ou nil. Chaque
+-- aspect cherché par son nom (celui du client, lu par l'ID de son premier rang : tous les rangs le portent) parmi tes
+-- auras (filtre PLAYER : la Meute d'un autre chasseur ne compte pas). Rien trouvé ne vaut « aucun » qu'hors combat, ou
+-- en combat quand le jeu dit que ces auras ne sont pas secrètes (en combat, une aura secrète peut ne pas être rendue
+-- du tout). Le Faucon du dragon et la Vipère ne sont pas confirmés sur Forever (PRD BeAGoodPal#22) : pas lus. La sonde
+-- note le combat, puis pour chaque aspect la réponse des auras (true : trouvé) et celle de ShouldSpellAuraBeSecret.
+local ASPECTS = { { "faucon", 13165 }, { "singe", 13163 }, { "guépard", 5118 }, { "meute", 13159 }, { "bête", 13161 },
+                  { "nature", 20043 } }
+local function aspect()
+  local auras, secrets, sorts = C_UnitAuras or {}, C_Secrets or {}, C_Spell or {}
+  local combat, a = demander(InCombatLockdown)
+  local notes, actif, inconnu = { a }, nil, false
+  for i, asp in ipairs(ASPECTS) do
+    local nom = brut(sorts.GetSpellName, asp[2])
+    local aura, n
+    if type(nom) == "string" then aura, n = brut(auras.GetAuraDataBySpellName, "player", nom, "HELPFUL|PLAYER")
+    else n = "pas de nom (" .. asp[2] .. ")" end
+    if type(aura) == "table" then n, actif = true, actif or asp[1]
+    elseif n ~= nil then inconnu = true end
+    local _, m = demander(secrets.ShouldSpellAuraBeSecret, asp[2])
+    notes[2 * i], notes[2 * i + 1] = n, m -- des nil parmi les notes : pas de #notes
+  end
+  lib.Sonder("aspect", unpack(notes, 1, 1 + 2 * #ASPECTS))
+  if actif then return actif end
+  if inconnu or combat == nil then return nil end
+  if not combat then return "aucun" end
+  for i = 3, 1 + 2 * #ASPECTS, 2 do if notes[i] ~= false then return nil end end -- en combat : lisibles seulement si le jeu le dit
+  return "aucun"
+end
+lib.DeclarerSonde("aspect",
+  "InCombatLockdown rend oui ou non ; pour chaque aspect, C_Spell.GetSpellName un nom, C_UnitAuras.GetAuraDataBySpellName "
+    .. "ton aura ou rien, C_Secrets.ShouldSpellAuraBeSecret oui ou non : ni absents, ni secrets, ni en erreur",
+  function(combat, ...)
+    if type(combat) ~= "boolean" then return false end
+    for i = 1, select("#", ...), 2 do
+      local n, m = select(i, ...)
+      if (n ~= nil and n ~= true) or type(m) ~= "boolean" then return false end
+    end
+    return true
+  end, function() aspect() end)
+
 local LECTURES = {
   ["portée"] = {
     lire = portee,
@@ -304,6 +380,9 @@ local LECTURES = {
     evenements = { "SPELL_UPDATE_USABLE", "SPELLS_CHANGED", "UNIT_POWER_FREQUENT" },
     unite = "player",
   },
+  munitions = { lire = munitions, evenements = { "BAG_UPDATE", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED" },
+    unite = "player" },
+  aspect = { lire = aspect, evenements = { "UNIT_AURA", "PLAYER_REGEN_ENABLED" }, unite = "player" },
 }
 
 -- Deux valeurs pareilles : égales, ou deux tables aux mêmes champs (les lectures rendent une table neuve à chaque fois).
