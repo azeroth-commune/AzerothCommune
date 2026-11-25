@@ -1,36 +1,88 @@
 -- Azeroth Commune : fenêtres, tableaux triables, montants et noms d'objets, pour tous les add-ons.
 -- Appel avec un point (AzerothCommune.Argent(c), pas :Argent) : ces fonctions servent aussi telles quelles de fmt à un
--- tableau. Rien n'est sauvegardé ici : ce qui doit durer (tri d'un tableau, base des objets) est une table de l'add-on,
+-- tableau. Seule la géométrie des fenêtres (place et taille, de l'interface) est sauvegardée ici, dans
+-- AzerothCommuneDB.fenetres ; le reste de ce qui doit durer (tri d'un tableau, base des objets) est une table de l'add-on,
 -- passée en paramètre (opts.store, objets, garde).
 local lib = AzerothCommune
 
 ---------------------------------------------------------------------------------------------------
--- Une fenêtre sombre, bord lavande, déplaçable, fermée par Échap, avec titre, croix et bouton capture.
+-- Une fenêtre au look du jeu (ButtonFrameTemplate sans portrait : son titre, sa croix), déplaçable, fermée par Échap,
+-- avec poignée de redimensionnement et bouton capture. f.title est le titre du gabarit.
+-- La taille de création est la taille de départ et le minimum ; une largeur fixée ensuite par l'add-on
+-- (f:SetWidth(largeur du tableau + 50)) relève le minimum, et à la création (fenêtre pas encore montrée) la largeur
+-- retenue, si elle est plus grande, l'emporte. Une hauteur fixée par l'add-on (d'après son contenu) est prise telle quelle.
+-- Place et taille retenues pour le compte dans AzerothCommuneDB.fenetres[name] (la géométrie d'une fenêtre est de
+-- l'interface), retrouvées à la création ; pas par le jeu (SetUserPlaced(false)). Base pas encore chargée : rien n'est
+-- lu ni retenu cette fois.
+-- opts (facultatif) : { redimensionnable = false (pas de poignée, taille gérée par l'add-on, seule la place est retenue,
+-- si le joueur l'a déplacée), place = { "TOPRIGHT", Minimap, "TOPLEFT", -12, -20 } (tant que rien n'est retenu ; le
+-- centre sinon) }. Une fenêtre qui se place elle-même après coup (ClearAllPoints, SetPoint) garde sa place.
 -- Bouton capture : seulement si un add-on l'a demandé (lib.captureDansLesFenetres, posé par Diagnostic, l'add-on de debug, Diagnostic#7).
-function lib.Fenetre(name, title, w, h)
-  local f = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-  f:SetSize(w, h)
-  f:SetPoint("CENTER")
+function lib.Fenetre(name, title, w, h, opts)
+  opts = opts or {}
+  local redim = opts.redimensionnable ~= false
+  local f = CreateFrame("Frame", name, UIParent, "ButtonFrameTemplate")
+  ButtonFrameTemplate_HidePortrait(f)
+  ButtonFrameTemplate_HideAttic(f)
+  ButtonFrameTemplate_HideButtonBar(f)
+  f:SetTitle(title)
+  f.title = f:GetTitleText()
+  local g = AzerothCommuneDB and AzerothCommuneDB.fenetres and AzerothCommuneDB.fenetres[name]
+  -- La taille choisie par le joueur (à la poignée), jamais plus grande que l'écran ; ne sert qu'à la création.
+  local voulue = redim and g and g.w and g.h and { math.min(g.w, UIParent:GetWidth()), math.min(g.h, UIParent:GetHeight()) }
+  f:SetSize(voulue and math.max(w, voulue[1]) or w, voulue and math.max(h, voulue[2]) or h)
+  f:ClearAllPoints()
+  if g and g.x and g.y then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", g.x, g.y)
+  elseif opts.place then f:SetPoint(unpack(opts.place))
+  else f:SetPoint("CENTER") end
   f:SetFrameStrata("HIGH")
-  f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-  f:SetBackdropColor(0.06, 0.06, 0.08, 0.96)
-  f:SetBackdropBorderColor(0.66, 0.56, 1.00, 0.35)
   f:EnableMouse(true)
   f:SetMovable(true)
   f:SetClampedToScreen(true)
   -- Deux fenêtres au même niveau mélangeaient leurs textes (18/11/2026) : celle qu'on ouvre ou qu'on clique passe devant.
   f:SetToplevel(true)
   f:HookScript("OnShow", function(self) self:Raise() end)
+  -- Un déplacement retient la place seule ; la poignée, la place et la taille (une taille retenue avant reste).
+  local function retenir(avecTaille)
+    f:StopMovingOrSizing()
+    f:SetUserPlaced(false) -- c'est nous qui retenons la place, pas le jeu
+    if not AzerothCommuneDB then return end
+    AzerothCommuneDB.fenetres = AzerothCommuneDB.fenetres or {}
+    local r = AzerothCommuneDB.fenetres[name] or {}
+    r.x, r.y = math.floor(f:GetLeft() + 0.5), math.floor(f:GetTop() + 0.5)
+    if avecTaille then r.w, r.h = math.floor(f:GetWidth() + 0.5), math.floor(f:GetHeight() + 0.5) end
+    AzerothCommuneDB.fenetres[name] = r
+  end
   f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", f.StartMoving)
-  f:SetScript("OnDragStop", f.StopMovingOrSizing)
+  f:SetScript("OnDragStop", function() retenir(false) end)
+  if redim then
+    local minW, minH = w, h
+    f:SetResizable(true)
+    f:SetResizeBounds(minW, minH)
+    local poignee = CreateFrame("Button", nil, f, "PanelResizeButtonTemplate")
+    poignee:SetPoint("BOTTOMRIGHT", -4, 4)
+    poignee:Init(f, minW, minH)
+    f.ResizeButton = poignee
+    poignee.resizeStoppedCallback = function()
+      f:SetSize(math.max(minW, f:GetWidth()), math.max(minH, f:GetHeight())) -- le jeu borne déjà ; au cas où
+      retenir(true)
+    end
+    -- La largeur fixée par l'add-on relève le minimum (pas pendant que le joueur tire la poignée : la borne du gabarit
+    -- passe aussi par SetWidth). Pas la hauteur : celle d'un contenu doit pouvoir redescendre.
+    f:HookScript("OnShow", function() voulue = nil end) -- la taille retenue ne sert qu'à la création
+    hooksecurefunc(f, "SetWidth", function(_, v)
+      if poignee:IsActive() then return end
+      minW = math.max(minW, v)
+      f:SetResizeBounds(minW, minH)
+      poignee:SetMinWidth(minW)
+      if voulue and not f:IsShown() and voulue[1] > v then f:SetSize(voulue[1], f:GetHeight()) end
+    end)
+  end
   table.insert(UISpecialFrames, name) -- Échap ferme la fenêtre
-  f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  f.title:SetPoint("TOPLEFT", 14, -12)
-  f.title:SetText(title)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", 2, 2)
-  if lib.captureDansLesFenetres and lib.BoutonCapture then lib.BoutonCapture(f, title, -30, -8) end
+  if lib.captureDansLesFenetres and lib.BoutonCapture then -- dans la barre de titre, au niveau de la croix (sinon sous le cadre)
+    lib.BoutonCapture(f, title, -28, -3):SetFrameLevel(f.CloseButton:GetFrameLevel())
+  end
   f:Hide()
   return f
 end
@@ -190,13 +242,10 @@ function lib.RechercheObjets(parent, qty, onPick, w)
   name:SetSize(w, 22)
   name:SetAutoFocus(false)
   name.recherche = true
-  local drop = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  local drop = CreateFrame("Frame", nil, parent, "TooltipBackdropTemplate") -- le fond des bulles d'aide du jeu
   drop:SetPoint("TOPLEFT", name, "BOTTOMLEFT", -6, -2)
   drop:SetSize(w + 40, 10)
   drop:SetFrameStrata("DIALOG")
-  drop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-  drop:SetBackdropColor(0.08, 0.08, 0.10, 0.98)
-  drop:SetBackdropBorderColor(0.66, 0.56, 1.00, 0.35)
   drop:Hide()
   local buttons, hits, sel = {}, {}, 1
   local function qtyValue() return math.max(1, tonumber(qty:GetText()) or 1) end
@@ -212,10 +261,11 @@ function lib.RechercheObjets(parent, qty, onPick, w)
   for i = 1, 8 do
     local b = CreateFrame("Button", nil, drop)
     b:SetSize(w + 36, 20)
-    b:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 20)
+    b:SetPoint("TOPLEFT", 2, -4 - (i - 1) * 20)
     b.hl = b:CreateTexture(nil, "BACKGROUND")
     b.hl:SetAllPoints()
-    b.hl:SetColorTexture(0.66, 0.56, 1.00, 0.18)
+    b.hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight") -- la surbrillance des listes du jeu
+    b.hl:SetBlendMode("ADD")
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetSize(16, 16)
     b.icon:SetPoint("LEFT", 4, 0)
@@ -238,7 +288,7 @@ function lib.RechercheObjets(parent, qty, onPick, w)
         b.text:SetText(e.name .. (e.fabricable and "  |cffe6a640fabricable|r" or ""))
       end
     end
-    drop:SetHeight(4 + 20 * #hits)
+    drop:SetHeight(8 + 20 * #hits)
     drop:SetShown(#hits > 0)
     paint()
   end
@@ -287,7 +337,8 @@ end
 -- alternées, défilement.
 --   cols : { key, title, w, get = function(ligne) → valeur de tri, fmt = function(valeur, ligne) → texte,
 --            align = "LEFT"/"RIGHT", asc = true (premier clic croissant), icon = function(ligne) → texture,
---            button = function(ligne) → libellé, click = function(ligne), tip = "aide de l'en-tête" }
+--            button = function(ligne) → libellé, click = function(ligne), tip = "aide de l'en-tête",
+--            extensible = true (une colonne au plus : elle prend la largeur libre, et s'élargit avec la fenêtre) }
 --   opts : { name, sort = clé par défaut, desc, store, top, bottom, rowH, tooltip = function(ligne, GameTooltip),
 --            onClick = function(ligne, bouton) }
 -- Renvoie le tableau (t:SetData(liste)) et sa largeur, pour dimensionner la fenêtre.
@@ -311,13 +362,10 @@ function lib.Tableau(parent, cols, opts)
       end
     end
   end
-  local x = 0
   for _, c in ipairs(cols) do
-    c.x = x
     if c.get then
       local b = CreateFrame("Button", nil, header)
-      b:SetPoint("TOPLEFT", x, 0)
-      b:SetSize(c.w, 18)
+      b:SetHeight(18)
       b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
       b.text:SetAllPoints()
       b.text:SetJustifyH(c.align or "LEFT")
@@ -348,48 +396,74 @@ function lib.Tableau(parent, cols, opts)
       end
       c.head = b
     end
-    x = x + c.w + GAP
   end
   local line = header:CreateTexture(nil, "ARTWORK")
-  line:SetColorTexture(0.66, 0.56, 1, 0.3)
+  line:SetColorTexture(1, 1, 1, 0.15)
   line:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -1)
-  line:SetSize(width, 1)
+  line:SetHeight(1)
   local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
   scroll:SetPoint("BOTTOMRIGHT", -32, opts.bottom or 30)
   local content = CreateFrame("Frame", nil, scroll)
-  content:SetSize(width, 1)
+  content:SetHeight(1)
   scroll:SetScrollChild(content)
   t.header, t.scroll = header, scroll
 
+  -- La colonne extensible prend la largeur libre du défilement (ancré au bord droit du parent) : elle s'élargit avec la
+  -- fenêtre, les autres gardent la leur. c.x, c.lw : place et largeur du moment.
+  local total = width
+  local function placer(r)
+    r:SetWidth(total)
+    for k, c in ipairs(cols) do
+      local cell = r.cells[k]
+      if c.button then
+        cell:SetWidth(c.lw)
+        cell:SetPoint("LEFT", c.x, 0)
+      else
+        local left = c.x
+        if c.icon then r["icon" .. k]:SetPoint("LEFT", left, 0); left = left + rowH end
+        cell:SetPoint("LEFT", left, 0)
+        cell:SetWidth(c.lw - (left - c.x))
+      end
+    end
+  end
+  local function disposer()
+    local libre, x = math.max(0, math.floor(scroll:GetWidth() - width)), 0
+    for _, c in ipairs(cols) do
+      c.x, c.lw = x, c.w + (c.extensible and libre or 0)
+      if c.head then c.head:SetPoint("TOPLEFT", x, 0); c.head:SetWidth(c.lw) end
+      x = x + c.lw + GAP
+    end
+    total = x
+    header:SetWidth(total)
+    line:SetWidth(total)
+    content:SetWidth(total)
+    for _, r in ipairs(t.rows) do placer(r) end
+  end
+  disposer()
+
   local function makeRow()
     local r = CreateFrame("Frame", nil, content)
-    r:SetSize(width, rowH)
+    r:SetHeight(rowH)
     r:EnableMouse(true)
     r.bg = r:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
     r.hl = r:CreateTexture(nil, "HIGHLIGHT")
     r.hl:SetAllPoints()
-    r.hl:SetColorTexture(0.66, 0.56, 1, 0.12)
+    r.hl:SetColorTexture(1, 1, 1, 0.08)
     r.cells = {}
     for k, c in ipairs(cols) do
       if c.button then
         local b = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
-        b:SetSize(c.w, rowH - 2)
-        b:SetPoint("LEFT", c.x, 0)
+        b:SetHeight(rowH - 2)
         b:SetScript("OnClick", function() c.click(r.item) end)
         r.cells[k] = b
       else
-        local left = c.x
         if c.icon then
           r["icon" .. k] = r:CreateTexture(nil, "ARTWORK")
           r["icon" .. k]:SetSize(rowH - 4, rowH - 4)
-          r["icon" .. k]:SetPoint("LEFT", left, 0)
-          left = left + rowH
         end
         local fs = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        fs:SetPoint("LEFT", left, 0)
-        fs:SetWidth(c.w - (left - c.x))
         fs:SetJustifyH(c.align or "LEFT")
         fs:SetWordWrap(false)
         r.cells[k] = fs
@@ -404,6 +478,7 @@ function lib.Tableau(parent, cols, opts)
       end)
       r:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
+    placer(r)
     return r
   end
 
@@ -440,9 +515,10 @@ function lib.Tableau(parent, cols, opts)
     for slot = shown + 1, #t.rows do t.rows[slot]:Hide() end
   end
   scroll:HookScript("OnVerticalScroll", render)
-  scroll:HookScript("OnSizeChanged", render)
+  scroll:HookScript("OnSizeChanged", function() disposer(); render() end)
 
   function t:Refresh()
+    disposer() -- un onglet caché pendant que la fenêtre changeait de taille se remet en place
     arrows()
     lib.TrierLignes(self.data, cols, self.sort)
     content:SetHeight(math.max(1, #self.data * rowH))
