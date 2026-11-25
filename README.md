@@ -93,7 +93,7 @@ local b, lot = AC:Lire("base des recettes")
 AC:Souscrire("base des quêtes")                    -- les quêtes que l'Alliance peut prendre, non liées à un perso (#43)
 local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription : nil, « pas encore relevé »
 -- q = { [questID] = { nom, zone, niveau, niveau_requis, races, classes, prerequis, prerequis_un, suites, amorces, donneur,
---   objet } } : la réserve générée depuis QuestieDB Forever, seule (rien n'est relevé en jeu) ; lot = { provenance =
+--   objet, origine } } : la réserve générée depuis QuestieDB Forever, seule (rien n'est relevé en jeu) ; lot = { provenance =
 --   « source externe », source = « QuestieDB Forever », version, date (de la génération) }.
 -- nom : français (traductions de QuestieDB), sinon anglais. zone : l'areaID (C_Map.GetAreaInfo pour son nom) ; négative :
 -- une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue (avec les corrections de zone que QuestieDB fait en
@@ -106,7 +106,9 @@ local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription :
 -- donneur = { pnj ou objet (son ID ; un objet du monde : coffre, stèle…),
 -- nom, carte (uiMapID), x, y (pourcentage de la carte) } : le premier donneur, un PNJ amical pour l'Alliance d'abord, à sa
 -- première apparition dans la zone de la quête (sinon la première listée ; x, y nil dans une instance) ; nil sans donneur.
--- objet : l'objet qui donne la quête (nil sans).
+-- objet : l'objet qui donne la quête (nil sans). origine = { nom (de l'objet), pnjs (les PNJ qui le lâchent), objets (les
+-- objets du monde qui le contiennent) } : noms français sinon anglais, 3 au plus chacun, nil quand vides (« lâché par les
+-- kobolds ») ; nil sans objet de départ.
 AC.Ecarts()                                        -- { { genre, recette, nom, attendu, vu, pnj, pnjNom, patron, date }, … } :
 -- chaque maître ou marchand vu en jeu qui contredit la réserve des recettes (« compétence », « patron absent », « marchand
 -- inconnu ») ; gardés dans la base sans doublon (un écart revu prend la date du relevé), rien d'autre n'est corrigé

@@ -102,6 +102,17 @@ test("races : toute l'Alliance (952) est la liste explicite, Humain et Skyborne 
     end)
 end)
 
+test("objet de départ : Le collecteur (123) part du Plan de route du Collecteur, lâché par les gnolls Rivepatte", function()
+    avec(true, function()
+        local q = AzerothCommune:Lire(BASE)[123]
+        assertEquals(1307, q.objet)
+        assertEquals("Plan de route du Collecteur", q.origine.nom)
+        assertTrue(contient(q.origine.pnjs, "Rivepatte chétif"), "lâché par les Rivepatte chétifs")
+        assertTrue(#q.origine.pnjs <= 3, "3 noms au plus")
+        assertNil(AzerothCommune:Lire(BASE)[952].origine) -- sans objet de départ
+    end)
+end)
+
 test("zone corrigée pour l'Alliance : Almanach de Nar'thalas (78124) est à Hurlevent", function()
     avec(true, function()
         assertEquals(1519, AzerothCommune:Lire(BASE)[78124].zone)

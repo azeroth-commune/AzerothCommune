@@ -148,6 +148,7 @@ lire["base des quêtes"] = function()
       local d = c[11] -- { ID (négatif : un objet du monde), nom, carte, x, y } ; races, classes : listes d'IDs, nil : toutes
       quetes[id] = { nom = c[1], zone = c[2], niveau = c[3], niveau_requis = c[4], races = c[5], classes = c[6],
         prerequis = c[7], prerequis_un = c[8], suites = c[9], amorces = c[10], objet = c[12],
+        origine = c[13] and { nom = c[13][1], pnjs = c[13][2], objets = c[13][3] }, -- l'objet de départ : d'où il vient
         donneur = d and { pnj = d[1] > 0 and d[1] or nil, objet = d[1] < 0 and -d[1] or nil, nom = d[2], carte = d[3], x = d[4], y = d[5] } }
     end
   end
