@@ -53,10 +53,13 @@ local function portee()
   local tir, d = demander(natif.IsTargetWithinSwingRange, TIR)
   local coupure, e = demander(sorts.IsSpellInRange, COUPURE_D_AILES, "target")
   local tirAuto, f = demander(sorts.IsSpellInRange, TIR_AUTOMATIQUE, "target")
-  -- Hors combat seulement : en combat, le jeu bloque CheckInteractDistance (taint.log du 25/11 : « An action was blocked
-  -- in combat because of taint from AzerothCommune »). En combat, ni mêlée ni tir ne dit donc rien (nil).
-  local proche, g -- nil : la sonde reste verte en combat
-  if not InCombatLockdown() then proche, g = demander(CheckInteractDistance, "target", 4) end
+  -- En combat, le jeu bloque CheckInteractDistance sur une cible qu'on ne peut pas attaquer (taint.log du 25/11 :
+  -- « An action was blocked in combat because of taint from AzerothCommune », au moment où le mob fuyait ou mourait) ;
+  -- sur une cible attaquable vivante, il répond (sonde en combat du 25/11). Comme OutplayedCombat pour IsItemInRange.
+  local proche, g -- nil : on ne sait pas, la sonde reste verte
+  if not InCombatLockdown() or (cible and attaquable and UnitIsDead("target") == false) then
+    proche, g = demander(CheckInteractDistance, "target", 4)
+  end
   lib.Sonder("portée", a, b, c, d, e, f, g)
   if not (cible and attaquable) then return nil end
   if melee == nil then melee = coupure end

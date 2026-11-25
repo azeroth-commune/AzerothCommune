@@ -120,22 +120,28 @@ test("portée, natif absent : replis Coupure d'ailes (mêlée), Tir automatique 
     assertEquals("tir", porteeAvec(r { natif = { [MELEE] = false }, coupure = true, tirAuto = true }))
 end)
 
-test("portée en combat : CheckInteractDistance jamais appelé (le jeu le bloque), ni tir ni mêlée donne nil", function()
-    local r = { cible = true, attaquable = true, coupure = false, tirAuto = false, suivre = true }
+test("portée en combat : CheckInteractDistance seulement sur une cible attaquable vivante (le jeu bloque les autres)", function()
     local appels = 0
-    local j = jeu(r)
-    j.CheckInteractDistance = function() appels = appels + 1 return true end
-    j.InCombatLockdown = function() return true end
-    local recu, fn = suiveur()
-    avec(j, function()
-        assertTrue(AzerothCommune:Suivre("portée", fn))
-        AzerothCommune:NePlusSuivre("portée", fn)
-    end)
-    assertEquals(0, appels, "CheckInteractDistance appelé en combat")
-    assertEquals("nil", recu[1], "en combat, ni tir ni mêlée : on ne sait pas")
-    j.InCombatLockdown = function() return true end
-    r.tirAuto = true
-    assertEquals("tir", (function() local rr, f = suiveur(); avec(j, function() AzerothCommune:Suivre("portée", f); AzerothCommune:NePlusSuivre("portée", f) end) return rr[1] end)())
+    local function enCombat(r, mort)
+        local j = jeu(r)
+        j.CheckInteractDistance = function() appels = appels + 1 return r.suivre end
+        j.InCombatLockdown = function() return true end
+        j.UnitIsDead = function() return mort end
+        local recu, fn = suiveur()
+        avec(j, function()
+            assertTrue(AzerothCommune:Suivre("portée", fn))
+            AzerothCommune:NePlusSuivre("portée", fn)
+        end)
+        return recu[1]
+    end
+    local function r(t) t.cible, t.coupure, t.tirAuto, t.suivre = true, false, false, true return t end
+    assertEquals("zone morte", enCombat(r { attaquable = true }, false), "cible attaquable vivante : zone morte en combat")
+    assertEquals(1, appels)
+    appels = 0
+    assertEquals("nil", enCombat(r { attaquable = false }, false))
+    assertEquals("nil", enCombat(r { attaquable = true }, true), "cible morte")
+    assertEquals("nil", enCombat(r { attaquable = true }, nil), "mort inconnue (secret)")
+    assertEquals(0, appels, "CheckInteractDistance appelé en combat sur une cible pas attaquable ou morte")
 end)
 
 test("la même fonction suivie deux fois : inscrite une fois, rappelée tout de suite à chaque Suivre, une fois par changement", function()
