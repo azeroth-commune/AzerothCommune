@@ -1474,6 +1474,15 @@ UnitGUID = function(u) if u == "player" then return "Player-6942-014B6DDC" end e
 UnitFactionGroup, time, AzerothCommuneMarket = function() return "Alliance" end, os.time, {}
 local scanned, realPrint = 0, print
 assert(AzerothCommune:QuandReleve("cours de l'HV", function() scanned = scanned + 1 end))
+-- La demande se voit dans le chat, et l'absence de réponse aussi (le serveur n'a rien renvoyé le 26/11/2026).
+do
+local dits, after0 = {}, C_Timer.After
+print, C_Timer.After = function(m) dits[#dits + 1] = m end, function(_, fn) fn() end -- 30 s écoulées sans réponse
+commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
+C_Timer.After = after0
+assert(dits[1]:find("demandée") and dits[2] and dits[2]:find("pas de réponse"), "scan demandé puis sans réponse : dit dans le chat")
+end
+GetTime = function() return 10000 end -- la demande suivante passe le délai de 15 min
 print = noop
 commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
 commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")

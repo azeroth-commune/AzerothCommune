@@ -572,6 +572,12 @@ local function requestScan()
   if GetTime() - lastRequest < SCAN_COOLDOWN then return end
   lastRequest = GetTime()
   C_AuctionHouse.ReplicateItems()
+  print("Azeroth Commune : lecture de l'hôtel des ventes demandée, laisse-le ouvert (une dizaine de secondes).")
+  local demande = lastRequest
+  C_Timer.After(30, function() -- le serveur peut ne rien renvoyer (26/11/2026) : le dire plutôt que de laisser croire au scan
+    if reading or (readAt and readAt >= demande) then return end
+    print("Azeroth Commune : pas de réponse du serveur pour l'hôtel des ventes. HV ouvert : /run C_AuctionHouse.ReplicateItems()")
+  end)
 end
 
 ---------------------------------------------------------------------------------------------------
