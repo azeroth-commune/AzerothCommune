@@ -1477,7 +1477,7 @@ assert(AzerothCommune:QuandReleve("cours de l'HV", function() scanned = scanned 
 -- La demande se voit dans le chat, et l'absence de réponse aussi (le serveur n'a rien renvoyé le 26/11/2026).
 do
 local dits, after0, rep0, demandes = {}, C_Timer.After, C_AuctionHouse.ReplicateItems, 0
-GetTime = function() return 10000 end -- passé le délai de 15 min depuis le démarrage
+GetTime = function() return 100 end -- jeu lancé il y a 100 s (Wine) : la première demande part quand même (27/11/2026)
 print, C_Timer.After = function(m) dits[#dits + 1] = m end, function(_, fn) fn() end -- délais écoulés sans réponse
 C_AuctionHouse.ReplicateItems = function() demandes = demandes + 1 end
 commerce.fn(commerce, "AUCTION_HOUSE_SHOW")

@@ -468,7 +468,7 @@ end
 -- premiers ne voyaient que la fine couche bon marché d'un marché à deux étages (le charbon : 530 unités à 4-5 pa,
 -- le gros à 13 pa, le 18/11/2026) ; le Négoce lit l'échelle entière.
 local SCAN_COOLDOWN, BATCH, TIERS = 15 * 60, 2000, 60
-local ahOpen, reading, lastRequest, readAt = false, false, 0, nil
+local ahOpen, reading, lastRequest, readAt = false, false, nil, nil -- pas 0 : sous Wine, GetTime() part du lancement du jeu
 
 local function house() return lib.MaisonHV() end
 -- ponytail: un HV par royaume et faction ; les HV neutres (gobelins) se mélangent à celui de la faction.
@@ -571,7 +571,7 @@ end
 -- La première demande après la connexion reste parfois sans réponse (26 et 27/11/2026), une deuxième passe : une
 -- relance automatique au bout de 20 s si l'HV est encore ouvert, puis le dire.
 local function requestScan(relance)
-  if not relance and GetTime() - lastRequest < SCAN_COOLDOWN then return end
+  if not relance and lastRequest and GetTime() - lastRequest < SCAN_COOLDOWN then return end
   lastRequest = GetTime()
   C_AuctionHouse.ReplicateItems()
   print(relance and "Azeroth Commune : pas de réponse, lecture de l'hôtel des ventes redemandée."
