@@ -568,15 +568,19 @@ local function learnDeposit()
   AzerothCommuneDB.deposit = { rate24 = median(rates), min = #mins > 0 and median(mins) or nil, checked = ns.now() }
 end
 
-local function requestScan()
-  if GetTime() - lastRequest < SCAN_COOLDOWN then return end
+-- La première demande après la connexion reste parfois sans réponse (26 et 27/11/2026), une deuxième passe : une
+-- relance automatique au bout de 20 s si l'HV est encore ouvert, puis le dire.
+local function requestScan(relance)
+  if not relance and GetTime() - lastRequest < SCAN_COOLDOWN then return end
   lastRequest = GetTime()
   C_AuctionHouse.ReplicateItems()
-  print("Azeroth Commune : lecture de l'hôtel des ventes demandée, laisse-le ouvert (une dizaine de secondes).")
+  print(relance and "Azeroth Commune : pas de réponse, lecture de l'hôtel des ventes redemandée."
+    or "Azeroth Commune : lecture de l'hôtel des ventes demandée, laisse-le ouvert (une demi-minute au plus).")
   local demande = lastRequest
-  C_Timer.After(30, function() -- le serveur peut ne rien renvoyer (26/11/2026) : le dire plutôt que de laisser croire au scan
+  C_Timer.After(20, function()
     if reading or (readAt and readAt >= demande) then return end
-    print("Azeroth Commune : pas de réponse du serveur pour l'hôtel des ventes. HV ouvert : /run C_AuctionHouse.ReplicateItems()")
+    if not relance and ahOpen then return requestScan(true) end
+    print("Azeroth Commune : pas de réponse du serveur pour l'hôtel des ventes. /reload puis rouvre l'HV.")
   end)
 end
 
@@ -634,7 +638,7 @@ f:SetScript("OnEvent", function(_, event)
     safe("taxi", scanTaxi)
   elseif event == "AUCTION_HOUSE_SHOW" then
     ahOpen = true
-    safe("auction_request", requestScan)
+    C_Timer.After(1, function() if ahOpen then safe("auction_request", requestScan) end end) -- l'HV prêt avant la demande
     C_Timer.After(2, function() safe("auction_deposit", learnDeposit) end)
   elseif event == "AUCTION_HOUSE_CLOSED" then
     ahOpen = false

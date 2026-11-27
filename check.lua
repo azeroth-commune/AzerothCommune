@@ -699,8 +699,8 @@ assert(math.abs(bouton.points[4] + 76) < 1e-6, "bouton déplacé")
 -- Clic : la liste des add-ons, sans ligne pour le socle ; chaque ligne ouvre le sien ; clic droit : les réglages.
 bouton.scripts.OnClick(bouton, "LeftButton")
 local m = etat.menus[1]
-assert(m and m[1].titre == "Azeroth Commune" and m[2][1]:find("Compagnie") and m[3][1]:find("Handshake") and m[4][1] == "Réglages" and #m == 4,
-  "menu : les deux add-ons et les réglages, pas de ligne du socle")
+assert(m and m[1].titre == "Azeroth Commune" and m[2][1]:find("Compagnie") and m[3][1]:find("Handshake") and m[4][1] == "Réglages" and m[5][1] == "Signaler un problème" and #m == 5,
+  "menu : les deux add-ons, les réglages et le signalement, pas de ligne du socle")
 m[3][2]()
 assert(ouverts[1] == "hs", "la ligne Handshake ouvre Handshake")
 bouton.scripts.OnClick(bouton, "RightButton")
@@ -754,7 +754,7 @@ etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
 m = etat.menus[1]
 local lignes = {}
 for i = 2, #m do lignes[#lignes + 1] = (m[i][1]:gsub("|T.-|t ", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-assert(table.concat(lignes, ",") == "Compagnie,Négoce,        Mécréant,        Journal,Handshake,Réglages", table.concat(lignes, ","))
+assert(table.concat(lignes, ",") == "Compagnie,Négoce,        Mécréant,        Journal,Handshake,Réglages,Signaler un problème", table.concat(lignes, ","))
 m[4][2]()
 assert(ouvertsOutils[1] == "mecreant", "la ligne Mécréant ouvre Mécréant")
 m[5][2]()
@@ -771,7 +771,7 @@ assert(ex[3].cle == "journal" and ex[3].addon == "Négoce" and ex[3].donnees().b
 lib.Regrouper({ nom = "Tard", ouvrir = noop, outils = { { libelle = "Outil tardif", ouvrir = noop } },
   exports = { { cle = "tard", libelle = "Tard", donnees = function() return {} end } } })
 etat.boutons[1].scripts.OnClick(etat.boutons[1], "LeftButton")
-assert(etat.menus[2][#etat.menus[2] - 1][1]:find("Outil tardif", 1, true), "outil du retardataire dans le menu")
+assert(etat.menus[2][#etat.menus[2] - 2][1]:find("Outil tardif", 1, true), "outil du retardataire dans le menu")
 assert(lib.Exports()[4].cle == "tard", "export du retardataire")
 -- Déclarations incomplètes : refusées tout de suite, pas au clic.
 assert(not pcall(lib.Regrouper, { nom = "X", ouvrir = noop, outils = { { libelle = "sans ouvrir" } } }), "outil sans ouvrir")
@@ -1476,13 +1476,17 @@ local scanned, realPrint = 0, print
 assert(AzerothCommune:QuandReleve("cours de l'HV", function() scanned = scanned + 1 end))
 -- La demande se voit dans le chat, et l'absence de réponse aussi (le serveur n'a rien renvoyé le 26/11/2026).
 do
-local dits, after0 = {}, C_Timer.After
-print, C_Timer.After = function(m) dits[#dits + 1] = m end, function(_, fn) fn() end -- 30 s écoulées sans réponse
+local dits, after0, rep0, demandes = {}, C_Timer.After, C_AuctionHouse.ReplicateItems, 0
+GetTime = function() return 10000 end -- passé le délai de 15 min depuis le démarrage
+print, C_Timer.After = function(m) dits[#dits + 1] = m end, function(_, fn) fn() end -- délais écoulés sans réponse
+C_AuctionHouse.ReplicateItems = function() demandes = demandes + 1 end
 commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
-C_Timer.After = after0
-assert(dits[1]:find("demandée") and dits[2] and dits[2]:find("pas de réponse"), "scan demandé puis sans réponse : dit dans le chat")
+C_Timer.After, C_AuctionHouse.ReplicateItems = after0, rep0
+assert(demandes == 2, "sans réponse, une seule relance automatique")
+assert(dits[1]:find("demandée") and dits[2]:find("redemandée") and dits[3] and dits[3]:find("pas de réponse"),
+  "scan demandé, relancé, puis sans réponse : dit dans le chat")
 end
-GetTime = function() return 10000 end -- la demande suivante passe le délai de 15 min
+GetTime = function() return 20000 end -- la demande suivante passe le délai de 15 min
 print = noop
 commerce.fn(commerce, "AUCTION_HOUSE_SHOW")
 commerce.fn(commerce, "REPLICATE_ITEM_LIST_UPDATE")
@@ -1498,7 +1502,7 @@ assert(hvLib.objet(2772).min == 100 and hvLib.objet(2772).sources.min == "GameDa
 -- Fournisseurs (GameData#6, option B). Un nouveau scan, 15 min plus tard, avec Auctionator et AuctionDB frais : GameData
 -- garde ce que son scan vient de voir (prix, quantité, annonces, paliers : comme avant, ils font foi en relevé direct),
 -- mais pas de copie de l'historique, qu'AuctionDB tient.
-local horloge = 100
+local horloge = 100000 -- après les demandes ci-dessus
 GetTime = function() return horloge end
 local function scanHV()
   horloge = horloge + 1000
