@@ -153,7 +153,8 @@ function lib.Arbre(parent, opts)
   local vue = { zoom = 1, x = 0, y = 0, fit = 1 }
   local arbre = { zone = zone, toile = toile, vue = vue, cadres = {}, rectangles = {} }
   local function appliquer()
-    vue.zoom = math.max(0.25, math.min(3, vue.zoom))
+    -- jusqu'à 3 fois la taille réelle, même quand l'ajustement a rétréci un grand arbre (fit petit)
+    vue.zoom = math.max(0.25, math.min(3 / math.min(1, vue.fit), vue.zoom))
     toile:SetScale(vue.fit * vue.zoom)
     toile:ClearAllPoints()
     toile:SetPoint("TOPLEFT", zone, "TOPLEFT", vue.x, vue.y) -- décalage dans l'échelle du dessin

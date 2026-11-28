@@ -157,6 +157,9 @@ test("arbre : la toile tient tout l'arbre (hauteur rendue) ; plus grande que la 
     local echelle = arbre.toile:GetScale()
     arbre.zone:GetScript("OnMouseWheel")(arbre.zone, 1)
     assertTrue(arbre.toile:GetScale() > echelle, "molette : zoom")
+    -- arbre rétréci pour tenir (zone de 300 de large) : le zoom monte quand même jusqu'à 3 fois la taille réelle
+    for _ = 1, 40 do arbre.zone:GetScript("OnMouseWheel")(arbre.zone, 1) end
+    assertTrue(math.abs(arbre.toile:GetScale() - 3) < 0.01, "zoom maximal : 3 fois la taille réelle, pas 3 fois l'ajustement : " .. arbre.toile:GetScale())
     arbre.zone:GetScript("OnMouseDown")(arbre.zone, "MiddleButton")
     assertEquals(echelle, arbre.toile:GetScale(), "clic du milieu : vue ajustée")
     assertNotNil(arbre.zone:GetScript("OnUpdate"), "glisser le fond déplace la toile")
