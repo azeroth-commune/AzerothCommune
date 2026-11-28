@@ -15,6 +15,7 @@ Capture.lua
 Regroupement.lua
 Fournisseurs.lua
 Base.lua
+Achats.lua
 RecettesReserve.lua
 QuetesReserve.lua
 QuetesQuestieDB.lua
