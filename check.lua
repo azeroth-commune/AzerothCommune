@@ -1894,8 +1894,8 @@ do (function() -- une fonction : le fichier a atteint 200 locales
   print("Azeroth Commune : base des marchands par catégorie et prix d'achat OK")
 end)() end
 
--- La base des quêtes (#43, #112) : la réserve (QuetesReserve.lua, la sortie du convertisseur sur QuestieDB, une table par
--- faction), seulement celle du perso ; rien sans souscription.
+-- La base des quêtes (#43, #112) : la réserve (QuetesReserve.lua, la sortie du convertisseur sur QuestieDB, un texte par
+-- faction), seulement celui du perso ; rien sans souscription.
 do (function()
   AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = {} }, nil, nil
   gns, glib = session("Alice")

@@ -1,6 +1,6 @@
 -- Base des quêtes dans wow-ui-sim (tools/sim.sh test AzerothCommune). Deux blocs, jamais mélangés : QuestieDB en direct
 -- (#111, QuetesQuestieDB.lua : LibQuestieDB présent et contrat accepté), sinon la réserve QuetesReserve.lua (#43, #112),
--- la sortie du même convertisseur, une table par faction (tools/reserve_quetes.sh de l'atelier), commitée, chargée par le
+-- la sortie du même convertisseur, un texte par faction (tools/reserve_quetes.sh de l'atelier), commitée, chargée par le
 -- TOC ; seule la faction du perso est servie. Rien sans souscription.
 -- Le simulateur ne charge pas QuestieDB de lui-même (suffixe _Forever de sa TOC, research/questiedb/NOTES.md de l'atelier) :
 -- la réserve est testée sans LibQuestieDB, le direct avec une fausse LibQuestieDB posée le temps d'un test (le vrai est remis
