@@ -60,7 +60,7 @@ les réglages fusionnés et le bouton de minicarte commun. Issu de la fusion de 
 | `VendorData.lua` | généré par `tools/build_vendor_data.py` de l'atelier (qui vend quoi : Fabrikao pour les patrons des recettes, QuestieDB pour le reste ; stock limité : cMaNGOS ; tous GPL-3.0 ; prix, lots, reventes et piles : client Forever) : commité (le socle est sous GPL-3.0) |
 | `CatalogueObjets.lua` | le catalogue des objets du jeu (identifiant, nom, qualité), privé au socle : généré par `tools/build_item_catalog.py` de l'atelier depuis la table ItemSparse du client Forever, commité (le socle est sous GPL-3.0) ; sans lui, le type « objets » rend les seuls objets relevés |
 | `QuetesQuestieDB.lua` | la base des quêtes en direct depuis QuestieDB quand il est installé (dépendance facultative, `## OptionalDeps: QuestieDB`) et accepte le contrat 4 : son API publique, mise à la forme de la réserve pour la faction du perso connecté |
-| `QuetesReserve.lua` | la réserve de la base des quêtes, privée au socle : générée par `tools/build_quest_data.py` de l'atelier depuis QuestieDB Forever (GPL-3.0), seulement les quêtes de l'Alliance et des deux factions, commitée |
+| `QuetesReserve.lua` | la réserve de la base des quêtes, privée au socle : la sortie de `QuetesQuestieDB.lua` sur QuestieDB (GPL-3.0), une fois par faction, au simulateur (`tools/reserve_quetes.sh` de l'atelier, régénérée à chaque publication), commitée ; un texte par faction (Alliance, Horde : les siennes et celles des deux factions), compilé seulement quand la réserve est retenue |
 | `RecettesReserve.lua` | la réserve de la base des recettes, privée au socle : générée par `tools/build_recipe_data_client.py` de l'atelier depuis les tables du client Forever et ses correctifs en cache, commitée (le socle est sous GPL-3.0) ; sans elle, la base des recettes rend les seules recettes vues |
 
 ## Accès aux données relevées
@@ -99,11 +99,12 @@ local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription :
 --   QuestieDB installé et compatible (contrat 4) : sa base lue en direct, construite à la première lecture, pour la faction
 --     du perso connecté (corrections de faction de QuestieDB comprises), noms dans la langue du client ; lot = { provenance =
 --     « autre add-on », source = « QuestieDB », version (de QuestieDB) } ;
---   sinon la réserve générée depuis QuestieDB Forever (quêtes de l'Alliance) ; lot = { provenance = « source externe »,
---     source = « QuestieDB Forever », version, date (de la génération) }. QuestieDB incompatible : la réserve, et la sonde
+--   sinon la réserve, la sortie du même convertisseur sur QuestieDB, celle de la faction du perso ; lot = { provenance =
+--     « source externe », source = « QuestieDB », version (de QuestieDB), date (de la génération) } ; rien n'en est construit
+--     tant que QuestieDB est retenu ; faction encore inconnue : rien. QuestieDB incompatible : la réserve, et la sonde
 --     « QuestieDB » prévient une fois.
--- Même sémantique pour les deux provenances : en direct pour la faction du perso, avec les corrections de faction et de zone
--- que QuestieDB applique selon elle ; la réserve, celle de l'Alliance (pour l'instant).
+-- Même sémantique pour les deux provenances : la base de la faction du perso, avec les corrections de faction et de zone que
+-- QuestieDB applique selon elle.
 -- nom : la langue du client en direct, français dans la réserve (traductions de QuestieDB), sinon anglais. zone : l'areaID
 -- (C_Map.GetAreaInfo pour son nom) ; négative : une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue.
 -- races : liste des raceID (select(3, UnitRace("player")) ; 95 : Skyborne de l'Alliance, 96 : de la Horde), classes :
