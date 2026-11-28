@@ -38,7 +38,8 @@
 -- Sondes : AC.Sondes() = l'état de chacune (vert, rouge, pas encore vue ; valeur reçue, heure, build) ;
 -- AC.RelancerSondes() refait les relevés sans contexte (aussi à la connexion). Une sonde rouge prévient dans le chat, ne corrige rien.
 -- Sondés aussi : sacs (AC.Conteneurs), recettes (fenêtre ouverte), noms d'objets (Interface.lua), fournisseurs de prix
--- (Fournisseurs.lua) ; ceux qui demandent un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
+-- (Fournisseurs.lua), QuestieDB (son contrat, à la lecture de la base des quêtes : QuetesQuestieDB.lua) ; ceux qui demandent
+-- un contexte restent « pas encore vue » tant qu'il ne s'est pas présenté.
 -- Pour les autres fichiers du socle : AC.DeclarerSonde(nom, attente, verifier, relever), AC.Sonder(nom, ...).
 -- État de combat (Combat.lua, ADR 0003 de l'atelier) : AC:Suivre(lecture, fn), AC:NePlusSuivre(lecture, fn) ; chaque lecture
 -- a sa sonde, dans le même registre.
@@ -90,15 +91,17 @@ local TYPES = {
   --   compétence demandée en level, source « maître », source_provenance et level_provenance « relevé direct » et prix_maitre (cuivre) ;
   --   les autres gardent les valeurs de la réserve.
   ["base des recettes"] = {},
-  -- Les quêtes que l'Alliance peut prendre, non liées à un perso (#43) : { [questID] = { nom (français, sinon anglais), zone
+  -- Les quêtes que la faction du perso peut prendre, non liées à un perso (#43, #111) : { [questID] = { nom (français, sinon anglais), zone
   --   (areaID, C_Map.GetAreaInfo pour son nom ; négative : catégorie de quête de QuestieDB ; nil : inconnue), niveau,
   --   niveau_requis, races, classes (listes de raceID, classID : select(3, UnitRace / UnitClass("player")) ; 95 : Skyborne
   --   de l'Alliance ; nil : toutes), prerequis (toutes à terminer), prerequis_un (une seule
   --   suffit), suites, amorces (facultatives, pas des prérequis), donneur = { pnj ou objet (ID), nom, carte (uiMapID), x, y
   --   (pourcentage de la carte) }, objet (l'objet qui donne la quête), origine = { nom (de l'objet), pnjs (qui le lâchent),
-  --   objets (du monde, qui le contiennent) : 3 noms au plus, nil quand vides } (nil sans objet) } } ; listes de questID, nil quand vides. Rien que la
-  --   réserve générée depuis QuestieDB Forever (QuetesReserve.lua), lot « source externe » (source, version, date) ; rien
-  --   sans souscription (Souscriptions.lua).
+  --   objets (du monde, qui le contiennent) : 3 noms au plus, nil quand vides } (nil sans objet) } } ; listes de questID, nil quand vides. Deux
+  --   provenances, jamais mélangées : QuestieDB en direct quand il est installé et accepte notre contrat (QuetesQuestieDB.lua,
+  --   la faction du perso connecté, noms dans la langue du client ; lot « autre add-on », source « QuestieDB », version) ;
+  --   sinon la réserve générée depuis QuestieDB Forever (QuetesReserve.lua, quêtes de l'Alliance ; lot « source externe »,
+  --   source « QuestieDB Forever », version, date) ; rien sans souscription (Souscriptions.lua).
   ["base des quêtes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
   marchands = {}, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
