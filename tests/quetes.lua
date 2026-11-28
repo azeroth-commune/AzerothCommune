@@ -1,21 +1,56 @@
 -- Base des quêtes dans wow-ui-sim (tools/sim.sh test AzerothCommune). Deux blocs, jamais mélangés : QuestieDB en direct
--- (#111, QuetesQuestieDB.lua : LibQuestieDB présent et contrat accepté), sinon la réserve QuetesReserve.lua (#43), générée
--- par tools/build_quest_data.py de l'atelier depuis QuestieDB Forever et commitée, chargée par le TOC. Rien sans souscription.
--- Le simulateur ne charge pas QuestieDB (suffixe _Forever de sa TOC, research/questiedb/NOTES.md de l'atelier) : la réserve
--- est testée sans LibQuestieDB, le direct avec une fausse LibQuestieDB posée le temps d'un test (le vrai est remis après).
+-- (#111, QuetesQuestieDB.lua : LibQuestieDB présent et contrat accepté), sinon la réserve QuetesReserve.lua (#43, #112),
+-- la sortie du même convertisseur, une table par faction (tools/reserve_quetes.sh de l'atelier), commitée, chargée par le
+-- TOC ; seule la faction du perso est servie. Rien sans souscription.
+-- Le simulateur ne charge pas QuestieDB de lui-même (suffixe _Forever de sa TOC, research/questiedb/NOTES.md de l'atelier) :
+-- la réserve est testée sans LibQuestieDB, le direct avec une fausse LibQuestieDB posée le temps d'un test (le vrai est remis
+-- après) ; les tests « vrai QuestieDB » ne tournent que s'il a été ajouté aux racines.
 local BASE = "base des quêtes"
 
 -- La souscription du type et LibQuestieDB le temps d'un test (une autre a pu souscrire avant : remise après).
--- qdb : la LibQuestieDB du test, nil : QuestieDB absent.
-local function avec(souscrit, fn, qdb)
-    local avant, vrai = AzerothCommuneDB.souscriptions and AzerothCommuneDB.souscriptions[BASE], LibQuestieDB
+-- qdb : la LibQuestieDB du test, nil : QuestieDB absent. faction (facultative) : celle du perso le temps du test.
+local function avec(souscrit, fn, qdb, faction)
+    local avant, vrai, uf = AzerothCommuneDB.souscriptions and AzerothCommuneDB.souscriptions[BASE], LibQuestieDB, UnitFactionGroup
     AzerothCommuneDB.souscriptions = AzerothCommuneDB.souscriptions or {}
     AzerothCommuneDB.souscriptions[BASE] = nil
     if souscrit then assertTrue(AzerothCommune:Souscrire(BASE)) end
     LibQuestieDB = qdb
+    if faction then UnitFactionGroup = function(u) if u == "player" then return faction, faction end return uf(u) end end
     local ok, err = pcall(fn)
-    AzerothCommuneDB.souscriptions[BASE], LibQuestieDB = avant, vrai
+    AzerothCommuneDB.souscriptions[BASE], LibQuestieDB, UnitFactionGroup = avant, vrai, uf
     if not ok then error(err, 0) end -- assertTrue tairait la raison
+end
+
+-- Une ligne au journal du simulateur (print va au chat simulé, invisible) : grep 'QUETES|'.
+local function dire(...) io.stdout:write("QUETES|", string.format(...), "\n") end
+
+local function taille(d)
+    local n = 0
+    for _ in pairs(d) do n = n + 1 end
+    return n
+end
+
+-- En premier : rien n'a encore lu la réserve dans ce lancement (Compagnie, s'il est chargé, lit la base en direct).
+test("vrai QuestieDB chargé : la réserve n'a construit aucune table (la construire, maintenant, prend de la mémoire)", function()
+    if not LibQuestieDB then dire("QuestieDB pas chargé au simulateur : sauté") return end
+    avec(true, function()
+        local direct = AzerothCommune:Lire(BASE) -- gardée : relire sans QuestieDB lâche la base en direct
+        collectgarbage("collect")
+        local avant = collectgarbage("count")
+        LibQuestieDB = nil
+        local r, lot = AzerothCommune:Lire(BASE)
+        collectgarbage("collect")
+        local pris = collectgarbage("count") - avant
+        dire("réserve (%s, %d quêtes) construite à la demande : %.0f Ko ; jusque-là rien (base en direct : %d quêtes)",
+            tostring(AzerothCommune.Faction()), taille(r), pris, taille(direct))
+        assertEquals("source externe", lot.provenance)
+        assertTrue(pris > 300, ("%.0f Ko : la réserve était déjà construite"):format(pris))
+    end, LibQuestieDB)
+end)
+
+local function contient(liste, v)
+    for _, x in ipairs(liste or {}) do if x == v then return true end end
+    return false
 end
 
 -- Les print le temps de fn : la liste de ce qui a été dit.
@@ -36,17 +71,49 @@ test("sans souscription, la base des quêtes ne rend rien", function()
     end)
 end)
 
-test("après souscription : la réserve et sa provenance (QuestieDB Forever, version, date)", function()
+test("après souscription : la réserve et sa provenance (QuestieDB, version, date)", function()
     avec(true, function()
         local d, lot = AzerothCommune:Lire(BASE)
         assertType("table", d)
         assertEquals("source externe", lot.provenance)
-        assertEquals("QuestieDB Forever", lot.source)
-        assertType("string", lot.version)
+        assertEquals("QuestieDB", lot.source)
+        assertTrue(lot.version:find("^%d+%.%d+%.%d+") ~= nil, lot.version)
         assertTrue(lot.date:find("^%d%d%d%d%-%d%d%-%d%d$") ~= nil, lot.date)
         lot.source = "modifié" -- le lot rendu est une copie
-        assertEquals("QuestieDB Forever", (select(2, AzerothCommune:Lire(BASE))).source)
+        assertEquals("QuestieDB", (select(2, AzerothCommune:Lire(BASE))).source)
     end)
+end)
+
+-- QuestieDB absent : la réserve de la faction du perso, les quêtes des deux factions dans chacune (#112).
+test("QuestieDB absent, perso de l'Alliance : ses quêtes et celles des deux factions, pas celles de la Horde", function()
+    avec(true, function()
+        local d, lot = AzerothCommune:Lire(BASE)
+        assertEquals("source externe", lot.provenance)
+        assertEquals("Bosquet des Anciens", d[952].nom) -- Alliance
+        assertEquals("Brawl at the Maul", d[99233].nom) -- les deux factions
+        assertNil(d[4641], "Votre place en ce monde : la Horde")
+        assertEquals(653, d[687].prerequis_un[1]) -- correction de faction de QuestieDB, côté Alliance
+        assertTrue(taille(d) > 3000, taille(d))
+    end, nil, "Alliance")
+end)
+
+test("QuestieDB absent, perso de la Horde : ses quêtes et celles des deux factions, pas celles de l'Alliance", function()
+    avec(true, function()
+        local d, lot = AzerothCommune:Lire(BASE)
+        assertEquals("source externe", lot.provenance)
+        assertEquals("QuestieDB", lot.source)
+        local q = d[4641] -- Votre place en ce monde, chez les orcs
+        assertEquals("Votre place en ce monde", q.nom)
+        assertTrue(contient(q.races, 2) and contient(q.races, 96) and not contient(q.races, 1), "races de la Horde")
+        assertEquals(10176, q.donneur.pnj) -- Kaltunk
+        assertEquals("Brawl at the Maul", d[99233].nom) -- les deux factions
+        assertNil(d[952], "Bosquet des Anciens : l'Alliance")
+        -- Corrections de faction de QuestieDB, côté Horde : prérequis et donneur de 687, zone de 78124 (Fossoyeuse).
+        assertEquals(688, d[687].prerequis_un[1])
+        assertEquals(2787, d[687].donneur.pnj)
+        assertEquals(1497, d[78124].zone)
+        assertTrue(taille(d) > 3000, taille(d))
+    end, nil, "Horde")
 end)
 
 -- Tous les prérequis d'une quête, de proche en proche (« tous » et « un seul suffit »).
@@ -93,10 +160,6 @@ test("vrai cas : Des problèmes à Sombrivage ? (730) est une amorce, pas un pr�
 end)
 
 -- races : liste des raceID (UnitRace), nil : toutes ; les bits 2^32 / 2^33 de QuestieDB sont les races Skyborne (95, 96).
-local function contient(liste, v)
-    for _, x in ipairs(liste or {}) do if x == v then return true end end
-    return false
-end
 
 test("races : À la découverte de l'Alliance (93963) est pour les Skyborne de l'Alliance seuls", function()
     avec(true, function()
@@ -282,14 +345,39 @@ test("QuestieDB incompatible (contrat refusé) : la réserve, et la sonde prévi
 end)
 
 test("vrai QuestieDB chargé au simulateur (lien QuestieDB.toc, NOTES.md de l'atelier) : toute sa base, en direct", function()
-    if not LibQuestieDB then print("QuestieDB pas chargé au simulateur : sauté") return end
+    if not LibQuestieDB then dire("QuestieDB pas chargé au simulateur : sauté") return end
     avec(true, function()
         local d, lot = AzerothCommune:Lire(BASE)
         local n = 0
         for _ in pairs(d) do n = n + 1 end
-        print(("QuestieDB %s en direct : %d quêtes (%s)"):format(tostring(lot.version), n, tostring(F)))
+        dire("QuestieDB %s en direct : %d quêtes (%s)", tostring(lot.version), n, tostring(F))
         assertEquals("autre add-on", lot.provenance)
         assertEquals(C_AddOns.GetAddOnMetadata("QuestieDB", "Version"), lot.version)
         assertTrue(n > 4000, n)
     end, LibQuestieDB)
+end)
+
+-- La réserve est la sortie du même convertisseur (#112) : sur le vrai QuestieDB de la même version, en français comme elle,
+-- la base en direct de la faction du perso et sa réserve rendent exactement la même chose, quête par quête.
+test("vrai QuestieDB de la version de la réserve : la réserve et la base en direct rendent la même chose", function()
+    if not LibQuestieDB then dire("QuestieDB pas chargé au simulateur : sauté") return end
+    local vrai = LibQuestieDB
+    avec(true, function()
+        LibQuestieDB = nil
+        local r, lotR = AzerothCommune:Lire(BASE)
+        if lotR.version ~= C_AddOns.GetAddOnMetadata("QuestieDB", "Version") then
+            dire("réserve de QuestieDB %s, QuestieDB %s chargé : comparaison sautée", lotR.version,
+                tostring(C_AddOns.GetAddOnMetadata("QuestieDB", "Version")))
+            return
+        end
+        vrai.l10n.SetLocale("frFR")
+        LibQuestieDB = setmetatable({}, { __index = vrai }) -- une autre table : le socle refait sa base, en français
+        local ok, d, lotD = pcall(AzerothCommune.Lire, AzerothCommune, BASE)
+        vrai.l10n.SetLocale(GetLocale())
+        assert(ok, d)
+        assertEquals("autre add-on", lotD.provenance)
+        assertEquals(taille(r), taille(d))
+        for id, q in pairs(d) do memes(q, r[id], tostring(id)) end
+        dire("réserve et base en direct (%s, QuestieDB %s) : %d quêtes identiques", tostring(F), lotR.version, taille(d))
+    end, vrai)
 end)

@@ -9,14 +9,12 @@
 -- et gardée pour la session (#110 : ~110 ms en jeu, ~160 ms à froid).
 -- Lot : { provenance = « autre add-on », source = « QuestieDB », version = sa version (sa TOC) } ; un autre add-on ne dit
 -- ni build ni date (Fournisseurs.lua).
--- Même forme et même sémantique que la réserve (en-tête de QuetesReserve.lua ; prototype : research/questiedb/ de
--- l'atelier, identique au Python sur 4237 quêtes de QuestieDB 1.1.6 sauf 2 corrections de faction, où il a raison),
--- avec ces différences de nature :
---   - les noms sont ceux de la langue du client (QuestieDB traduit seul selon GetLocale), l'anglais à défaut ;
---   - la base est celle de la faction du perso connecté : QuestieDB applique à son chargement ses corrections de faction
---     (zone, donneurs…) selon UnitFactionGroup("player"), toutes, pas seulement les zones de l'Alliance ; les races filtrent
---     les quêtes, friendlyToFaction le donneur ;
---   - un bit de race ou de classe inconnu est ignoré (le Python échoue).
+-- La réserve (QuetesReserve.lua, #112) est la sortie de ce convertisseur, en français, une fois par faction, hors du jeu
+-- (tools/reserve_quetes.sh de l'atelier) : même forme, même sémantique ; seule différence, les noms ici sont ceux de la
+-- langue du client (QuestieDB traduit seul selon GetLocale), l'anglais à défaut. La base est celle de la faction du perso
+-- connecté : QuestieDB applique à son chargement ses corrections de faction (zone, donneurs…) selon
+-- UnitFactionGroup("player") ; les races filtrent les quêtes, friendlyToFaction le donneur. Un bit de race ou de classe
+-- inconnu est ignoré.
 -- Lua 5.1, ni bit.band : les masques de races vont jusqu'au bit 2^33 (Skyborne).
 local _, ns = ...
 local lib = AzerothCommune
@@ -161,7 +159,8 @@ end
 
 -- La base en direct et une copie de son lot, ou nil : la réserve. Choisie à la première lecture pour la LibQuestieDB
 -- présente (en jeu : une fois par session ; une autre LibQuestieDB, celle d'un test, refait le choix). Faction encore
--- inconnue : la réserve pour cette lecture, le choix est retenté à la suivante (la sonde « faction » prévient).
+-- inconnue : nil pour cette lecture (la réserve, par faction, ne sert rien non plus), le choix est retenté à la suivante
+-- (la sonde « faction » prévient).
 local vue, base, lot = {}, nil, nil -- vue : la LibQuestieDB du dernier choix ({} : aucun encore)
 function ns.quetesQuestieDB()
   local q = LibQuestieDB
