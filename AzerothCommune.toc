@@ -9,6 +9,7 @@
 ## X-License: GPL-3.0-or-later
 AzerothCommune.lua
 Interface.lua
+Arbre.lua
 Capture.lua
 Regroupement.lua
 Fournisseurs.lua
