@@ -1894,7 +1894,8 @@ do (function() -- une fonction : le fichier a atteint 200 locales
   print("Azeroth Commune : base des marchands par catégorie et prix d'achat OK")
 end)() end
 
--- La base des quêtes (#43) : la réserve générée depuis QuestieDB Forever (QuetesReserve.lua), rien sans souscription.
+-- La base des quêtes (#43, #112) : la réserve (QuetesReserve.lua, la sortie du convertisseur sur QuestieDB, un texte par
+-- faction), seulement celui du perso ; rien sans souscription.
 do (function()
   AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = {} }, nil, nil
   gns, glib = session("Alice")
@@ -1904,12 +1905,22 @@ do (function()
   assert(glib:Souscrire("base des quêtes"))
   local lot
   d, lot = glib:Lire("base des quêtes")
-  assert(lot.provenance == "source externe" and lot.source == "QuestieDB Forever" and lot.version and lot.date, "lot : provenance")
+  assert(lot.provenance == "source externe" and lot.source == "QuestieDB" and lot.version:find("^%d+%.%d+%.%d+")
+    and lot.date:find("^%d%d%d%d%-%d%d%-%d%d$"), "lot : provenance, version de QuestieDB, date")
   local q = d[952] -- Bosquet des Anciens, à Sombrivage ; prérequis : Teldrassil (940), à Teldrassil
   assert(q.zone == 148 and q.prerequis_un[1] == 940 and d[940].zone == 141, "952 : zone et prérequis")
   assert(q.donneur.pnj == 3516 and q.donneur.objet == nil and d[940].donneur.objet == 673378, "donneur : PNJ, ou objet (ID négatif)")
   assert(d[93963].races[1] == 95 and #d[93963].races == 1 and q.races[1] == 1 and q.races[5] == 95, "races : raceID, Skyborne 95")
   assert(d[729].amorces[1] == 730 and d[729].prerequis == nil and d[729].prerequis_un == nil, "730 : une amorce de 729, pas un prérequis")
+  assert(d[99233] and not d[4641] and d[687].prerequis_un[1] == 653, "Alliance : les deux factions oui, la Horde non")
+  local faction = UnitFactionGroup
+  UnitFactionGroup = function() return "Horde" end -- un perso de la Horde
+  d, lot = glib:Lire("base des quêtes")
+  UnitFactionGroup = faction
+  assert(lot.provenance == "source externe" and lot.source == "QuestieDB", "Horde : la réserve")
+  assert(d[4641] and d[4641].races[1] == 2 and d[99233] and not d[952], "Horde : les siennes et les deux factions, pas l'Alliance")
+  assert(d[687].prerequis_un[1] == 688 and d[687].donneur.pnj == 2787 and d[78124].zone == 1497, "Horde : ses corrections de faction")
+  assert(glib:Lire("base des quêtes")[952], "de retour dans l'Alliance : sa réserve")
   print("Azeroth Commune : base des quêtes OK")
 end)() end
 
@@ -1953,6 +1964,9 @@ do (function()
   AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = {} }, nil, nil
   gns, glib = session("Alice") -- personnage de l'Alliance
   charger("QuetesReserve", gns)
+  -- Les textes de la réserve lus (pour être compilés en tables) : aucun tant que QuestieDB est retenu.
+  local construites, textes = 0, gns.quetesReserve
+  gns.quetesReserve = setmetatable({}, { __index = function(_, f) construites = construites + 1 return textes[f] end })
   LibQuestieDB = faux()
   assert(glib:Lire("base des quêtes") == nil, "sans souscription : rien, même avec QuestieDB")
   assert(glib:Souscrire("base des quêtes"))
@@ -1966,9 +1980,10 @@ do (function()
   assert(d[3].donneur.objet == 20 and d[3].donneur.pnj == nil and d[3].donneur.carte == nil, "donneur : un objet du monde")
   local o = d[2].origine
   assert(d[2].objet == 30 and o.nom == "Lettre" and #o.pnjs == 3 and o.pnjs[2] == "Gnoll" and o.objets == nil, "origine : 3 noms")
+  assert(construites == 0, "QuestieDB retenu : la réserve n'a construit aucune table")
   LibQuestieDB = nil
   d, lot = glib:Lire("base des quêtes")
-  assert(lot.provenance == "source externe" and d[952], "QuestieDB absent : la réserve")
+  assert(lot.provenance == "source externe" and d[952] and construites == 1, "QuestieDB absent : la réserve, construite une fois")
   sortie = {}
   print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end
   LibQuestieDB = faux(false)
@@ -1992,7 +2007,7 @@ do (function()
   UnitFactionGroup = function() return nil end
   LibQuestieDB = faux()
   d, lot = glib:Lire("base des quêtes")
-  assert(lot.provenance == "source externe", "faction inconnue : la réserve pour cette lecture")
+  assert(d == nil and lot == "pas encore relevé", "faction inconnue : rien pour cette lecture (la réserve est par faction)")
   UnitFactionGroup = faction
   d, lot = glib:Lire("base des quêtes")
   assert(lot.provenance == "autre add-on" and d[1] and glib.Sondes().QuestieDB.etat == "vert", "faction connue : choix retenté")

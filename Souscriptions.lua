@@ -137,19 +137,24 @@ lire.objets = function()
   return fusion.d, lot
 end
 -- Base des quêtes : deux blocs, jamais mélangés par quête ni par champ. QuestieDB en direct quand il est là et accepte notre
--- contrat (#111, QuetesQuestieDB.lua : lot « autre add-on ») ; sinon la réserve QuetesReserve.lua (#43), générée par
--- tools/build_quest_data.py de l'atelier depuis QuestieDB Forever (GPL-3.0) et commitée, mise en forme une fois (champs
--- nommés, AzerothCommune.lua), seulement quand elle est retenue ; lot : une copie de ns.quetesReserveLot. Rien sans
--- souscription (le type n'a rien à relever : la souscription dit seulement qu'un add-on la lit).
-local quetes, quetesBrutes
+-- contrat (#111, QuetesQuestieDB.lua : lot « autre add-on ») ; sinon la réserve QuetesReserve.lua (#43, #112), la sortie
+-- du même convertisseur sur QuestieDB (GPL-3.0), un texte par faction (tools/reserve_quetes.sh de l'atelier), commitée :
+-- seulement celui de la faction du perso, compilé et mis en forme une fois (champs nommés, AzerothCommune.lua), quand la
+-- réserve est retenue (QuestieDB retenu : aucune table construite, seul le texte reste) ; faction encore inconnue : rien
+-- pour cette lecture. Lot : une copie de ns.quetesReserveLot. Rien sans souscription (le type n'a rien à relever : la
+-- souscription dit seulement qu'un add-on la lit).
+local quetes, quetesDe -- quetesDe : le texte de la réserve dont quetes est la mise en forme
 lire["base des quêtes"] = function()
   if not ns.souscrit("base des quêtes") then return nil end
   local direct, lotDirect = ns.quetesQuestieDB()
   if direct then return direct, lotDirect end
-  if not ns.quetesReserve then return nil end
-  if quetesBrutes ~= ns.quetesReserve then
-    quetesBrutes, quetes = ns.quetesReserve, {}
-    for id, c in pairs(quetesBrutes) do
+  local faction = lib.Faction()
+  local texte = faction and ns.quetesReserve and ns.quetesReserve[faction]
+  if not texte then return nil end
+  if quetesDe ~= texte then
+    local brutes = assert(loadstring(texte, "QuetesReserve " .. faction))() -- compilée d'abord : une erreur le reste
+    quetesDe, quetes = texte, {}
+    for id, c in pairs(brutes) do
       local d = c[11] -- { ID (négatif : un objet du monde), nom, carte, x, y } ; races, classes : listes d'IDs, nil : toutes
       quetes[id] = { nom = c[1], zone = c[2], niveau = c[3], niveau_requis = c[4], races = c[5], classes = c[6],
         prerequis = c[7], prerequis_un = c[8], suites = c[9], amorces = c[10], objet = c[12],

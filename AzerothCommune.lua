@@ -100,8 +100,8 @@ local TYPES = {
   --   objets (du monde, qui le contiennent) : 3 noms au plus, nil quand vides } (nil sans objet) } } ; listes de questID, nil quand vides. Deux
   --   provenances, jamais mélangées : QuestieDB en direct quand il est installé et accepte notre contrat (QuetesQuestieDB.lua,
   --   la faction du perso connecté, noms dans la langue du client ; lot « autre add-on », source « QuestieDB », version) ;
-  --   sinon la réserve générée depuis QuestieDB Forever (QuetesReserve.lua, quêtes de l'Alliance ; lot « source externe »,
-  --   source « QuestieDB Forever », version, date) ; rien sans souscription (Souscriptions.lua).
+  --   sinon la réserve (QuetesReserve.lua, la sortie du même convertisseur, pour la faction du perso ; lot « source externe »,
+  --   source « QuestieDB », version, date) ; rien sans souscription (Souscriptions.lua).
   ["base des quêtes"] = {},
   ["maîtres de métier"] = {}, -- { [PNJ] = { services, filters, … } }
   marchands = {}, -- { [PNJ] = { items = { { id, price, stack, limited }, … } } }
