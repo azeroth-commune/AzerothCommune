@@ -37,7 +37,7 @@ local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", 
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 15, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98, le retour des joueurs, l'Arbre, #108)")
+assert(#fichiersCharges("AzerothCommune") == 16, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98, le retour des joueurs, l'Arbre, #108, QuestieDB en direct, #111)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
@@ -1129,6 +1129,7 @@ charger("Commerce")
 local commerce = frames[#frames]
 -- Rien n'est relevé sans souscription (Souscriptions.lua, testé plus bas) : ici, souscription à tous les types.
 time = os.time
+charger("QuetesQuestieDB")
 charger("Souscriptions")
 for nom in pairs(ns.rangement) do ns.souscrire(nom) end
 commerce.fn(commerce, "TRADE_SKILL_LIST_UPDATE")
@@ -1612,7 +1613,8 @@ local toc = io.open("AzerothCommune/AzerothCommune.toc"):read("*a")
 assert(toc:find("## Title: Azeroth Commune\n", 1, true) and toc:find("## Category: Data\n", 1, true)
   and toc:find("## Category-frFR: Données\n", 1, true), "titre et catégorie")
 assert(toc:find("## SavedVariables: AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket\n", 1, true), "SavedVariables neuves")
-assert(not toc:find("LibStub", 1, true) and not toc:find("Deps", 1, true), "ni LibStub ni dépendance")
+assert(not toc:find("LibStub", 1, true) and not toc:gsub("## OptionalDeps: QuestieDB\n", ""):find("Deps", 1, true),
+  "ni LibStub ni dépendance, sauf QuestieDB, facultatif (#111)")
 print("Azeroth Commune : /ac, exports du socle, TOC OK")
 
 -- Souscriptions (GameData#4), sur plusieurs sessions qui partagent les SavedVariables : une souscription faite sur le
@@ -1633,7 +1635,7 @@ local function session(nom, souscriptions)
   AzerothCommune = nil -- nouvelle session : le socle repart de zéro, seules les SavedVariables restent
   frames = {} -- [fichier] = son dernier cadre, et dans l'ordre de création
   local gns = {}
-  for _, f in ipairs({ "AzerothCommune", "Interface", "Capture", "Regroupement", "Fournisseurs", "Base", "Commerce", "Souscriptions" }) do
+  for _, f in ipairs({ "AzerothCommune", "Interface", "Capture", "Regroupement", "Fournisseurs", "Base", "Commerce", "QuetesQuestieDB", "Souscriptions" }) do
     local n = #frames
     charger(f, gns)
     if #frames > n then frames[f] = frames[#frames] end
@@ -1909,5 +1911,76 @@ do (function()
   assert(d[93963].races[1] == 95 and #d[93963].races == 1 and q.races[1] == 1 and q.races[5] == 95, "races : raceID, Skyborne 95")
   assert(d[729].amorces[1] == 730 and d[729].prerequis == nil and d[729].prerequis_un == nil, "730 : une amorce de 729, pas un prérequis")
   print("Azeroth Commune : base des quêtes OK")
+end)() end
+
+-- La base des quêtes en direct depuis QuestieDB (#111) : présent et contrat accepté → sa base, de la faction du perso, lot
+-- « autre add-on » ; absent → la réserve, sans message ; contrat refusé → la réserve, et la sonde prévient une fois.
+do (function()
+  -- Une fausse LibQuestieDB (forme de QuestieDB 1.1.6) : un nombre absent se lit 0, startedBy absent {}.
+  local NOMBRES = { zoneOrSort = true, questLevel = true, requiredLevel = true, requiredRaces = true, requiredClasses = true,
+    nextQuestInChain = true, breadcrumbForQuestId = true }
+  local function entite(t)
+    local ids = {}
+    for id in pairs(t) do ids[#ids + 1] = id end
+    table.sort(ids)
+    return { GetAllIds = function() return ids end, Exists = function(id) return t[id] ~= nil end,
+      Get = function(id, c)
+        local v = t[id] and t[id][c]
+        if v == nil and NOMBRES[c] then return 0 end
+        if v == nil and c == "startedBy" then return {} end
+        return v
+      end }
+  end
+  local ALLIANCE, HORDE = 1 + 4 + 8 + 64 + 2 ^ 32, 2 + 16 + 32 + 128 + 2 ^ 33
+  local function faux(contrat)
+    return { addonName = "QuestieDB",
+      RequireContract = function(v) if contrat == false then return false, "contract mismatch" end return v == 4 end,
+      Enum = { raceMaskById = { [1] = 1, [2] = 2, [3] = 4, [4] = 8, [5] = 16, [6] = 32, [7] = 64, [8] = 128, [95] = 2 ^ 32, [96] = 2 ^ 33 },
+        factionRaceMasks = { Alliance = ALLIANCE, Horde = HORDE } },
+      Support = { Get = function() return { private = { areaIdToUiMapId = "return {[12]=1429}" } } end },
+      Quest = entite({
+        [1] = { name = "Un", zoneOrSort = 12, requiredRaces = ALLIANCE, startedBy = { { 11, 10 } }, nextQuestInChain = 2 },
+        [2] = { name = "Deux", zoneOrSort = 12, preQuestSingle = { 1 }, startedBy = { {}, {}, { 30 } } },
+        [3] = { name = "Amorce", breadcrumbForQuestId = 2, startedBy = { {}, { 20 } } },
+        [4] = { name = "Horde", requiredRaces = HORDE, preQuestGroup = { 1 } } }),
+      Npc = entite({ [10] = { name = "Garde", friendlyToFaction = "A", spawns = { [12] = { { 45.678, 12.3 } } } },
+        [11] = { name = "Grunt", friendlyToFaction = "H" }, [12] = { name = "Kobold" }, [13] = { name = "Kobold" },
+        [14] = { name = "Gnoll" }, [15] = { name = "Murloc" }, [16] = { name = "Harpie" } }),
+      Object = entite({ [20] = { name = "Coffre" } }),
+      Item = entite({ [30] = { name = "Lettre", npcDrops = { 12, 13, 14, 15, 16 } } }) }
+  end
+  C_AddOns = { GetAddOnMetadata = function(a, k) if a == "QuestieDB" and k == "Version" then return "1.1.6" end end }
+  AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { souscriptions = {} }, nil, nil
+  gns, glib = session("Alice") -- personnage de l'Alliance
+  charger("QuetesReserve", gns)
+  LibQuestieDB = faux()
+  assert(glib:Lire("base des quêtes") == nil, "sans souscription : rien, même avec QuestieDB")
+  assert(glib:Souscrire("base des quêtes"))
+  local d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "autre add-on" and lot.source == "QuestieDB" and lot.version == "1.1.6", "lot : autre add-on, sa version")
+  assert(d[1] and d[2] and d[3] and not d[4] and not d[952], "la faction du perso, sans mélange avec la réserve")
+  assert(d[1].suites[1] == 2 and #d[1].suites == 1 and d[2].prerequis_un[1] == 1, "suites inversées (la Horde n'y est pas)")
+  assert(d[2].amorces[1] == 3 and d[1].races[5] == 95 and d[3].races == nil, "amorces ; races (Skyborne 95), nil : toutes")
+  local g = d[1].donneur
+  assert(g.pnj == 10 and g.nom == "Garde" and g.carte == 1429 and g.x == 45.68 and g.y == 12.3, "donneur : le premier amical")
+  assert(d[3].donneur.objet == 20 and d[3].donneur.pnj == nil and d[3].donneur.carte == nil, "donneur : un objet du monde")
+  local o = d[2].origine
+  assert(d[2].objet == 30 and o.nom == "Lettre" and #o.pnjs == 3 and o.pnjs[2] == "Gnoll" and o.objets == nil, "origine : 3 noms")
+  LibQuestieDB = nil
+  d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "source externe" and d[952], "QuestieDB absent : la réserve")
+  sortie = {}
+  print = function(...) sortie[#sortie + 1] = table.concat({ ... }, " ") end
+  LibQuestieDB = faux(false)
+  local _, lot1 = glib:Lire("base des quêtes")
+  LibQuestieDB = faux(false)
+  local _, lot2 = glib:Lire("base des quêtes")
+  print = realPrint
+  assert(lot1.provenance == "source externe" and lot2.provenance == "source externe", "contrat refusé : la réserve")
+  assert(#sortie == 1 and sortie[1]:find("QuestieDB", 1, true) and sortie[1]:find("contract mismatch", 1, true),
+    "contrat refusé : un seul message : " .. table.concat(sortie, " | "))
+  assert(glib.Sondes().QuestieDB.etat == "rouge", "sonde QuestieDB rouge")
+  LibQuestieDB, C_AddOns = nil, nil
+  print("Azeroth Commune : base des quêtes en direct depuis QuestieDB OK")
 end)() end
 end

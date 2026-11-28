@@ -1,16 +1,31 @@
--- Base des quêtes (#43) dans wow-ui-sim (tools/sim.sh test AzerothCommune) : la réserve QuetesReserve.lua, générée par
--- tools/build_quest_data.py de l'atelier depuis QuestieDB Forever et commitée, chargée par le TOC. Rien sans souscription.
+-- Base des quêtes dans wow-ui-sim (tools/sim.sh test AzerothCommune). Deux blocs, jamais mélangés : QuestieDB en direct
+-- (#111, QuetesQuestieDB.lua : LibQuestieDB présent et contrat accepté), sinon la réserve QuetesReserve.lua (#43), générée
+-- par tools/build_quest_data.py de l'atelier depuis QuestieDB Forever et commitée, chargée par le TOC. Rien sans souscription.
+-- Le simulateur ne charge pas QuestieDB (suffixe _Forever de sa TOC, research/questiedb/NOTES.md de l'atelier) : la réserve
+-- est testée sans LibQuestieDB, le direct avec une fausse LibQuestieDB posée le temps d'un test (le vrai est remis après).
 local BASE = "base des quêtes"
 
--- La souscription du type le temps d'un test (une autre a pu souscrire avant : remise après).
-local function avec(souscrit, fn)
-    local avant = AzerothCommuneDB.souscriptions and AzerothCommuneDB.souscriptions[BASE]
+-- La souscription du type et LibQuestieDB le temps d'un test (une autre a pu souscrire avant : remise après).
+-- qdb : la LibQuestieDB du test, nil : QuestieDB absent.
+local function avec(souscrit, fn, qdb)
+    local avant, vrai = AzerothCommuneDB.souscriptions and AzerothCommuneDB.souscriptions[BASE], LibQuestieDB
     AzerothCommuneDB.souscriptions = AzerothCommuneDB.souscriptions or {}
     AzerothCommuneDB.souscriptions[BASE] = nil
     if souscrit then assertTrue(AzerothCommune:Souscrire(BASE)) end
+    LibQuestieDB = qdb
     local ok, err = pcall(fn)
-    AzerothCommuneDB.souscriptions[BASE] = avant
+    AzerothCommuneDB.souscriptions[BASE], LibQuestieDB = avant, vrai
     assertTrue(ok, err)
+end
+
+-- Les print le temps de fn : la liste de ce qui a été dit.
+local function dits(fn)
+    local l, garde = {}, print
+    print = function(...) l[#l + 1] = table.concat({ ... }, " ") end
+    local ok, err = pcall(fn)
+    print = garde
+    assertTrue(ok, err)
+    return l
 end
 
 test("sans souscription, la base des quêtes ne rend rien", function()
@@ -129,4 +144,152 @@ test("/ac souscriptions montre la souscription à la base des quêtes", function
         local dit = table.concat(dits, "\n")
         assertTrue(dit:find(BASE .. " : souscrit le " .. date("%Y-%m-%d"), 1, true) ~= nil, dit)
     end)
+end)
+
+---------------------------------------------------------------------------------------------------
+-- QuestieDB en direct (#111). Une fausse LibQuestieDB, de la forme de QuestieDB 1.1.6 (contrat 4) : Entité.Get(id, champ)
+-- (un nombre absent se lit 0, startedBy absent {}), GetAllIds, Exists, Enum (bits des races, Skyborne aux bits 2^32 / 2^33),
+-- Support.Get("ZoneDB") (areaID -> uiMapID, du texte « return {…} »). Faction du perso du simulateur : F ; l'autre : O.
+local F = AzerothCommune.Faction() or "Alliance"
+local O = F == "Alliance" and "Horde" or "Alliance"
+local MASQUES = { Alliance = 1 + 4 + 8 + 64 + 2 ^ 32, Horde = 2 + 16 + 32 + 128 + 2 ^ 33 }
+local RACES_F = F == "Alliance" and { 1, 3, 4, 7, 95 } or { 2, 5, 6, 8, 96 }
+
+local function entite(donnees)
+    local NOMBRES = { zoneOrSort = true, questLevel = true, requiredLevel = true, requiredRaces = true,
+        requiredClasses = true, nextQuestInChain = true, breadcrumbForQuestId = true }
+    local ids = {}
+    for id in pairs(donnees) do ids[#ids + 1] = id end
+    table.sort(ids)
+    return {
+        Get = function(id, champ)
+            local v = donnees[id] and donnees[id][champ]
+            if v == nil and NOMBRES[champ] then return 0 end
+            if v == nil and champ == "startedBy" then return {} end
+            return v
+        end,
+        GetAllIds = function() return ids end,
+        Exists = function(id) return donnees[id] ~= nil end,
+    }
+end
+
+-- contrat : ce que rend RequireContract(4) (défaut : accepté). addonName : un add-on chargé au simulateur, pour lire une
+-- version par GetAddOnMetadata comme le socle le fait pour QuestieDB.
+local function fausseQuestieDB(contrat)
+    return {
+        addonName = "AzerothCommune",
+        RequireContract = function(v) if contrat ~= nil then return contrat, "contract mismatch" end return v == 4 end,
+        Enum = { raceMaskById = { [1] = 1, [2] = 2, [3] = 4, [4] = 8, [5] = 16, [6] = 32, [7] = 64, [8] = 128, [95] = 2 ^ 32, [96] = 2 ^ 33 },
+            factionRaceMasks = MASQUES },
+        Support = { Get = function(n) if n == "ZoneDB" then
+            return { private = { areaIdToUiMapId = "return {[12]=1429,[5]=1411,[7]=1}", areaIdToUiMapIdOverride = "return {[7]=0}" } }
+        end end },
+        Quest = entite({
+            [101] = { name = "Première", zoneOrSort = 12, questLevel = 5, requiredLevel = 3, requiredRaces = MASQUES[F],
+                startedBy = { { 1001 } }, nextQuestInChain = 102 },
+            [102] = { name = "Deuxième", zoneOrSort = 12, questLevel = 6, preQuestSingle = { 101 }, startedBy = { { 1002, 1001 } } },
+            [103] = { name = "Amorce", zoneOrSort = 12, breadcrumbForQuestId = 102, startedBy = { {}, { 2001 } } },
+            [104] = { name = "Lettre trouvée", zoneOrSort = 7, startedBy = { {}, {}, { 3001 } } },
+            [105] = { name = "Autre faction", zoneOrSort = 12, requiredRaces = MASQUES[O], preQuestSingle = { 101 },
+                startedBy = { { 1001 } } },
+            [106] = { name = "Quête de classe", zoneOrSort = -101, requiredClasses = 1 + 8, preQuestGroup = {} },
+        }),
+        Npc = entite({
+            [1001] = { name = "Ami", friendlyToFaction = "AH", spawns = { [5] = { { 1, 1 } }, [12] = { { 40.123, 50.456 } } } },
+            [1002] = { name = "Ennemi", friendlyToFaction = O:sub(1, 1), spawns = { [12] = { { 10, 10 } } } },
+            [1003] = { name = "Kobold" }, [1004] = { name = "Kobold" }, [1005] = { name = "Chef kobold" },
+            [1006] = { name = "Mineur" }, [1007] = { name = "Contremaître" },
+        }),
+        Object = entite({ [2001] = { name = "Coffre", spawns = { [12] = { { -1, -1 } } } } }),
+        Item = entite({ [3001] = { name = "Lettre", npcDrops = { 1003, 1004, 1005, 1006, 1007 } } }),
+    }
+end
+
+test("QuestieDB absent : la réserve, lot « source externe », sans message", function()
+    local l = dits(function()
+        avec(true, function()
+            local d, lot = AzerothCommune:Lire(BASE)
+            assertEquals("source externe", lot.provenance)
+            assertType("table", d[952])
+        end, nil)
+    end)
+    assertEquals(0, #l, table.concat(l, " | "))
+end)
+
+test("rien sans souscription, même avec QuestieDB", function()
+    avec(false, function()
+        local d, raison = AzerothCommune:Lire(BASE)
+        assertNil(d)
+        assertEquals("pas encore relevé", raison)
+    end, fausseQuestieDB())
+end)
+
+test("QuestieDB en direct : la base de la faction du perso, lot « autre add-on » et sa version", function()
+    avec(true, function()
+        local d, lot = AzerothCommune:Lire(BASE)
+        assertEquals("autre add-on", lot.provenance)
+        assertEquals("QuestieDB", lot.source)
+        assertEquals(C_AddOns.GetAddOnMetadata("AzerothCommune", "Version"), lot.version)
+        assertNil(d[952], "pas de mélange avec la réserve")
+        assertNil(d[105], "une quête de l'autre faction seulement : absente")
+        local n = 0
+        for _ in pairs(d) do n = n + 1 end
+        assertEquals(5, n)
+        lot.source = "modifié" -- le lot rendu est une copie
+        assertEquals("QuestieDB", (select(2, AzerothCommune:Lire(BASE))).source)
+    end, fausseQuestieDB())
+end)
+
+-- Même forme que la réserve : champs nommés, listes triées de questID, nil quand vides, donneur { pnj | objet, nom, carte,
+-- x, y }, origine { nom, pnjs, objets } (3 noms au plus, sans doublon).
+local function memes(attendu, vu, ou)
+    if type(attendu) ~= "table" then return assertEquals(attendu, vu, ou) end
+    assertType("table", vu, ou)
+    for k, v in pairs(attendu) do memes(v, vu[k], ou .. "." .. k) end
+    for k in pairs(vu) do assertNotNil(attendu[k], ou .. "." .. k .. " en trop") end
+end
+
+test("QuestieDB en direct : suites inversées, amorces, donneur, objet de départ et origine, comme la réserve", function()
+    avec(true, function()
+        local d = AzerothCommune:Lire(BASE)
+        memes({ nom = "Première", zone = 12, niveau = 5, niveau_requis = 3, races = RACES_F, suites = { 102 },
+            donneur = { pnj = 1001, nom = "Ami", carte = 1429, x = 40.12, y = 50.46 } }, d[101], "101")
+        memes({ nom = "Deuxième", zone = 12, niveau = 6, prerequis_un = { 101 }, amorces = { 103 },
+            donneur = { pnj = 1001, nom = "Ami", carte = 1429, x = 40.12, y = 50.46 } }, d[102], "102 (1002 : ennemi)")
+        memes({ nom = "Amorce", zone = 12, donneur = { objet = 2001, nom = "Coffre", carte = 1429 } }, d[103], "103 (hors carte)")
+        memes({ nom = "Lettre trouvée", zone = 7, objet = 3001,
+            origine = { nom = "Lettre", pnjs = { "Kobold", "Chef kobold", "Mineur" } } }, d[104], "104 (carte masquée)")
+        memes({ nom = "Quête de classe", zone = -101, classes = { 1, 4 } }, d[106], "106")
+        -- La réserve a la même forme (un vrai cas de chaque) : donneur PNJ, objet du monde, objet de départ.
+        LibQuestieDB = nil
+        local r = AzerothCommune:Lire(BASE)
+        for _, q in ipairs({ r[952], d[101] }) do assertType("number", q.donneur.pnj); assertNil(q.donneur.objet) end
+        for _, q in ipairs({ r[940], d[103] }) do assertType("number", q.donneur.objet); assertNil(q.donneur.pnj) end
+        for _, q in ipairs({ r[123], d[104] }) do assertType("string", q.origine.nom); assertType("table", q.origine.pnjs) end
+    end, fausseQuestieDB())
+end)
+
+test("QuestieDB incompatible (contrat refusé) : la réserve, et la sonde prévient une seule fois", function()
+    local l = dits(function()
+        avec(true, function()
+            for _ = 1, 2 do assertEquals("source externe", (select(2, AzerothCommune:Lire(BASE))).provenance) end
+        end, fausseQuestieDB(false))
+        avec(true, function() AzerothCommune:Lire(BASE) end, fausseQuestieDB(false)) -- une autre LibQuestieDB refusée
+    end)
+    assertEquals(1, #l, table.concat(l, " | "))
+    assertTrue(l[1]:find("QuestieDB", 1, true) ~= nil, l[1])
+    assertEquals("rouge", AzerothCommune.Sondes().QuestieDB.etat)
+end)
+
+test("vrai QuestieDB chargé au simulateur (lien QuestieDB.toc, NOTES.md de l'atelier) : toute sa base, en direct", function()
+    if not LibQuestieDB then print("QuestieDB pas chargé au simulateur : sauté") return end
+    avec(true, function()
+        local d, lot = AzerothCommune:Lire(BASE)
+        local n = 0
+        for _ in pairs(d) do n = n + 1 end
+        print(("QuestieDB %s en direct : %d quêtes (%s)"):format(tostring(lot.version), n, tostring(F)))
+        assertEquals("autre add-on", lot.provenance)
+        assertEquals(C_AddOns.GetAddOnMetadata("QuestieDB", "Version"), lot.version)
+        assertTrue(n > 4000, n)
+    end, LibQuestieDB)
 end)

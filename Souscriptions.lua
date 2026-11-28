@@ -18,7 +18,7 @@ local RANGEMENT = {
   ["quêtes terminées"] = { persos = { "quests_done" } },
   ["recettes connues"] = { persos = { "recipes" }, base = { "recipes", "trade_seen" } },
   ["base des recettes"] = { base = { "recipes" } }, -- les recettes vues, partagées avec les recettes connues ; la réserve n'est pas relevée
-  ["base des quêtes"] = {}, -- rien de relevé : la réserve seule (#43)
+  ["base des quêtes"] = {}, -- rien de relevé : QuestieDB en direct (#111) ou la réserve (#43)
   ["maîtres de métier"] = { base = { "trainers" } },
   marchands = { base = { "vendors" } },
   ["prix des vols"] = { base = { "taxi" } },
@@ -136,12 +136,17 @@ lire.objets = function()
   lot.provenance, lot.perime = "extrait du client", GetBuildInfo and lot.build ~= lib.Build() or nil
   return fusion.d, lot
 end
--- Base des quêtes (#43) : la réserve QuetesReserve.lua seule, générée par tools/build_quest_data.py de l'atelier depuis
--- QuestieDB Forever (GPL-3.0) et commitée, mise en forme une fois (champs nommés, AzerothCommune.lua) ; rien sans souscription
--- (le type n'a rien à relever : la souscription dit seulement qu'un add-on la lit). Lot : une copie de ns.quetesReserveLot.
+-- Base des quêtes : deux blocs, jamais mélangés par quête ni par champ. QuestieDB en direct quand il est là et accepte notre
+-- contrat (#111, QuetesQuestieDB.lua : lot « autre add-on ») ; sinon la réserve QuetesReserve.lua (#43), générée par
+-- tools/build_quest_data.py de l'atelier depuis QuestieDB Forever (GPL-3.0) et commitée, mise en forme une fois (champs
+-- nommés, AzerothCommune.lua), seulement quand elle est retenue ; lot : une copie de ns.quetesReserveLot. Rien sans
+-- souscription (le type n'a rien à relever : la souscription dit seulement qu'un add-on la lit).
 local quetes, quetesBrutes
 lire["base des quêtes"] = function()
-  if not ns.souscrit("base des quêtes") or not ns.quetesReserve then return nil end
+  if not ns.souscrit("base des quêtes") then return nil end
+  local direct, lotDirect = ns.quetesQuestieDB()
+  if direct then return direct, lotDirect end
+  if not ns.quetesReserve then return nil end
   if quetesBrutes ~= ns.quetesReserve then
     quetesBrutes, quetes = ns.quetesReserve, {}
     for id, c in pairs(quetesBrutes) do
