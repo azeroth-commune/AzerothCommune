@@ -37,7 +37,7 @@ local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", 
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 16, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98, le retour des joueurs, l'Arbre, #108, QuestieDB en direct, #111)")
+assert(#fichiersCharges("AzerothCommune") == 17, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98, le retour des joueurs, l'Arbre, #108, QuestieDB en direct, #111, les achats de l'HV, #116)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
@@ -1022,7 +1022,7 @@ print("Azeroth Commune : le global ne porte que l'API publique OK")
 do
 AzerothCommune = nil
 Auctionator, TSM_API, AuctionDBForeverSaved, C_TradeSkillUI, Settings = nil, nil, nil, nil, nil
-hooksecurefunc = function() error("crochet posé : le socle n'en pose aucun (#41)") end
+hooksecurefunc = function() error("crochet posé hors Achats.lua (#41, #116)") end
 local ns = {}
 local noop = function() end
 CreateFrame = function() return { RegisterEvent = noop, SetScript = noop } end

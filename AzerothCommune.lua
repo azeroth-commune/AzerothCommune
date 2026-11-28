@@ -18,6 +18,8 @@
 -- Un type qui a des fournisseurs (cours de l'HV : Auctionator, TSM, AuctionDB) passe aussi par eux (Fournisseurs.lua).
 --   AC:QuandReleve(type, fn)     : fn(type) après chaque nouveau relevé de ce type (scan de l'HV terminé ; métiers relus sur un
 --                                  gain de compétence).
+--   AC:QuandAchatHV(fn)          : fn(id, quantité, prix total en cuivre, GUID du perso) à chaque achat immédiat confirmé à l'HV, quel
+--                                  que soit le chemin ; le courrier relevé s'en complète aussi (Achats.lua, #116).
 -- Personnage : AC.Personnage(guid) = { guid, nom } ; AC.Destinataire(nom) (« Prénom Nom », pour un chuchotement).
 -- Prix d'achat : AC:PrixAchat(id, qty, hv, marchands), AC:PrixMarchands() (en fin de fichier).
 -- Maîtres d'un métier, avec leur position : AC.MaitresDuMetier(métier) -> maîtres, lot (Commerce.lua, d'après Fabrikao, source

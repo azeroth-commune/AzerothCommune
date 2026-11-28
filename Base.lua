@@ -134,7 +134,7 @@ function window.mail()
         local link = GetInboxItemLink(i, a)
         if link then
           local _, _, _, count = GetInboxItem(i, a)
-          items[#items + 1] = { link = link, count = count }
+          items[#items + 1] = { id = tonumber(link:match("item:(%d+)")), link = link, count = count }
         end
       end
     end
