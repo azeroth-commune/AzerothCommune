@@ -66,8 +66,10 @@ local function construireBase(libQ, faction)
   -- Cartes : areaID -> uiMapID, la table de QuestieDB (du texte « return {…} ») ; ses exceptions l'emportent, 0 (masquée) :
   -- absente.
   local cartes = {}
+  -- Sans ZoneDB, une erreur (la réserve, et la sonde le dit) plutôt qu'une base sans cartes.
   local zdb = libQ.Support and libQ.Support.Get("ZoneDB")
-  for _, src in ipairs({ zdb and zdb.private.areaIdToUiMapId, zdb and zdb.private.areaIdToUiMapIdOverride }) do
+  assert(type(zdb) == "table" and type(zdb.private) == "table", "ZoneDB introuvable (Support.Get)")
+  for _, src in ipairs({ zdb.private.areaIdToUiMapId, zdb.private.areaIdToUiMapIdOverride }) do
     local t = src
     if type(src) == "string" then t = loadstring(src)() end
     for aire, carte in pairs(type(t) == "table" and t or {}) do cartes[aire] = carte end
@@ -158,24 +160,28 @@ local function construireBase(libQ, faction)
 end
 
 -- La base en direct et une copie de son lot, ou nil : la réserve. Choisie à la première lecture pour la LibQuestieDB
--- présente (en jeu : une fois par session ; une autre LibQuestieDB, celle d'un test, refait le choix).
+-- présente (en jeu : une fois par session ; une autre LibQuestieDB, celle d'un test, refait le choix). Faction encore
+-- inconnue : la réserve pour cette lecture, le choix est retenté à la suivante (la sonde « faction » prévient).
 local vue, base, lot = {}, nil, nil -- vue : la LibQuestieDB du dernier choix ({} : aucun encore)
 function ns.quetesQuestieDB()
   local q = LibQuestieDB
-  if q ~= vue then
+  local faction = lib.Faction()
+  if q ~= vue and not (type(q) == "table" and not faction) then
     vue, base, lot = q, nil, nil
-    if type(q) == "table" and type(q.RequireContract) == "function" then -- absent : la réserve, sans message
-      local faction = lib.Faction() -- inconnue : la réserve (la sonde « faction » prévient)
-      local ok, accepte, raison = pcall(q.RequireContract, CONTRAT) -- refusé : false et son message
-      if not ok then raison = accepte end
-      ok = ok and accepte == true
+    if type(q) == "table" then -- absent : la réserve, sans message
+      local ok, accepte, raison = false, nil, "LibQuestieDB sans RequireContract" -- trop ancien : incompatible
+      if type(q.RequireContract) == "function" then
+        ok, accepte, raison = pcall(q.RequireContract, CONTRAT) -- refusé : false et son message
+        if not ok then raison = accepte end
+        ok = ok and accepte == true
+      end
       local construite
-      if ok and faction then
+      if ok then
         ok, construite = pcall(construireBase, q, faction)
         if not ok then raison = construite end
       end
       lib.Sonder("QuestieDB", ok, not ok and raison or nil)
-      if ok and faction then
+      if ok then
         local meta = C_AddOns and C_AddOns.GetAddOnMetadata
         base, lot = construite, { provenance = "autre add-on", source = "QuestieDB",
           version = meta and meta(q.addonName or "QuestieDB", "Version") }

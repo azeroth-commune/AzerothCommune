@@ -91,10 +91,10 @@ local TYPES = {
   --   compétence demandée en level, source « maître », source_provenance et level_provenance « relevé direct » et prix_maitre (cuivre) ;
   --   les autres gardent les valeurs de la réserve.
   ["base des recettes"] = {},
-  -- Les quêtes que la faction du perso peut prendre, non liées à un perso (#43, #111) : { [questID] = { nom (français, sinon anglais), zone
+  -- Les quêtes que la faction du perso peut prendre, non liées à un perso (#43, #111) : { [questID] = { nom (langue du client en direct, français dans la réserve ; sinon anglais), zone
   --   (areaID, C_Map.GetAreaInfo pour son nom ; négative : catégorie de quête de QuestieDB ; nil : inconnue), niveau,
   --   niveau_requis, races, classes (listes de raceID, classID : select(3, UnitRace / UnitClass("player")) ; 95 : Skyborne
-  --   de l'Alliance ; nil : toutes), prerequis (toutes à terminer), prerequis_un (une seule
+  --   de l'Alliance, 96 : de la Horde ; nil : toutes), prerequis (toutes à terminer), prerequis_un (une seule
   --   suffit), suites, amorces (facultatives, pas des prérequis), donneur = { pnj ou objet (ID), nom, carte (uiMapID), x, y
   --   (pourcentage de la carte) }, objet (l'objet qui donne la quête), origine = { nom (de l'objet), pnjs (qui le lâchent),
   --   objets (du monde, qui le contiennent) : 3 noms au plus, nil quand vides } (nil sans objet) } } ; listes de questID, nil quand vides. Deux

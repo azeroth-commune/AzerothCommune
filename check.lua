@@ -1980,6 +1980,22 @@ do (function()
   assert(#sortie == 1 and sortie[1]:find("QuestieDB", 1, true) and sortie[1]:find("contract mismatch", 1, true),
     "contrat refusé : un seul message : " .. table.concat(sortie, " | "))
   assert(glib.Sondes().QuestieDB.etat == "rouge", "sonde QuestieDB rouge")
+  local ancien = faux(); ancien.RequireContract = nil
+  LibQuestieDB = ancien
+  d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "source externe" and glib.Sondes().QuestieDB.etat == "rouge", "sans RequireContract : incompatible")
+  local sansZones = faux(); sansZones.Support = nil
+  LibQuestieDB = sansZones
+  d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "source externe" and glib.Sondes().QuestieDB.etat == "rouge", "sans ZoneDB : la réserve, sonde rouge")
+  local faction = UnitFactionGroup
+  UnitFactionGroup = function() return nil end
+  LibQuestieDB = faux()
+  d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "source externe", "faction inconnue : la réserve pour cette lecture")
+  UnitFactionGroup = faction
+  d, lot = glib:Lire("base des quêtes")
+  assert(lot.provenance == "autre add-on" and d[1] and glib.Sondes().QuestieDB.etat == "vert", "faction connue : choix retenté")
   LibQuestieDB, C_AddOns = nil, nil
   print("Azeroth Commune : base des quêtes en direct depuis QuestieDB OK")
 end)() end

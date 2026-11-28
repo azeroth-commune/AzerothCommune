@@ -102,16 +102,20 @@ local q, lot = AC:Lire("base des quêtes")           -- rien sans souscription :
 --   sinon la réserve générée depuis QuestieDB Forever (quêtes de l'Alliance) ; lot = { provenance = « source externe »,
 --     source = « QuestieDB Forever », version, date (de la génération) }. QuestieDB incompatible : la réserve, et la sonde
 --     « QuestieDB » prévient une fois.
--- nom : français (traductions de QuestieDB), sinon anglais. zone : l'areaID (C_Map.GetAreaInfo pour son nom) ; négative :
--- une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue (avec les corrections de zone que QuestieDB fait en
--- jeu pour l'Alliance). races : liste des raceID (select(3, UnitRace("player")) ; 95 : Skyborne de l'Alliance), classes :
--- liste des classID (select(3, UnitClass("player"))), nil : toutes ; toute l'Alliance : {1, 3, 4, 7, 95}.
+-- Même sémantique pour les deux provenances : en direct pour la faction du perso, avec les corrections de faction et de zone
+-- que QuestieDB applique selon elle ; la réserve, celle de l'Alliance (pour l'instant).
+-- nom : la langue du client en direct, français dans la réserve (traductions de QuestieDB), sinon anglais. zone : l'areaID
+-- (C_Map.GetAreaInfo pour son nom) ; négative : une catégorie de quête de QuestieDB (classe, métier…) ; nil : inconnue.
+-- races : liste des raceID (select(3, UnitRace("player")) ; 95 : Skyborne de l'Alliance, 96 : de la Horde), classes :
+-- liste des classID (select(3, UnitClass("player"))), nil : toutes ; toute une faction : sa liste explicite (Alliance :
+-- {1, 3, 4, 7, 95}).
 -- prerequis : quêtes à avoir toutes terminées ; prerequis_un : il suffit d'en avoir terminé une. suites : la suite de
 -- QuestieDB et les quêtes qui ont celle-ci en prérequis ; amorces : quêtes facultatives qui y mènent (pas des prérequis).
--- Listes de questID, nil quand vides ; suites, amorces : de la réserve ; prerequis, prerequis_un : tels quels dans
--- QuestieDB (une quête de la Horde, absente de la réserve, peut y être : d[p] nil ; un ID négatif dans 2 quêtes).
+-- Listes de questID, nil quand vides ; suites, amorces : seulement des quêtes de la base ; prerequis, prerequis_un : tels
+-- quels dans QuestieDB (une quête de l'autre faction, absente de la base, peut y être : d[p] nil ; un ID négatif dans 2
+-- quêtes).
 -- donneur = { pnj ou objet (son ID ; un objet du monde : coffre, stèle…),
--- nom, carte (uiMapID), x, y (pourcentage de la carte) } : le premier donneur, un PNJ amical pour l'Alliance d'abord, à sa
+-- nom, carte (uiMapID), x, y (pourcentage de la carte) } : le premier donneur, un PNJ amical pour la faction d'abord, à sa
 -- première apparition dans la zone de la quête (sinon la première listée ; x, y nil dans une instance) ; nil sans donneur.
 -- objet : l'objet qui donne la quête (nil sans). origine = { nom (de l'objet), pnjs (les PNJ qui le lâchent), objets (les
 -- objets du monde qui le contiennent) } : noms français sinon anglais, 3 au plus chacun, nil quand vides (« lâché par les

@@ -24,7 +24,7 @@ local function dits(fn)
     print = function(...) l[#l + 1] = table.concat({ ... }, " ") end
     local ok, err = pcall(fn)
     print = garde
-    assertTrue(ok, err)
+    if not ok then error(err, 0) end -- assertTrue tairait la raison
     return l
 end
 
