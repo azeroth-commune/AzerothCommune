@@ -333,6 +333,12 @@ AC.RechercheObjets(parent, qty, onPick, w) -- la barre de recherche (champ, vali
                                      -- flèches, Entrée ou Tab, clic ; Entrée sans suggestion : TrouverObjet ; objet déposé
                                      -- choisi aussitôt ; onPick(id, quantité lue dans l'EditBox qty) ; w : 280 par défaut
 AC.RecevoirObjet(cadre, onObjet)     -- un objet des sacs déposé sur le cadre : rendu à son sac, onObjet(id)
+local g = AC.PlacerArbre(cases, liens, bandes, dims) -- l'Arbre, placé sans rien dessiner : cases { key, band, index (racine) },
+                                     -- liens { from, to, text, color, thick, hidden }, bandes { key, title, color } dans l'ordre ;
+                                     -- écrit col et y sur chaque case, path (relais dans chaque étage sauté) sur chaque lien
+local arbre = AC.Arbre(f, { case = function(case, cadre) … return cadre end }) -- la toile qui défile (molette, glisser) ;
+arbre.zone:SetAllPoints(…)           -- la fonction de case crée le cadre (cadre nil) sur arbre.toile, puis le remplit à chaque dessin
+arbre:Dessiner(g)                    -- cases placées à leur taille, liens en S, rectangles et en-têtes des bandes
 AC.Capturer(cadre, libellé), AC.BoutonCapture(cadre, libellé, x, y) -- photo de l'écran avec repères magenta
 AC.Exporter(valeur, "nom")           -- une table Lua photographiée en grilles de couleurs (tools/crop_captures.py)
 ```

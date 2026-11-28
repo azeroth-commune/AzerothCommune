@@ -37,7 +37,7 @@ local interdits = appelsInterdits("AzerothCommune", { "LibStub", "GameDataAPI", 
   "costCommand", "openCraftWindow", "SLASH_GAMEDATA", "GameDataDB", "GameDataItems", "GameDataMarket",
   "Handshake", "Negoce", "BeAGoodPal", "GameContext", "Compagnie" })
 assert(#interdits == 0, "dans le socle : " .. table.concat(interdits, ", "))
-assert(#fichiersCharges("AzerothCommune") == 14, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98, le retour des joueurs)")
+assert(#fichiersCharges("AzerothCommune") == 15, "les fichiers des deux, dans une seule TOC (et la réserve des recettes, #48, le catalogue des objets, #52, la réserve des quêtes, #43, l'état de combat, #98, le retour des joueurs, l'Arbre, #108)")
 local nos = {}
 for _, dossier in ipairs(arg or {}) do
   for _, x in ipairs(appelsInterdits(dossier, { 'LibStub("LibCommune-1.0"', "GameDataAPI" })) do nos[#nos + 1] = x end
@@ -504,6 +504,45 @@ assert(rows[1].n == "a" and rows[4].n == "d")
 assert(lib.TrierLignes(rows, cols, { key = "inconnue" })[1].n == "a", "colonne inconnue : ordre gardé")
 print("Azeroth Commune : tri des tableaux OK")
 
+-- L'Arbre (Arbre.lua, #108) : le placement seul, sans cadre. Deux bandes : x (racine A, A → B → C et A → C qui saute
+-- l'étage 1 ; A → D, B → D), y (racine E, E → F) ; un lien de bande à bande, F → C.
+charger("Arbre")
+do
+  local function case(key, band, index) return { key = key, band = band, index = index } end
+  local A, B, C, D, E, F = case("A", "x", 1), case("B", "x"), case("C", "x"), case("D", "x"), case("E", "y", 2), case("F", "y")
+  local cases = { A, B, C, D, E, F }
+  local liens = { { from = A, to = B }, { from = B, to = C }, { from = A, to = C }, { from = A, to = D }, { from = B, to = D },
+    { from = E, to = F }, { from = F, to = C } }
+  local g = lib.PlacerArbre(cases, liens, { { key = "x", title = "X" }, { key = "y", title = "Y" } })
+  local d = g.dims
+  assert(d.hauteur == 42 and d.relais == 10 and d.entreBandes == 28, "tailles par défaut : celles de l'arbre de Composants")
+  assert(A.col == 0 and E.col == 0 and B.col == 1 and F.col == 1 and C.col == 2 and D.col == 2 and g.cols == 3, "étages")
+  for _, e in ipairs(liens) do assert(e.to.col > e.from.col, "une case à droite de ses parents : " .. e.from.key .. e.to.key) end
+  -- A → C passe par un relais à l'étage 1, dans la bande de A, qu'aucune case de l'étage ne recouvre.
+  local saut = liens[3]
+  assert(#saut.path == 3 and saut.path[2].kind == "relay" and saut.path[2].col == 1 and saut.path[2].band == "x", "relais")
+  assert(saut.first == saut.path[2] and saut.last == saut.path[2] and liens[1].first == B, "first, last")
+  local function haut(n) return n.kind == "relay" and d.relais or d.hauteur end
+  for _, n in ipairs(g.all) do -- rien ne se chevauche dans un étage, relais compris
+    for _, m in ipairs(g.all) do
+      assert(n == m or n.col ~= m.col or n.y + haut(n) <= m.y or m.y + haut(m) <= n.y, "chevauchement " .. n.key .. " " .. m.key)
+    end
+  end
+  -- Bandes empilées dans l'ordre, sans se mêler : tout x au-dessus de tout y, l'écart entre les deux ; la hauteur rendue.
+  local bas = { x = -math.huge, y = -math.huge }
+  local dessus = { x = math.huge, y = math.huge }
+  for _, n in ipairs(g.all) do bas[n.band], dessus[n.band] = math.max(bas[n.band], n.y + haut(n)), math.min(dessus[n.band], n.y) end
+  assert(dessus.x == 0 and dessus.y - bas.x == d.entreBandes and g.height == bas.y, "bandes empilées, hauteur " .. g.height)
+  -- Sans bandes : une seule ; les racines dans l'ordre de leur rang.
+  local R1, R2 = case("R1", nil, 2), case("R2", nil, 1)
+  g = lib.PlacerArbre({ R1, R2 }, {})
+  assert(R2.y == 0 and R1.y == d.hauteur + d.ecart and g.height == 2 * d.hauteur + d.ecart, "racines par rang")
+  -- Tailles de l'add-on.
+  g = lib.PlacerArbre({ case("S", nil, 1), case("T", nil, 2) }, {}, nil, { hauteur = 20, ecart = 2 })
+  assert(g.height == 42 and g.dims.relais == 10, "dims de l'add-on, défauts pour le reste")
+end
+print("Azeroth Commune : placement de l'arbre OK")
+
 -- Montants : arrondis, version courte (pc oubliés au-delà d'1 po, pa au-delà de 100 po), signée.
 GetCoinTextureString = function(c, taille) return c .. (taille and ("@" .. taille) or "") end
 assert(lib.Argent(1234.6) == "1235" and lib.Argent(nil) == "?")
@@ -969,7 +1008,7 @@ function verifierGlobalDocumente(lib)
     Lire LireParFournisseurs MaisonHV NomObjet PagesExport Personnage PrixAchat PrixMarchands QuandReleve RangerRecettes
     Regrouper RelancerSondes ReleverRecettes ReleverRecettesSansFenetre RetenirObjet Royaume Signaler Sonder Sondes
     Souscrire Tableau TrierLignes TrouverObjet fournisseurs provenances regroupes types captureDansLesFenetres
-    MaitresDuMetier Ecarts RechercheObjets RecevoirObjet Suivre NePlusSuivre PVDuFamilier]]):gmatch("%S+") do
+    MaitresDuMetier Ecarts RechercheObjets RecevoirObjet Suivre NePlusSuivre PVDuFamilier Arbre PlacerArbre]]):gmatch("%S+") do
     documentes[nom] = true
   end
   for k in pairs(lib) do assert(documentes[k], "sur le global, ni public ni documenté : " .. tostring(k)) end
