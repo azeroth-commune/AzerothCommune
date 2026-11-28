@@ -67,8 +67,9 @@ local function hauteurs(g, bands, d)
 end
 
 -- AzerothCommune.PlacerArbre(cases, liens, bandes, dims) → g : le placement seul, sans aucun cadre.
---   cases : { { key = clé unique (texte), band = clé de sa bande, index = rang en tête (facultatif : une racine, à l'étage 0,
---           rangée par son rang) }, … } ; les autres champs sont à l'add-on (sa fonction de case les lit).
+--   cases : { { key = clé unique (texte), band = clé de sa bande (une de bandes : une case d'une bande absente n'est pas
+--           placée), index = rang en tête (facultatif : une racine, à l'étage 0, rangée par son rang) }, … } ; les autres
+--           champs sont à l'add-on (sa fonction de case les lit).
 --   liens : { { from = case, to = case }, … }, du parent vers l'enfant ; facultatifs, pour le dessin (arbre:Dessiner) :
 --           text (écrit juste avant la case d'arrivée), color = { r, g, b }, thick (2 par défaut), hidden (placé, pas tracé).
 --   bandes (facultatif) : { { key, title, color = { r, g, b } }, … } dans l'ordre, de haut en bas ; sans elles, une seule.
@@ -240,6 +241,8 @@ function lib.Arbre(parent, opts)
       local c = opts.case(n, cadres[i])
       cadres[i] = c
       if c:GetParent() ~= toile then c:SetParent(toile) end
+      -- au-dessus des rectangles des bandes (toile + 1), sans baisser une case que l'add-on a montée plus haut
+      if c:GetFrameLevel() < toile:GetFrameLevel() + 3 then c:SetFrameLevel(toile:GetFrameLevel() + 3) end
       c:SetSize(d.largeur, d.hauteur)
       c:ClearAllPoints()
       c:SetPoint("TOPLEFT", toile, "TOPLEFT", n.x, -(n.y + d.haut))
