@@ -15,7 +15,7 @@ local function avec(souscrit, fn, qdb)
     LibQuestieDB = qdb
     local ok, err = pcall(fn)
     AzerothCommuneDB.souscriptions[BASE], LibQuestieDB = avant, vrai
-    assertTrue(ok, err)
+    if not ok then error(err, 0) end -- assertTrue tairait la raison
 end
 
 -- Les print le temps de fn : la liste de ce qui a été dit.
